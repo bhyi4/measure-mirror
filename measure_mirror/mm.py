@@ -54,9 +54,9 @@ def _load_prereg(ledger_path: str, claim_id: str) -> dict | None:
 # ④a-1 소표본 신뢰구간 (Wilson score interval, 이항)
 # ─────────────────────────────────────────────────────────────
 def wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
-    if n == 0:
+    if n <= 0:
         return (0.0, 1.0)
-    p = k / n
+    p = max(0.0, min(1.0, k / n))
     denom = 1 + z * z / n
     center = (p + z * z / (2 * n)) / denom
     half = (z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))) / denom
@@ -136,6 +136,13 @@ def audit(ledger_path: str, claim_id: str, *,
             baseline, db_note = b, f"  ⟵ DB 자동조회(task={task})"
         else:
             baseline = 0.5
+    if not (0.0 <= reported_acc <= 1.0):
+        findings.append(Finding("④a acc 범위", "FAIL", f"reported_acc={reported_acc:.3f} 는 0.0과 1.0 사이여야 합니다."))
+        return findings
+    if n < 0:
+        findings.append(Finding("④a n 범위", "FAIL", f"n={n} 은 0 이상이어야 합니다."))
+        return findings
+
     k = round(reported_acc * n)
     lo, hi = wilson_ci(k, n)
 
@@ -200,9 +207,14 @@ def _auto(name: str, ledger: str = "mm_ledger.jsonl") -> None:
         sys.exit(1)
     d = json.load(open(path, encoding="utf-8"))
     cid = d.get("claim_id", name)
+    acc = d.get("acc")
+    n = d.get("n")
+    if acc is None or n is None:
+        print(f"🪞 에러: {path} 파일 내에 'acc' 와 'n' 키가 필요합니다.")
+        sys.exit(1)
     print(f"📂 {path} 자동 로드")
     report(cid, audit(ledger, cid, reported_metric=d.get("metric", "acc"),
-                      reported_acc=d["acc"], n=d["n"], baseline=d.get("baseline", 0.5)))
+                      reported_acc=acc, n=n, baseline=d.get("baseline", 0.5)))
 
 
 def _cli() -> None:
@@ -241,7 +253,7 @@ def _cli() -> None:
         if args.file:
             d = json.load(open(args.file, encoding="utf-8"))
             cid = d.get("claim_id", "?")
-            acc, n = d["acc"], d["n"]
+            acc, n = d.get("acc"), d.get("n")
             metric, baseline = d.get("metric", "acc"), d.get("baseline", 0.5)
         else:
             cid, acc, n = args.claim_id, args.acc, args.n
