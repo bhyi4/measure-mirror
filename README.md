@@ -3,7 +3,8 @@
 AI 평가 *주장*이 진짜 신호인지 **측정 착시(거짓양성/거짓음성)**인지 자동 적발.
 **훈련 0 · 결정론적 · 의존성 0** (Python 3.10+ 표준 라이브러리만). 場과 정반대 — 붕괴 없음.
 
-> ⚠️ **비공개(private)** — 공개·배포 보류 상태. 내부 자산.
+> 場(WaveODE/CDE)을 정직하게 검증하며 태어난 도구. 만든 자가 *자기 프로젝트를 먼저 죽였다.*
+> → [🦋 크리살리스 연대기](docs/CHRONICLE.md) · License: Apache-2.0
 
 ## 설치
 
@@ -97,4 +98,13 @@ measure-mirror/
 
 ## 미구현 (다음)
 - ③ 게이밍 정적분석 (AST) · ④b 적대 에이전트(LLM "진짜 대상 썼나") · ⑤ 재현 샌드박스 · ⑥ scope
-- pytest 플러그인 (`@preregister`) · CI 게이트 · PyPI/GitHub 공개 (보류)
+- pytest 플러그인 (`@preregister`) · CI 게이트 · PyPI 배포
+
+## 기여 (Contributing)
+
+`db/`에 오염·게이밍·재현실패 사례를 **PR**로 추가하면 다음 사용자가 덕봅니다
+(CVE·안티바이러스 시그니처 모델). 새 probe·거짓음성 가드도 환영.
+
+## License
+
+Apache License 2.0 — [LICENSE](LICENSE) 참조.
