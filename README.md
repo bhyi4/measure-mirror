@@ -1,5 +1,9 @@
 # 🪞 Measurement Mirror
 
+[![CI](https://github.com/bhyi4/measure-mirror/actions/workflows/ci.yml/badge.svg)](https://github.com/bhyi4/measure-mirror/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![deps: zero](https://img.shields.io/badge/deps-zero-brightgreen.svg)](pyproject.toml)
+
 AI 평가 *주장*이 진짜 신호인지 **측정 착시(거짓양성/거짓음성)**인지 자동 적발.
 **훈련 0 · 결정론적 · 의존성 0** (Python 3.10+ 표준 라이브러리만). 場과 정반대 — 붕괴 없음.
 
