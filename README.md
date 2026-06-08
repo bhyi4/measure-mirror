@@ -92,6 +92,9 @@ measure-mirror/
 場과 정반대 = **훈련 0**. 거짓양성 **AND** 거짓음성 양방향. 사전등록 = 해시 봉인.
 규율 원문: `Chrysalis/agent_chat/MEASUREMENT_MIRROR.md` (7체크). MVP는 그중 ①②④a 구현.
 
+## 부록 — 거울 탄생 배경
+- [🦋 크리살리스 연대기](docs/CHRONICLE.md) — 이 도구가 태어난 대장간. 場을 죽이며 측정거울이 벼려진 여정.
+
 ## 미구현 (다음)
 - ③ 게이밍 정적분석 (AST) · ④b 적대 에이전트(LLM "진짜 대상 썼나") · ⑤ 재현 샌드박스 · ⑥ scope
 - pytest 플러그인 (`@preregister`) · CI 게이트 · PyPI/GitHub 공개 (보류)
