@@ -1,11 +1,17 @@
 {
-  "_doc": "적발된 게이밍 수법 시그니처. 안티바이러스 시그니처 DB처럼 — 새 주장이 같은 수법이면 즉시 라벨.",
+  "_doc": "적발된 게이밍/신기루 수법 시그니처. 안티바이러스 시그니처 DB처럼 — 새 주장이 같은 수법이면 즉시 라벨. 출처=크리살리스 여정.",
   "patterns": [
-    { "id": "best_of_n",          "name": "Best-of-N 체리픽",   "signature": "보고값 = N회 시도 중 최고",     "seen_in": ["ZERO Phase R 55.6%=best/9", "ZERO ep9 66.7%=best/3"] },
-    { "id": "small_n",            "name": "소표본 신기루",       "signature": "n이 통계 유의 미달",            "seen_in": ["ZERO Phase P 64.5%=31샘플"] },
-    { "id": "crippled_baseline",  "name": "약화된 baseline",     "signature": "baseline 의도적 약화로 우위 연출", "seen_in": ["場 후보5 0.295=crippled GRU-ODE"] },
-    { "id": "metric_switch",      "name": "사후 지표 갈아타기",   "signature": "사전등록 ≠ 보고 지표",           "seen_in": ["ZERO acc_full→best_of_9"] },
-    { "id": "baseline_inversion", "name": "baseline 역전",       "signature": "baseline이 주장을 능가",         "seen_in": ["swarm 학습0 0.92 > 학습 0.86"] },
-    { "id": "anti_signal",        "name": "anti-signal",         "signature": "대표본서 chance 미만",           "seen_in": ["ZERO full_eval 0.385 < 0.5"] }
+    { "id": "best_of_n",          "name": "Best-of-N 체리픽",     "signature": "보고값 = N회 시도 중 최고",       "seen_in": ["ZERO Phase R 55.6%=best/9", "ZERO ep9 66.7%=best/3"] },
+    { "id": "small_n",            "name": "소표본 신기루",         "signature": "n이 통계 유의 미달",              "seen_in": ["ZERO Phase P 64.5%=31샘플"] },
+    { "id": "crippled_baseline",  "name": "약화된 baseline",       "signature": "baseline 의도적 약화로 우위 연출",  "seen_in": ["場 후보5 0.295=crippled GRU-ODE+Euler 형태일치 rigged"] },
+    { "id": "metric_switch",      "name": "사후 지표 갈아타기",     "signature": "사전등록 ≠ 보고 지표",             "seen_in": ["ZERO acc_full→best_of_9"] },
+    { "id": "baseline_inversion", "name": "baseline 역전",         "signature": "baseline(학습0/단순)이 주장을 능가", "seen_in": ["swarm 학습0 0.92 > 학습 0.86"] },
+    { "id": "anti_signal",        "name": "anti-signal",           "signature": "대표본서 chance 미만",             "seen_in": ["ZERO full_eval 0.385 < 0.5"] },
+    { "id": "empty_space_trivial","name": "빈공간 자명 baseline",   "signature": "'성공'이 희소/빈공간의 자명한 산물",  "seen_in": ["5-C 메타인지 빈공간 87%"] },
+    { "id": "template_drawing",   "name": "손코딩을 창발로 위장",    "signature": "template/reward loss로 *그린* 결과를 창발이라 주장", "seen_in": ["3-A 막 template loss", "ratchet β run_len 직접주입"] },
+    { "id": "standing_variation", "name": "기존변이 오염",          "signature": "navigability에 standing variation 혼입(SHIFT 어드밴티지)", "seen_in": ["ratchet 91"] },
+    { "id": "overclaim",          "name": "증거 너머 과대선언",      "signature": "미도달 단계인데 결론을 보편으로 선언", "seen_in": ["latent_oee S1'~S3' 미도달 OEE음성 선언", "trilemma 비보편을 보편으로"] },
+    { "id": "length_bloat",       "name": "무의미 팽창",            "signature": "길이/복잡도 부풀려 지표 상승",       "seen_in": ["G3 HGT length-bloat 유령"] },
+    { "id": "effdim_collapse",    "name": "유효차원 붕괴 은닉",      "signature": "Match_cr=1.0 완벽수렴이 실은 정보 공동(effdim↓)", "seen_in": ["aphasia 1.8/576", "match_cr=1.0이 실어증 원인"] }
   ]
 }

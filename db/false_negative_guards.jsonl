@@ -1,0 +1,6 @@
+{"_doc":"거짓*음성* 가드 — 음성을 믿기 전 '진짜 대상 썼나/프레이밍 맞나'를 검증한 사례. 측정거울 양방향성의 핵심."}
+{"case":"spike의 '場'이 실은 평범 MLP였음","guard":"진짜 대상 미시험(stand-in)","resolution":"실제 WaveODEFunc import해 Lorenz-96 재시험 → 0.992 동률, 음성 robust 확정","source":"field_real_edge_control_axis_closed"}
+{"case":"FM회귀 Adjoint 필요하다는 '거짓음성'","guard":"구현 결함이 음성으로 위장","resolution":"O(1) Adjoint불요 자가정정 → F1 PASS","source":"fm_cde_pixel_feasibility"}
+{"case":"latent_oee '분기1 FALSIFIED' 선언","guard":"지평(T) 너무 짧아 거짓음성","resolution":"대장님 비판 적중→철회, 지평-sweep 정정","source":"chrysalis_latent_oee_pivot"}
+{"case":"DCC 0.32 plateau를 '천장'으로 단정","guard":"천장이라 믿은 거짓음성","resolution":"천장 아님 — 처방(자모CE헤드+보존ODE) 존재","source":"dcc_plateau_metric_phantom"}
+{"case":"aphasia Match_tf 코사인 프록시","guard":"프록시가 진짜 readout 아님","resolution":"fresh linear/MLP probe로 직접 측정 → 정보보존 10.2% 확정","source":"aphasia_576d_attractor_collapse"}

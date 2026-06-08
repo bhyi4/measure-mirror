@@ -1,3 +1,15 @@
-{"claim":"ZERO Phase R MuSR 55.6%","task":"musr","n_claimed":9,"acc_claimed":0.556,"reproduction":{"n":1050,"acc":0.385},"verdict":"FAIL","note":"대표본서 chance(0.5) 미만"}
-{"claim":"ZERO Phase P 추론 64.5%","task":"musr","n_claimed":31,"acc_claimed":0.645,"reproduction":{"n":200,"acc":0.52},"verdict":"FAIL","note":"균형 홀드아웃서 chance와 구별 불가"}
-{"claim":"場 real_edge 후보5 control STC 0.295","reproduction":{"note":"공정 universal GRU-ODE baseline서 0.996≈0.998 동률"},"verdict":"FAIL","note":"crippled baseline 거짓양성"}
+{"claim":"ZERO Phase R MuSR 55.6%","task":"musr","n_claimed":9,"acc_claimed":0.556,"reproduction":{"n":1050,"acc":0.385},"verdict":"FAIL","note":"대표본서 chance(0.5) 미만","source":"zero_coprocessor_track_closed"}
+{"claim":"ZERO Phase P 추론 64.5%","task":"musr","n_claimed":31,"acc_claimed":0.645,"reproduction":{"n":200,"acc":0.52},"verdict":"FAIL","note":"균형 홀드아웃서 chance와 구별 불가; effdim 1.8/576 붕괴","source":"aphasia_576d_attractor_collapse"}
+{"claim":"場 real_edge 후보5 control STC 0.295","reproduction":{"note":"공정 universal GRU-ODE baseline서 0.996≈0.998 동률"},"verdict":"FAIL","note":"crippled baseline 거짓양성","source":"field_real_edge_control_axis_closed"}
+{"claim":"DCC 한글 char-LM 0.32 plateau = '천장'","task":"korean_char_lm","verdict":"PHANTOM","note":"천장 아님 — 이중진범=비트BCE손실+ODE본체, 처방=자모CE헤드+보존ODE","source":"dcc_plateau_metric_phantom"}
+{"claim":"5-C 세포 메타인지 '성공'","verdict":"FAIL","note":"빈공간 87%의 자명한 산물 (trivial baseline)","source":"chrysalis_5c_metacognition_phantom"}
+{"claim":"swarm 학습된 군집 Chamfer 0.86","reproduction":{"baseline_학습0":0.92},"verdict":"FAIL","note":"학습0 점뭉치가 학습된 것 능가 = 지표 무의미"}
+{"claim":"場 Perturb-seq 유전자 예측 우위","reproduction":{"場":0.678,"additive":0.884,"linear":0.912},"verdict":"FAIL","note":"場이 generic보다 못함, epistatic서도 짐","source":"real_data_perturbation_negative"}
+{"claim":"場 control/transfer real edge (4축)","reproduction":{"場":"0.996~1.009","GRU_ODE":"동률"},"verdict":"FAIL","note":"dose·연속時·통제·게임엔진 전부 generic 동급, 유일 참=비선형>선형","source":"field_real_edge_control_axis_closed"}
+{"claim":"자생-OEE bilinear 공진화 'Resolved-Negative'","verdict":"OVERCLAIM","note":"전수감사로 강등 — ΔW 미구현·S1'~S3' 미도달인데 OEE음성 선언=자기모순; trilemma 비보편","source":"chrysalis_latent_oee_pivot"}
+{"claim":"G3 자라는게놈 기능 개방성","verdict":"FAIL","note":"S1·S2 PASS→S4 Hard Failure→HGT length-bloat 유령→Simplex Trap(닫힌 형질공간)","source":"chrysalis_g3_turnover_bloom_wall"}
+{"claim":"차원구성 재설계 OEE (expanding trait space)","verdict":"FAIL","note":"S1'~S2' 통과 BUT S3' Hard Failure(선택이 D_eco 0으로 붕괴)","source":"chrysalis_expanding_trait_space"}
+{"claim":"navigable lock-in 자생 창발","verdict":"FAIL","note":"nav≈1.00 null(화석화); 래칫엔진=손코딩 필수; NACC 3자 만장일치","source":"complementary_ratchet_navigable_lockin"}
+{"claim":"OEE navigability→ratchet 자생","verdict":"FAIL","note":"H1 PASS(navigability granted) BUT H2 FAIL(κ rel−irr 0/10); navigability⊥ratchet 독립벽","source":"oee_wall_emergence_repair_lens"}
+{"claim":"개방성(OEE) selection 자율구동","verdict":"FAIL","note":"9종 음성→3대 인과장벽(물리-정보 상동·선택 동질화·개체성 전이)","source":"openness_generation_gaming_chasm"}
+{"claim":"FM-CDE 코어 = 자생 인과場","verdict":"DOWNGRADE","note":"robust field-방향이나 정적 frame선 수송기(외삽); 자생 아닌 granted 수용","source":"causal_field_vs_transporter"}
