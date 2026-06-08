@@ -99,7 +99,7 @@ measure-mirror/
 
 ## 미구현 (다음)
 - ③ 게이밍 정적분석 (AST) · ④b 적대 에이전트(LLM "진짜 대상 썼나") · ⑤ 재현 샌드박스
-- pytest 플러그인 (`@preregister`) · CI 게이트 · PyPI 배포
+- PyPI 배포 (안정화 후)
 
 ## 기여 (Contributing)
 

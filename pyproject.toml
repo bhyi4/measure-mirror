@@ -13,6 +13,9 @@ authors = [{ name = "Mother Seara" }]
 keywords = ["evaluation", "integrity", "false-positive", "pre-registration", "audit"]
 dependencies = []
 
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
 [project.scripts]
 mm = "measure_mirror.mm:_cli"
 
