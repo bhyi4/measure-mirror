@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# 런타임 산출물 (원장·결과 파일)
+*_ledger.jsonl
+mm_ledger.jsonl
+result.json
+my_model.json

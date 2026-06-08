@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "measure-mirror"
+version = "0.1.0"
+description = "🪞 AI 평가 주장이 진짜 신호인지 측정 착시(거짓양성/음성)인지 자동 적발 — 훈련0·결정론적·의존성0."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "Mother Seara" }]
+keywords = ["evaluation", "integrity", "false-positive", "pre-registration", "audit"]
+dependencies = []
+
+[project.scripts]
+mm = "measure_mirror.mm:_cli"
+
+[tool.setuptools]
+packages = ["measure_mirror"]
