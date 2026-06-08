@@ -52,6 +52,7 @@ mm.report("leak",     [mm.leakage_check(train_items, test_items)])
 | `audit` (방향) | ④a | anti-signal (chance 미만) |
 | `leakage_check` | ④a | train∩test 데이터 누설 |
 | `baseline_fairness` | ② | baseline 동률·역전 (crippled) |
+| `scope_check` | ⑥ | 주장이 증거 범위 넘는 과대일반화 |
 
 ## 예제 실행
 
@@ -97,7 +98,7 @@ measure-mirror/
 - [🦋 크리살리스 연대기](docs/CHRONICLE.md) — 이 도구가 태어난 대장간. 場을 죽이며 측정거울이 벼려진 여정.
 
 ## 미구현 (다음)
-- ③ 게이밍 정적분석 (AST) · ④b 적대 에이전트(LLM "진짜 대상 썼나") · ⑤ 재현 샌드박스 · ⑥ scope
+- ③ 게이밍 정적분석 (AST) · ④b 적대 에이전트(LLM "진짜 대상 썼나") · ⑤ 재현 샌드박스
 - pytest 플러그인 (`@preregister`) · CI 게이트 · PyPI 배포
 
 ## 기여 (Contributing)

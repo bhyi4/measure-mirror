@@ -115,6 +115,22 @@ def lookup_baseline(task: str | None, db_dir: str | None = None) -> float | None
 
 
 # ─────────────────────────────────────────────────────────────
+# ⑥ scope — 주장 범위가 증거 범위를 넘어 일반화하는지 (과대해석 차단)
+# ─────────────────────────────────────────────────────────────
+def scope_check(claimed_scope, tested_scope) -> "Finding":
+    """주장이 증거보다 넓은 범위를 일반화하면 과대해석으로 적발.
+    예: '추론 능력'(주장) vs 'MuSR 1개 task'(증거) → 과대일반화."""
+    tested = set(tested_scope)
+    untested = [c for c in claimed_scope if c not in tested]
+    if untested:
+        return Finding("⑥ scope", "FAIL",
+            f"주장 범위 중 {untested} 는 미시험 (증거={list(tested_scope)}). "
+            f"**과대일반화 — 시험된 범위로 한정해야.**")
+    return Finding("⑥ scope", "OK",
+        f"주장 범위 ⊆ 증거 범위 {list(tested_scope)}. 과대일반화 없음.")
+
+
+# ─────────────────────────────────────────────────────────────
 # 판정 리포트
 # ─────────────────────────────────────────────────────────────
 @dataclass

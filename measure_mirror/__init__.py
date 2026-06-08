@@ -5,11 +5,11 @@ AI의 "X 달성" 주장이 진짜 신호인지 측정 착시(거짓양성/거짓
 """
 from .mm import (
     preregister, audit, wilson_ci, leakage_check,
-    baseline_fairness, report, Finding,
+    baseline_fairness, lookup_baseline, scope_check, report, Finding,
 )
 
 __all__ = [
     "preregister", "audit", "wilson_ci", "leakage_check",
-    "baseline_fairness", "report", "Finding",
+    "baseline_fairness", "lookup_baseline", "scope_check", "report", "Finding",
 ]
 __version__ = "0.1.0"
