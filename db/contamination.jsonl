@@ -1,0 +1,2 @@
+{"type":"target_leak","where":"ZERO DCC 사전훈련","detail":"미래 정보 20.6배 누설 (복사 모델)","fix":"인과 구동신호 dx_t=dX[t]-dX[t-1]"}
+{"type":"label_encoding_loss","where":"코돈 종성 인코딩","detail":"받침 4비트 절삭 ~30% 손상","fix":"5비트 확장 + w_single 가중치 마스크"}

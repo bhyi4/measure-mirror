@@ -97,6 +97,24 @@ def baseline_fairness(name: str, claimed: float, baseline: float, *,
 
 
 # ─────────────────────────────────────────────────────────────
+# 공유 DB 조회 — 누가 기여하면 다음 사용자가 덕본다
+# ─────────────────────────────────────────────────────────────
+def lookup_baseline(task: str | None, db_dir: str | None = None) -> float | None:
+    """db/baselines.json 에서 과제 baseline 조회 — 없으면 None."""
+    if not task:
+        return None
+    p = os.path.join(db_dir or "db", "baselines.json")
+    if not os.path.exists(p):
+        return None
+    try:
+        db = json.load(open(p, encoding="utf-8"))
+    except Exception:
+        return None
+    e = db.get(task)
+    return e.get("baseline") if isinstance(e, dict) else None
+
+
+# ─────────────────────────────────────────────────────────────
 # 판정 리포트
 # ─────────────────────────────────────────────────────────────
 @dataclass
@@ -108,8 +126,16 @@ class Finding:
 
 def audit(ledger_path: str, claim_id: str, *,
           reported_metric: str, reported_acc: float, n: int,
-          baseline: float = 0.5) -> list[Finding]:
+          baseline: float | None = None, task: str | None = None,
+          db_dir: str | None = None) -> list[Finding]:
     findings: list[Finding] = []
+    db_note = ""
+    if baseline is None:                      # baseline 미지정 → 공유 DB가 채운다
+        b = lookup_baseline(task, db_dir)
+        if b is not None:
+            baseline, db_note = b, f"  ⟵ DB 자동조회(task={task})"
+        else:
+            baseline = 0.5
     k = round(reported_acc * n)
     lo, hi = wilson_ci(k, n)
 
@@ -118,7 +144,7 @@ def audit(ledger_path: str, claim_id: str, *,
         findings.append(Finding(
             "④a 소표본 CI", "FAIL",
             f"n={n}, acc={reported_acc:.3f} → 95%CI [{lo:.3f}, {hi:.3f}] "
-            f"⊃ baseline({baseline}). **chance와 통계적으로 구별 불가.**"))
+            f"⊃ baseline({baseline}).{db_note} **chance와 통계적으로 구별 불가.**"))
     elif hi < baseline:
         findings.append(Finding(
             "④a 방향(anti-signal)", "FAIL",

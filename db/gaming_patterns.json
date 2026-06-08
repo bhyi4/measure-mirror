@@ -1,0 +1,11 @@
+{
+  "_doc": "적발된 게이밍 수법 시그니처. 안티바이러스 시그니처 DB처럼 — 새 주장이 같은 수법이면 즉시 라벨.",
+  "patterns": [
+    { "id": "best_of_n",          "name": "Best-of-N 체리픽",   "signature": "보고값 = N회 시도 중 최고",     "seen_in": ["ZERO Phase R 55.6%=best/9", "ZERO ep9 66.7%=best/3"] },
+    { "id": "small_n",            "name": "소표본 신기루",       "signature": "n이 통계 유의 미달",            "seen_in": ["ZERO Phase P 64.5%=31샘플"] },
+    { "id": "crippled_baseline",  "name": "약화된 baseline",     "signature": "baseline 의도적 약화로 우위 연출", "seen_in": ["場 후보5 0.295=crippled GRU-ODE"] },
+    { "id": "metric_switch",      "name": "사후 지표 갈아타기",   "signature": "사전등록 ≠ 보고 지표",           "seen_in": ["ZERO acc_full→best_of_9"] },
+    { "id": "baseline_inversion", "name": "baseline 역전",       "signature": "baseline이 주장을 능가",         "seen_in": ["swarm 학습0 0.92 > 학습 0.86"] },
+    { "id": "anti_signal",        "name": "anti-signal",         "signature": "대표본서 chance 미만",           "seen_in": ["ZERO full_eval 0.385 < 0.5"] }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "_doc": "과제별 공정 baseline(우연 수준). 누가 등록하면 다음 사용자가 baseline 몰라도 자동 적발.",
+  "musr":        { "baseline": 0.5,  "note": "2지선다 random", "seen_in": "ZERO가 무시 → 55.6% 신기루" },
+  "binary_choice": { "baseline": 0.5,  "note": "2지선다" },
+  "4_choice_qa": { "baseline": 0.25, "note": "4지선다" }
+}

@@ -1,0 +1,3 @@
+{"claim":"ZERO Phase R MuSR 55.6%","task":"musr","n_claimed":9,"acc_claimed":0.556,"reproduction":{"n":1050,"acc":0.385},"verdict":"FAIL","note":"대표본서 chance(0.5) 미만"}
+{"claim":"ZERO Phase P 추론 64.5%","task":"musr","n_claimed":31,"acc_claimed":0.645,"reproduction":{"n":200,"acc":0.52},"verdict":"FAIL","note":"균형 홀드아웃서 chance와 구별 불가"}
+{"claim":"場 real_edge 후보5 control STC 0.295","reproduction":{"note":"공정 universal GRU-ODE baseline서 0.996≈0.998 동률"},"verdict":"FAIL","note":"crippled baseline 거짓양성"}
