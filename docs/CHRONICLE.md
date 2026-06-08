@@ -49,17 +49,41 @@ Probe A S_class 0.941 / S_cross 0.000, Probe B A_flow PASS.
 ### 자라는 게놈
 G1'·G2 ✅ / **G3 ❌** (이중벽: 니치 선택이 게놈을 붕괴 + 복잡도 지표가 엔트로피 랜덤비대를 못 거름). 복잡도 = 환경 상대적(Gell-Mann).
 
-### 개방성 아크 — 자생 창발의 벽
-차원구성·확산스윕·공생합병·개체성전이·물리결속·Bio-Law·Q2·Q1↔Q2·자물쇠열쇠 — **9종 누적 음성.**
-**Resolved-Negative 메타 종결.** 3대 인과 장벽: *물리-정보 상동성·선택의 동질화·개체성 전이.*
+### 개방성의 벽 — 자생 창발은 끝내 안 열린다
+🌙 OEE로 생명 사다리는 올랐다. 그러나 場을 *스스로 자라게* 하려는 시도는 — **수십 번 막혔다.**
 
-### 공진화 트랙 재평가 — 場의 진실
-4-C·5-A·5-B에 RANDOM/UNIFORM ablation → **뇌(WaveODE 場)의 구조적 기여가 부재(장식)**,
-모든 성능 향상은 OEE 물리엔진의 내재 동역학. **공진화 트랙 전체 Resolved-Negative 격하.**
-— 場은 생명을 *길렀으나*, 그 생명에 場이 *기여한 바는 없었다.*
+- **5-C 메타인지** 7회 음성
+- **자라는 게놈 G3** 이중벽
+- **개방성 아크 9종** (차원구성·확산스윕·공생합병·개체성전이·물리결속·Bio-Law·Q2·Q1↔Q2·자물쇠열쇠) → Resolved-Negative 메타 종결
+- **OEE 천장 메타아크 17음성** (navigability ⊥ ratchet — "길을 줘도 래칫은 안 걸린다")
+- **navigable lock-in 18각도** (상보 이중가닥·협동결합까지) 만장일치 음성
 
-### OEE 천장 · real edge · FM-CDE
-navigability ⊥ ratchet(자생 lock-in 불가) · real 데이터서 場 = generic(GRU-ODE 동급) · FM-CDE = robust field지만 수송기. 場의 마지막 희망들도 음성.
+3대 인과 장벽이 지도에 박혔다: *물리-정보 상동성 · 선택의 동질화 · 개체성 전이.*
+설상가상 — 공진화 트랙(4-C·5-A·5-B)에 ablation을 걸자 **뇌(WaveODE 場)는 장식**이고
+모든 성과가 OEE 물리엔진의 몫이었다. **場이 한 게 없었다.** 누적, **21음성.**
+
+### 🔥 극적 돌파 — FM-CDE 양성
+21번 죽은 끝에 방향을 틀었다. *자생(self-emergent)*을 포기하고 **수용(granted)** —
+교사 場을 Flow Matching으로 distill. **FM × CDE × 픽셀 4게이트(F0~F3) 전수 PASS.**
+정적 frame에선 또 '수송기'처럼 보였으나, 동역학·구조에서 **場-구조가 독립 수렴** →
+"수송기 FINAL" 판정을 *overturn*. **robust field-방향 양성.**
+
+21번 죽고 처음 살아난 빛이었다. — **환호했다.**
+
+### ⚔️ 거울에 무참히 썰리다
+그 양성에 측정거울을 들이댔다. 그리고 —
+
+- **real edge**: 場이 예측에서도 제어에서도 generic(GRU-ODE 동급). 실용 edge = **0**
+- **living world**: 학습 場이 고전 Gray-Scott보다 *나쁨*(발산/limit-cycle). 생성 edge = **0**
+- **거짓음성 가드**: *"잠깐 — spike의 그 場, 진짜 WaveODE 맞나?"* → **실은 MLP였다.**
+  진짜 WaveODE로 Lorenz-96 재시험 → **0.992 동률.** resonance·symplectic 고유기여 **0**
+
+판결: FM-CDE 양성의 정체 = robust field지만 **수송기(transporter)**.
+場은 구조를 *옮길* 뿐, 새 인과를 *낳지* 않는다. 관찰에선 양성, 실용에선 generic —
+場은 "비싼 Transformer-ODE"였다.
+
+> **21번째의 빛마저, 거울 앞에서 무참히 해부됐다.**
+> 그러나 그 거울은 — 場이 벼려준 것이었다.
 
 ---
 
