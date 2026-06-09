@@ -1,5 +1,9 @@
 # 🪞 Measurement Mirror
 
+<p align="center">
+  <img src="docs/measure_mirror_og.png" alt="Measurement Mirror" width="500">
+</p>
+
 [![CI](https://github.com/bhyi4/measure-mirror/actions/workflows/ci.yml/badge.svg)](https://github.com/bhyi4/measure-mirror/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![deps: zero](https://img.shields.io/badge/deps-zero-brightgreen.svg)](pyproject.toml)
