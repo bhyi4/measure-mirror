@@ -62,6 +62,36 @@ mm.report("leak",     [mm.leakage_check(train_items, test_items)])
 | `baseline_fairness` | ② | baseline 동률·역전 (crippled) |
 | `scope_check` | ⑥ | 주장이 증거 범위 넘는 과대일반화 |
 
+## 실제 적발 화면 예시 (Audit Output)
+
+`examples/demo_zero.py` 및 `demo_field.py` 실행 시 소표본 신기루, 사후 지표 변경, 공정 baseline 동률/역전, 데이터 누설을 자동 적발하는 출력 화면입니다.
+
+### 1. ZERO 소표본 및 사후 지표 변경 적발 (`demo_zero.py`)
+```text
+[사전등록 봉인] zero_phase_r_musr metric=acc_full_balanced min_n=200 seal=6c802655ab095e8b
+
+🪞 측정거울 감사: ZERO 주장 ① Phase R '55.6% Best'
+   종합: 🔴 FAIL
+   🔴 [④a 소표본 CI] n=9, acc=0.556 → 95%CI [0.267, 0.811] ⊃ baseline(0.5). **chance와 통계적으로 구별 불가.**
+   🔴 [① 사전등록(min_n)] 보고 n=9 < 등록 min_n=200. 표본 미달.
+   🔴 [① 사전등록(지표변경)] 보고 지표 'best_of_9' ≠ 등록 지표 'acc_full_balanced'. **사후 지표 갈아타기.** (seal=6c802655ab095e8b)
+```
+
+### 2. 연속 매질(場) 거짓양성 및 데이터 누설 적발 (`demo_field.py`)
+```text
+🪞 측정거울 감사: 場 후보5 (control sim, 공정 baseline)
+   종합: 🔴 FAIL
+   🔴 [② 공정 baseline] 후보5 場 vs universal GRU-ODE: 주장 0.996 ≈ baseline 0.998 (Δ+0.002 < 0.01). **동률 — 고유 우위 없음.**
+
+🪞 측정거울 감사: swarm (학습 vs 학습0 baseline)
+   종합: 🔴 FAIL
+   🔴 [② 공정 baseline] swarm 학습된 모델 vs 학습0: 주장 0.860 이 baseline 0.920 *보다 나쁨*. baseline 우수 — 주장 무효/게이밍.
+
+🪞 측정거울 감사: 데이터 누설 (toy 예시)
+   종합: 🔴 FAIL
+   🔴 [④a 데이터누설] train∩test = 5건 (50.0% of test). **평가셋 오염.**
+```
+
 ## 예제 실행
 
 ```bash
