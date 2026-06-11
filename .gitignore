@@ -6,6 +6,9 @@ dist/
 .venv/
 venv/
 
+# Agent rules (local only — not for public repo)
+CLAUDE.md
+
 # 런타임 산출물 (원장·결과 파일)
 *_ledger.jsonl
 mm_ledger.jsonl
