@@ -15,9 +15,11 @@ dependencies = []
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
+mcp  = ["mcp>=1.0.0"]
 
 [project.scripts]
-mm = "measure_mirror.mm:_cli"
+mm     = "measure_mirror.mm:_cli"
+mm-mcp = "measure_mirror.mcp_server:main"
 
 [tool.setuptools]
 packages = ["measure_mirror"]
