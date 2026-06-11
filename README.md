@@ -126,7 +126,7 @@ def test_my_model_is_real():
 
 ---
 
-## All 14 Probes + 3 Utilities
+## All 15 Probes + 4 Utilities
 
 | Probe | Check # | Catches |
 |---|---|---|
@@ -144,12 +144,14 @@ def test_my_model_is_real():
 | `multiple_comparisons_check` | ⑨ | k>1 experiments in ledger — Bonferroni correction alarm |
 | `grim_check` | ⑩ | Reported acc × n is arithmetically impossible (fabricated value) |
 | `falsifiability_check` | ⑪ | No kill-condition → unfalsifiable; kill_threshold triggered → claim is dead |
+| `cascade_check` | ⑫ | Claim or transitive dependency retracted → FAIL/WARN stale |
 
 | Utility | Purpose |
 |---|---|
 | `anchor` | Print tamper-evident ledger snapshot (hash + head seal) to stdout for external archival |
 | `calibrate` | Self-test: 5 synthetic known-good/bad cases; confirms tool health |
 | `witness` | Execute a command, capture output, seal tamper-evident run record |
+| `retract` | Append a chain-linked retraction entry; cascades to dependents via cascade_check |
 
 ### Chain hash ledger (① extended)
 
@@ -220,6 +222,39 @@ Claims registered without any `kill_condition` or `kill_threshold` receive a
 `WARN: Unfalsifiable` at audit time — operationalizing Popper's criterion as a
 code contract. OSF pre-registration accepts hypotheses; this is the first tool
 that also seals the kill condition.
+
+### Retraction cascade ⑫
+
+```python
+# Register a claim that depends on prior work
+mm.preregister("mm_ledger.jsonl", "model_v2",
+               metric="acc", min_n=200, baseline=0.5, pass_threshold=0.60,
+               depends_on=["dataset_v1", "baseline_eval"])
+
+# Later: dataset_v1 turns out to have contamination — retract it
+mm.retract("mm_ledger.jsonl", "dataset_v1", "train/test overlap discovered")
+
+# cascade_check flags model_v2 as STALE automatically
+f = mm.cascade_check("mm_ledger.jsonl", "model_v2")
+# ⚠️  [⑫ retraction-cascade] Claim 'model_v2' is STALE: depends (transitively) on
+#     retracted claim(s): 'dataset_v1'
+
+# audit() runs cascade_check automatically — only WARN/FAIL are appended
+findings = mm.audit("mm_ledger.jsonl", "model_v2",
+                    reported_metric="acc", reported_acc=0.72, n=500)
+```
+
+```bash
+# CLI
+mm register model_v2 --metric acc --min-n 200 --baseline 0.5 --pass 0.60 \
+  --depends-on dataset_v1 baseline_eval
+
+mm retract dataset_v1 --reason "train/test overlap discovered"
+```
+
+The retraction entry is **chain-linked** — deleting it from the ledger breaks the
+chain and is detected by `verify_chain()`. Retraction propagates regardless of
+publication order: a claim built on a retracted foundation is automatically stale.
 
 ### Anchor ⎈
 
@@ -314,11 +349,11 @@ pip install "measure-mirror[mcp]"
 
 **Other MCP clients** — run `mm-mcp` as the stdio server command.
 
-All 14 probes + 3 utilities are exposed as MCP tools:  
+All 15 probes + 4 utilities are exposed as MCP tools:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
-`mm_falsifiability_check` · `mm_anchor` · `mm_calibrate` · `mm_witness`
+`mm_falsifiability_check` · `mm_cascade_check` · `mm_anchor` · `mm_calibrate` · `mm_witness` · `mm_retract`
 
 ---
 

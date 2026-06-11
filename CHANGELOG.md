@@ -5,6 +5,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.8.0] — 2026-06-11
+
+### Added
+- **⑫ `cascade_check(ledger_path, claim_id)`** — Retraction cascade probe.
+  Checks whether a claim, or any of its transitive dependencies, has been
+  retracted. Levels: `FAIL` (claim itself retracted), `WARN` (claim is STALE:
+  a dependency was retracted), `OK` (no retraction risk). Runs automatically
+  inside `audit()` — only WARN/FAIL are appended to findings.
+- **`retract(ledger_path, claim_id, reason)`** — Retraction utility.
+  Appends a chain-linked `_type="retraction"` entry to the ledger. Retraction
+  records cannot be silently deleted — removing them breaks the chain and is
+  detected by `verify_chain()`. Every call appends a new entry.
+- **`preregister()` gains `depends_on: list[str] | None`** — seal which prior
+  claims this claim builds on. If any of those are later retracted,
+  `cascade_check()` flags this claim STALE, transitively.
+- **CLI `mm retract <claim_id> --reason "..."`** — command to record a
+  retraction. Prints the seal of the retraction entry.
+- **CLI `mm register`** gains `--depends-on <id1> [id2 ...]` flag.
+- **`mm_cascade_check`** MCP tool (probe — returns Finding).
+- **`mm_retract`** MCP tool (utility — returns dict, like `mm_anchor`).
+- **`mm_register`** MCP schema updated with optional `depends_on` field.
+- 10 new tests (total: 83 → 93, all passing).
+- Sync gate: `"retract"` added to `_MCP_UTILITY_TOOLS` exclusion list.
+
+### Changed
+- Probe count: 14 → 15. Utilities: 3 → 4. README / README_KO updated.
+- Module docstring: "10 probes" corrected to "12 probes" (⑪ was already present).
+
+---
+
 ## [0.7.0] — 2026-06-11
 
 ### Added

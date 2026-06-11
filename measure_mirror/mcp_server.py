@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — MCP server
 
-Exposes 14 probes + 3 utilities (anchor, calibrate, witness) as MCP tools via stdio transport so any
+Exposes 15 probes + 4 utilities (anchor, calibrate, witness, retract) as MCP tools via stdio transport so any
 MCP-compatible AI (Claude Code, Cursor, Windsurf, …) can call them
 directly mid-conversation.
 
@@ -62,8 +62,50 @@ async def list_tools() -> list[types.Tool]:
                                        "Structured auto-evaluable form: "
                                        "{\"metric\": \"acc\", \"threshold\": 0.55, \"direction\": \"below\"}",
                                        "default": None},
+                    "depends_on":     {"type": "array",   "items": {"type": "string"},
+                                       "description":
+                                       "Claim IDs this claim depends on. If any are retracted, "
+                                       "this claim becomes STALE (⑫ cascade).",
+                                       "default": None},
                 },
                 "required": ["ledger_path", "claim_id", "metric"],
+            },
+        ),
+        types.Tool(
+            name="mm_cascade_check",
+            description=(
+                "⑫ Retraction cascade: check if a claim or any of its transitive dependencies "
+                "has been retracted. "
+                "FAIL when claim_id itself is retracted. "
+                "WARN when the claim is STALE (depends on a retracted claim). "
+                "OK when no retraction risk is found. "
+                "Runs automatically inside mm_audit — call standalone to check without a full audit."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ledger_path": {"type": "string", "description": "Path to the JSONL ledger file"},
+                    "claim_id":    {"type": "string", "description": "Claim ID to check"},
+                },
+                "required": ["ledger_path", "claim_id"],
+            },
+        ),
+        types.Tool(
+            name="mm_retract",
+            description=(
+                "Append a chain-linked retraction entry to the ledger. "
+                "Marks claim_id as retracted; any claim that depends on it will be "
+                "flagged STALE by mm_cascade_check. The retraction record is chain-linked "
+                "so it cannot be silently deleted from the ledger."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ledger_path": {"type": "string", "description": "Path to the JSONL ledger file"},
+                    "claim_id":    {"type": "string", "description": "Claim ID to retract"},
+                    "reason":      {"type": "string", "description": "Reason for retraction"},
+                },
+                "required": ["ledger_path", "claim_id", "reason"],
             },
         ),
         types.Tool(
@@ -409,6 +451,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 pass_threshold=arguments.get("pass_threshold", 0.60),
                 kill_condition=arguments.get("kill_condition"),
                 kill_threshold=arguments.get("kill_threshold"),
+                depends_on=arguments.get("depends_on"),
             )
             kill_line = ""
             if entry.get("kill_threshold"):
@@ -427,6 +470,25 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 f"{kill_line}\n"
                 f"prev_seal: {entry['prev_seal']}\n"
                 f"seal: {entry['seal']}"
+            )
+
+        elif name == "mm_cascade_check":
+            result = _single(mm.cascade_check(
+                arguments["ledger_path"],
+                arguments["claim_id"],
+            ))
+
+        elif name == "mm_retract":
+            e = mm.retract(
+                arguments["ledger_path"],
+                arguments["claim_id"],
+                arguments["reason"],
+            )
+            result = (
+                f"🚫 Retracted: {e['claim_id']}\n"
+                f"   Reason:     {e['reason']}\n"
+                f"   Prev seal:  {e['prev_seal']}\n"
+                f"   Seal:       {e['seal']}"
             )
 
         elif name == "mm_falsifiability_check":

@@ -693,3 +693,109 @@ def test_falsifiability_kill_threshold_seal_valid(tmp_path):
                    kill_threshold={"metric": "acc", "threshold": 0.55, "direction": "below"})
     findings = mm.verify_chain(ledger)
     assert all(f.level == "OK" for f in findings), findings
+
+
+# ─── ⑫ retraction cascade tests ──────────────────────────────
+
+def test_cascade_ok_no_retractions(tmp_path):
+    """No retractions in ledger → OK."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.6)
+    f = mm.cascade_check(ledger, "exp1")
+    assert f.level == "OK"
+    assert f.probe == "⑫ retraction-cascade"
+
+
+def test_cascade_ok_empty_ledger(tmp_path):
+    """Empty ledger → OK (no retraction risk)."""
+    f = mm.cascade_check(str(tmp_path / "none.jsonl"), "exp1")
+    assert f.level == "OK"
+
+
+def test_cascade_fail_direct_retraction(tmp_path):
+    """Claim itself retracted → FAIL."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.6)
+    mm.retract(ledger, "exp1", "data labelling error")
+    f = mm.cascade_check(ledger, "exp1")
+    assert f.level == "FAIL"
+    assert "exp1" in f.msg
+
+
+def test_cascade_warn_direct_dependency(tmp_path):
+    """Claim depends on retracted claim → WARN stale."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "base", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.6)
+    mm.preregister(ledger, "exp1", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.6,
+                   depends_on=["base"])
+    mm.retract(ledger, "base", "fundamental flaw found")
+    f = mm.cascade_check(ledger, "exp1")
+    assert f.level == "WARN"
+    assert "STALE" in f.msg
+    assert "base" in f.msg
+
+
+def test_cascade_warn_transitive_dependency(tmp_path):
+    """Transitive chain: exp2 → exp1 → base (base retracted) → exp2 is STALE."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "base", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.6)
+    mm.preregister(ledger, "exp1", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.6,
+                   depends_on=["base"])
+    mm.preregister(ledger, "exp2", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.6,
+                   depends_on=["exp1"])
+    mm.retract(ledger, "base", "fundamental flaw")
+    f = mm.cascade_check(ledger, "exp2")
+    assert f.level == "WARN"
+    assert "STALE" in f.msg
+
+
+def test_retract_entry_chain_verifies(tmp_path):
+    """Retraction entry is chain-linked and passes verify_chain."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.6)
+    mm.retract(ledger, "exp1", "mistake")
+    findings = mm.verify_chain(ledger)
+    assert all(f.level == "OK" for f in findings), findings
+
+
+def test_retract_returns_entry_with_seal(tmp_path):
+    """retract() returns a dict with the expected keys."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "e1", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.6)
+    e = mm.retract(ledger, "e1", "wrong baseline used")
+    assert e["_type"] == "retraction"
+    assert e["claim_id"] == "e1"
+    assert e["reason"] == "wrong baseline used"
+    assert len(e["seal"]) == 16
+
+
+def test_cascade_in_audit_fail_appended(tmp_path):
+    """audit() appends ⑫ FAIL when claim is retracted."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.4)
+    mm.retract(ledger, "exp1", "results were fabricated")
+    findings = mm.audit(ledger, "exp1",
+                        reported_metric="acc", reported_acc=0.72, n=200)
+    assert any(f.probe == "⑫ retraction-cascade" and f.level == "FAIL" for f in findings)
+
+
+def test_cascade_in_audit_warn_appended(tmp_path):
+    """audit() appends ⑫ WARN when audited claim's dependency was retracted."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "base", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.4)
+    mm.preregister(ledger, "exp1", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.4,
+                   depends_on=["base"])
+    mm.retract(ledger, "base", "dataset contaminated")
+    findings = mm.audit(ledger, "exp1",
+                        reported_metric="acc", reported_acc=0.72, n=200)
+    assert any(f.probe == "⑫ retraction-cascade" and f.level == "WARN" for f in findings)
+
+
+def test_depends_on_sealed_in_entry(tmp_path):
+    """depends_on is included in the ledger entry and sealed."""
+    ledger = str(tmp_path / "l.jsonl")
+    e = mm.preregister(ledger, "exp1", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.6,
+                       depends_on=["baseline_v1", "data_v2"])
+    assert e["depends_on"] == ["baseline_v1", "data_v2"]
+    findings = mm.verify_chain(ledger)
+    assert all(f.level == "OK" for f in findings), findings

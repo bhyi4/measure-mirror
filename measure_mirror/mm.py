@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — probe engine (no training, pure rule+stat).
 
-10 probes:
+12 probes:
   ① Pre-registration ledger — append-only chain-hash, first-write wins,
       metric-swap detection, tamper detection, re-registration detection
   ② Fair baseline — crippled / tied / reversed baseline
@@ -15,11 +15,13 @@
   ⑨ Multiple comparisons — Bonferroni alarm for k>1 experiments in ledger
   ⑩ GRIM — arithmetic consistency (acc × n must be a whole-number count)
   ⑪ Falsifiability — Popper gate (kill-condition registered? triggered?)
+  ⑫ Retraction cascade — claim or transitive dependency retracted?
 
 Utilities:
   calibrate() — self-test: run 5 synthetic known-good/known-bad cases
   anchor()    — tamper-evident ledger snapshot for external archival
   witness()   — execute a command and seal a tamper-evident run record
+  retract()   — append a chain-linked retraction entry to the ledger
 
 Design:
   - Zero dependencies (Python stdlib only). Deterministic. No trained model.
@@ -66,7 +68,8 @@ def _get_last_seal(ledger_path: str) -> str:
 def preregister(ledger_path: str, claim_id: str, *, metric: str,
                 min_n: int, baseline: float, pass_threshold: float,
                 kill_condition: str | None = None,
-                kill_threshold: dict | None = None) -> dict:
+                kill_threshold: dict | None = None,
+                depends_on: list[str] | None = None) -> dict:
     """Seal evaluation criteria BEFORE seeing results.
 
     Each entry is cryptographically linked to the previous one (chain hash).
@@ -81,6 +84,8 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
         direction "above": FAIL when reported_acc > threshold (error metrics).
         Both can be provided together. Claims with neither are flagged
         "unfalsifiable" by falsifiability_check() at audit time.
+    depends_on: list of claim_ids this claim builds on. If any of those claims
+        is later retracted, this claim is flagged STALE by cascade_check().
 
     Chain link: deleting or inserting entries breaks the chain and is
     detected by verify_chain(). Complete ledger replacement is NOT caught
@@ -100,6 +105,8 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
         entry["kill_condition"] = kill_condition
     if kill_threshold is not None:
         entry["kill_threshold"] = kill_threshold
+    if depends_on:
+        entry["depends_on"] = depends_on
     entry["seal"] = hashlib.sha256(
         json.dumps(entry, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()[:16]
@@ -514,6 +521,113 @@ def falsifiability_check(ledger_path: str, claim_id: str, *,
 
 
 # ─────────────────────────────────────────────────────────────
+# ⑫ Retraction cascade
+# ─────────────────────────────────────────────────────────────
+def _load_dependency_graph(ledger_path: str) -> tuple[dict[str, list[str]], set[str]]:
+    """Return (deps, retracted) by scanning the entire ledger.
+
+    deps:      claim_id → list of claim_ids it depends on (from first preregister)
+    retracted: set of claim_ids that have at least one retraction entry
+    """
+    deps: dict[str, list[str]] = {}
+    retracted: set[str] = set()
+
+    if not os.path.exists(ledger_path):
+        return deps, retracted
+
+    with open(ledger_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                e = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            cid = e.get("claim_id")
+            if not cid:
+                continue
+            if e.get("_type") == "retraction":
+                retracted.add(cid)
+            elif "_type" not in e:
+                # preregister entry — record first occurrence only (first-write wins)
+                if cid not in deps:
+                    do = e.get("depends_on")
+                    deps[cid] = do if isinstance(do, list) else []
+
+    return deps, retracted
+
+
+def retract(ledger_path: str, claim_id: str, reason: str) -> dict:
+    """Append a chain-linked retraction entry to the ledger.
+
+    Marks claim_id as retracted. Any claim that depends (directly or transitively)
+    on a retracted claim will be flagged STALE by cascade_check(). Every call
+    appends a new entry; the entry is chain-linked via prev_seal so retraction
+    records cannot be silently deleted from the ledger.
+    """
+    ts = time.strftime("%Y-%m-%dT%H:%M:%S")
+    entry: dict = {
+        "_type":    "retraction",
+        "ts":       ts,
+        "claim_id": claim_id,
+        "reason":   reason,
+    }
+    prev_seal = _get_last_seal(ledger_path)
+    entry["prev_seal"] = prev_seal
+    entry["seal"] = hashlib.sha256(
+        json.dumps(entry, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()[:16]
+
+    with open(ledger_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    return entry
+
+
+def cascade_check(ledger_path: str, claim_id: str) -> Finding:
+    """⑫ Retraction cascade: check if claim or any transitive dependency was retracted.
+
+    Levels:
+      FAIL — claim_id itself has a retraction entry in the ledger
+      WARN — claim is STALE: a transitive dependency has been retracted
+      OK   — no retraction risk found
+
+    Policy: retraction propagates regardless of publication order. A claim
+    built on a retracted foundation is automatically stale.
+    Call standalone, or it runs automatically inside audit() (WARN/FAIL only).
+    """
+    deps, retracted = _load_dependency_graph(ledger_path)
+
+    if claim_id in retracted:
+        return Finding("⑫ retraction-cascade", "FAIL",
+                       f"Claim '{claim_id}' has been retracted.")
+
+    # BFS over dependency graph to find stale transitive dependencies
+    visited: set[str] = set()
+    queue: list[str] = list(deps.get(claim_id, []))
+    stale: list[str] = []
+
+    while queue:
+        dep = queue.pop(0)
+        if dep in visited:
+            continue
+        visited.add(dep)
+        if dep in retracted:
+            stale.append(dep)
+        else:
+            queue.extend(d for d in deps.get(dep, []) if d not in visited)
+
+    if stale:
+        return Finding("⑫ retraction-cascade", "WARN",
+                       f"Claim '{claim_id}' is STALE: depends (transitively) on "
+                       "retracted claim(s): "
+                       + ", ".join(f"'{s}'" for s in stale))
+
+    return Finding("⑫ retraction-cascade", "OK",
+                   f"No retraction risk for '{claim_id}'.")
+
+
+# ─────────────────────────────────────────────────────────────
 # Binary / classification metric audit
 # ─────────────────────────────────────────────────────────────
 def audit(ledger_path: str, claim_id: str, *,
@@ -580,6 +694,11 @@ def audit(ledger_path: str, claim_id: str, *,
                     f"{pre['pass_threshold']:.3f}. (seal={pre['seal']})"))
             # ⑪ falsifiability — only when seal is valid (no double-load)
             findings.append(_falsifiability_eval(pre, reported_acc))
+
+    # ⑫ cascade — retraction check (runs regardless of pre-registration)
+    casc = cascade_check(ledger_path, claim_id)
+    if casc.level != "OK":
+        findings.append(casc)
 
     return findings
 
@@ -892,7 +1011,7 @@ def _auto(name: str, ledger: str = "mm_ledger.jsonl") -> None:
 
 def _cli() -> None:
     import argparse, sys
-    _SUBCMDS = {"register", "audit", "calibrate", "run", "anchor"}
+    _SUBCMDS = {"register", "audit", "calibrate", "run", "anchor", "retract"}
     if len(sys.argv) == 2 and sys.argv[1] not in _SUBCMDS \
             and not sys.argv[1].startswith("-"):
         _auto(sys.argv[1]); return
@@ -916,6 +1035,8 @@ def _cli() -> None:
                    help="Numeric kill threshold for automatic evaluation")
     r.add_argument("--kill-direction", choices=["below", "above"], default="below",
                    help="Fail when reported value is below/above threshold (default: below)")
+    r.add_argument("--depends-on", dest="depends_on", nargs="+", default=None,
+                   help="Claim IDs this claim depends on (space-separated)")
 
     a = sub.add_parser("audit", help="Audit evaluation results")
     a.add_argument("claim_id", nargs="?")
@@ -932,6 +1053,12 @@ def _cli() -> None:
                         help="Print tamper-evident ledger snapshot to stdout for external archival")
     an.add_argument("--pretty", action="store_true",
                     help="Pretty-print JSON (default: compact single line for piping)")
+
+    rt = sub.add_parser("retract",
+                        help="Retract a claim; cascades STALE to all dependent claims")
+    rt.add_argument("claim_id", help="Claim ID to retract")
+    rt.add_argument("--reason", required=True,
+                    help="Reason for retraction (e.g. 'data labelling error discovered')")
 
     rn = sub.add_parser("run",
                         help="Calibrate + witness-execute a command, sealing the run record")
@@ -956,7 +1083,8 @@ def _cli() -> None:
                         min_n=args.min_n, baseline=args.baseline,
                         pass_threshold=args.pass_threshold,
                         kill_condition=args.kill_condition,
-                        kill_threshold=kill_thresh)
+                        kill_threshold=kill_thresh,
+                        depends_on=args.depends_on)
         kill_note = ""
         if kill_thresh:
             op = "<" if args.kill_direction == "below" else ">"
@@ -986,6 +1114,9 @@ def _cli() -> None:
             print(json.dumps(a, indent=2, ensure_ascii=False))
         else:
             print(json.dumps(a, ensure_ascii=False))
+    elif args.cmd == "retract":
+        e = retract(args.ledger, args.claim_id, args.reason)
+        print(f"🚫 Retracted: {args.claim_id}  reason={args.reason!r}  seal={e['seal']}")
     elif args.cmd == "run":
         cmd = [c for c in (args.command or []) if c != "--"]
         if not cmd:

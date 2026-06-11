@@ -122,7 +122,7 @@ def test_my_model_is_real():
 
 ---
 
-## 14종 Probe + 3 유틸리티 전체 목록
+## 15종 Probe + 4 유틸리티 전체 목록
 
 | Probe | 번호 | 잡아내는 것 |
 |---|---|---|
@@ -140,12 +140,14 @@ def test_my_model_is_real():
 | `multiple_comparisons_check` | ⑨ | 같은 레저에 k>1 실험 → Bonferroni 교정 경보 |
 | `grim_check` | ⑩ | 보고된 acc × n이 정수 k와 일치 불가 (수치 조작 적발) |
 | `falsifiability_check` | ⑪ | kill-condition 없음→반증불가; kill_threshold 발화→주장 사망 |
+| `cascade_check` | ⑫ | 주장 자신 또는 전이 의존성 철회 → FAIL/WARN 오래됨 |
 
 | 유틸리티 | 역할 |
 |---|---|
 | `anchor` | 변조 방지 원장 스냅샷(해시+헤드 봉인) stdout 출력 → 외부 보관 |
 | `calibrate` | 자가 테스트: 5종 합성 케이스로 도구 정상 작동 확인 |
 | `witness` | 커맨드 실행·출력 캡처·변조 방지 실행 봉인 원장에 기록 |
+| `retract` | 체인 연결 철회 엔트리 추가 → 의존 주장 cascade_check에서 STALE |
 
 ### 체인 해시 원장 (① 확장)
 
@@ -206,6 +208,37 @@ mm register my_model --metric acc --min-n 200 --baseline 0.5 --pass 0.60 \
 
 kill-condition 없이 등록된 주장은 audit 시점에 `WARN: Unfalsifiable`을 받습니다.
 OSF 사전등록도 가설만 받지 죽음조건은 받지 않습니다 — 이 도구가 최초입니다.
+
+### 철회 cascade ⑫
+
+```python
+# 의존성이 있는 주장 등록
+mm.preregister("mm_ledger.jsonl", "model_v2",
+               metric="acc", min_n=200, baseline=0.5, pass_threshold=0.60,
+               depends_on=["dataset_v1", "baseline_eval"])
+
+# 나중에 dataset_v1에서 오염 발견 → 철회
+mm.retract("mm_ledger.jsonl", "dataset_v1", "훈련/테스트 중복 발견")
+
+# cascade_check가 model_v2를 자동으로 STALE 표시
+f = mm.cascade_check("mm_ledger.jsonl", "model_v2")
+# ⚠️  [⑫ retraction-cascade] Claim 'model_v2' is STALE: depends (transitively) on
+#     retracted claim(s): 'dataset_v1'
+
+# audit()에서 cascade_check 자동 실행 (WARN/FAIL만 추가)
+findings = mm.audit("mm_ledger.jsonl", "model_v2",
+                    reported_metric="acc", reported_acc=0.72, n=500)
+```
+
+```bash
+mm register model_v2 --metric acc --min-n 200 --baseline 0.5 --pass 0.60 \
+  --depends-on dataset_v1 baseline_eval
+
+mm retract dataset_v1 --reason "훈련/테스트 중복 발견"
+```
+
+철회 엔트리는 **체인 연결**되어 있어 삭제하면 `verify_chain()`에서 즉시 탐지됩니다.
+발표 순서와 관계없이 철회가 전파됩니다: 철회된 기반 위에 세운 주장은 자동으로 오래된 것이 됩니다.
 
 ### 앵커(Anchor) ⎈
 
@@ -289,11 +322,11 @@ pip install "measure-mirror[mcp]"
 
 **기타 MCP 클라이언트** — stdio 서버 명령으로 `mm-mcp`를 실행하세요.
 
-14종 probe + 3 유틸리티 전부 MCP 도구로 노출됩니다:  
+15종 probe + 4 유틸리티 전부 MCP 도구로 노출됩니다:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
-`mm_falsifiability_check` · `mm_anchor` · `mm_calibrate` · `mm_witness`
+`mm_falsifiability_check` · `mm_cascade_check` · `mm_anchor` · `mm_calibrate` · `mm_witness` · `mm_retract`
 
 ---
 
