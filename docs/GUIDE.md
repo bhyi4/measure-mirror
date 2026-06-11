@@ -719,6 +719,65 @@ f = mm.judge_score_sanity(scores)
 
 ---
 
+#### ⑱ `judge_swap_check`
+
+**Catches**: a judge whose verdict follows the *slot*, not the content — including
+the hardest case: a deterministic, balanced, content-blind judge that passes every
+other probe.
+
+Each pair is judged twice: once as (A, B) and once with positions swapped (B, A).
+A content-driven judge must invert its verdict — the same response wins from either
+slot. A judge whose verdict stays with the slot is reading position, not content.
+
+```
+lock = forward[i] == swapped[i]   (same slot won both times)
+
+lock_rate ≈ 0.0  → content-driven  (verdict follows the response)  → OK
+lock_rate ≈ 0.5  → noise           (verdict tracks neither)        → WARN
+lock_rate ≈ 1.0  → position-locked (verdict follows the slot)      → FAIL
+```
+
+**Why aggregate win-rate (⑮) is not enough** — a deterministic judge that never
+reads the responses (e.g. decides from the prompt alone) is perfectly consistent
+(⑭ OK), shows a balanced win-rate (⑮ OK), agrees with itself (⑯ κ=1.0), and
+produces varied scores (⑰ OK). Only the swap exposes it:
+
+```python
+# Content-driven judge: every verdict inverts with the swap
+forward = [0, 1, 0, 1, 0, 1]
+swapped = [1, 0, 1, 0, 1, 0]
+f = mm.judge_swap_check(forward, swapped)
+# ✅ [⑱ judge-swap] Position-lock rate 0.0% ≤ 35.0% (6/6 verdicts inverted
+#    with the swap). Content-driven.
+
+# Content-blind judge: verdicts identical in both orders
+forward = [0, 1, 0, 1, 0, 1]
+swapped = [0, 1, 0, 1, 0, 1]
+f = mm.judge_swap_check(forward, swapped)
+# 🔴 [⑱ judge-swap] Position-lock rate 100.0% > 65.0% (6/6 verdicts stayed
+#    with the slot after AB→BA swap). Judge is reading position, not content.
+```
+
+Run `python examples/demo_judge.py` to see a mock content-blind judge pass
+⑭⑮⑯⑰ and get caught only by ⑱ — no API key needed.
+
+**Parameters:**
+| Param | Default | Notes |
+|---|---|---|
+| `forward_results` | required | `[0, 1, ...]` — winners in original (A, B) order |
+| `swapped_results` | required | `[0, 1, ...]` — winners in swapped (B, A) order |
+| `position_lock_threshold` | 0.65 | lock_rate above this → FAIL |
+| `noise_threshold` | 0.35 | lock_rate above this → WARN |
+
+Pairs containing values outside {0, 1} (e.g. -1 parse failures) are excluded.
+
+**Levels:**
+- `FAIL` — lock_rate > position_lock_threshold, or forward/swapped length mismatch
+- `WARN` — lock_rate in the noise band, or no valid pairs
+- `OK` — lock_rate ≤ noise_threshold
+
+---
+
 #### `judge_run` — automatic orchestration (`judge.py`)
 
 `judge_run` eliminates the friction of collecting scores yourself. It calls the
@@ -751,8 +810,9 @@ result = judge_run(
     "my_llm_eval_v1",   # claim_id — links to a preregister entry if you have one
     judge_fn=judge_fn,
     items=pairs,
-    runs=2,             # 2 = call each item twice; enables ⑭ + ⑯
-    pairwise=True,      # True = enable ⑮ bias check
+    runs=2,              # 2 = call each item twice; enables ⑭ + ⑯
+    pairwise=True,       # True = enable ⑮ bias check
+    swap_positions=True, # extra AB→BA pass; enables ⑱ swap test
 )
 
 # Findings from ⑭⑮⑯⑰
@@ -769,9 +829,11 @@ print(result["ledger_entry"])  # the sealed ledger entry
 
 | Key | Type | Contents |
 |---|---|---|
-| `findings` | `list[Finding]` | ⑭⑮⑯⑰ probe results |
-| `scores` | `list[int]` | run-1 scores (one per item) |
+| `findings` | `list[Finding]` | probe results (⑭⑮⑯⑰⑱ + `judge-parse`) |
+| `scores` | `list[int]` | raw run-1 scores (one per item, may contain -1) |
 | `score_pairs` | `list[tuple]` or `None` | `(run1, run2)` pairs; `None` if `runs=1` |
+| `swap_scores` | `list[int]` or `None` | swapped-order scores; `None` unless `swap_positions` |
+| `parse_failures` | `int` | items excluded due to unparseable responses |
 | `n_items` | `int` | number of items evaluated |
 | `runs` | `int` | number of repetitions performed |
 | `pairwise` | `bool` | whether pairwise mode was used |
@@ -785,6 +847,13 @@ print(result["ledger_entry"])  # the sealed ledger entry
 | ⑮ `judge_bias_check` | always when `pairwise=True` |
 | ⑯ `inter_rater_agreement` | always when `runs ≥ 2` |
 | ⑰ `judge_score_sanity` | always |
+| ⑱ `judge_swap_check` | when `swap_positions=True` (pairwise only) |
+| `judge-parse` | WARN when >10% of responses unparseable; FAIL when none parsed |
+
+**Parse-failure handling** — judge responses that cannot be parsed score -1.
+Items with a -1 in any run are excluded from every probe, so parse noise cannot
+distort ⑮ bias or ⑰ sanity results. The exclusion count is recorded in the
+ledger entry (`parse_failures`).
 
 ---
 
@@ -835,6 +904,42 @@ what the script produced.
 ### `retract`
 
 Append a chain-linked retraction entry. See [⑫ cascade_check](#-cascade_check--retract) above.
+
+---
+
+### `certificate`
+
+Issue a sealed verification certificate for a claim — the full integrity state
+collapsed into one verifiable artifact for papers, READMEs, or release notes.
+
+```python
+# Structural certificate (prereg seal + chain + retraction status)
+cert = mm.certificate("ledger.jsonl", "my_model")
+
+# Full certificate — fold audit findings in
+findings = mm.audit("ledger.jsonl", "my_model",
+                    reported_metric="acc", reported_acc=0.72, n=500)
+cert = mm.certificate("ledger.jsonl", "my_model", findings=findings)
+```
+
+```bash
+mm certify my_model --pretty                  # structural only
+mm certify my_model --acc 0.72 --n 500        # + audit findings folded in
+mm certify my_model | gh gist create -        # publish externally
+```
+
+| Verdict | Trigger |
+|---|---|
+| `REJECTED` | chain broken · prereg seal tampered · claim retracted · any FAIL finding |
+| `UNVERIFIED` | no pre-registration exists for this claim |
+| `CERTIFIED-WITH-WARNINGS` | stale dependency or WARN findings |
+| `CERTIFIED` | every check clean |
+
+Key properties:
+- Embeds the ledger's `anchor_hash` — the certificate attests to **one specific
+  ledger state**; regenerate after any ledger change.
+- The certificate itself is sealed (SHA-256) — any field edit is detectable.
+- Not appended to the ledger; it is an output artifact like `anchor()`.
 
 ---
 
@@ -1041,10 +1146,12 @@ Agent: [calls mm_register, then mm_audit]
 | ⑮ | `judge_bias_check` | judge favors position A or B systematically | standalone |
 | ⑯ | `inter_rater_agreement` | Cohen's κ below threshold (poor agreement) | standalone |
 | ⑰ | `judge_score_sanity` | judge assigns identical/near-identical scores | standalone |
+| ⑱ | `judge_swap_check` | verdict follows the slot, not the content (AB→BA swap) | via `judge_run(swap_positions=True)` |
 | — | `anchor` | complete ledger replacement | manual (before publish) |
 | — | `calibrate` | mirror itself has regressions | manual (before witness) |
 | — | `witness` | execution record: what ran, when, output hash | manual |
 | — | `retract` | create retraction record (chain-linked) | manual |
+| — | `certificate` | sealed verdict artifact for one claim (anchor-pinned) | manual (before publish) |
 
 **Severity policy** across the codebase:
 - `FAIL` — hard stop; result is invalid or self-contradicted

@@ -8,11 +8,15 @@ This module provides:
   openai_judge()    — returns a judge callable backed by the OpenAI API
   anthropic_judge() — returns a judge callable backed by the Anthropic API
   judge_run()       — runs the judge, chain-links results to the ledger,
-                      and automatically fires probes ⑭⑮⑯⑰
+                      and automatically fires probes ⑭⑮⑯⑰ (and ⑱ with
+                      swap_positions=True)
 
-Probes ⑭⑮⑯⑰ (judge_consistency_check, judge_bias_check,
-inter_rater_agreement, judge_score_sanity) live in mm.py so they stay
-zero-dependency and can be called standalone with any score list.
+Probes ⑭⑮⑯⑰⑱ (judge_consistency_check, judge_bias_check,
+inter_rater_agreement, judge_score_sanity, judge_swap_check) live in mm.py
+so they stay zero-dependency and can be called standalone with any score list.
+
+Unparseable judge responses score -1 and are excluded from probes; a
+`judge-parse` WARN fires when the failure rate exceeds 10%.
 
 Typical workflow
 ----------------
@@ -235,8 +239,9 @@ def judge_run(
     items: list[dict],
     runs: int = 2,
     pairwise: bool = True,
+    swap_positions: bool = False,
 ) -> dict[str, Any]:
-    """Run a judge function on items, fire ⑭⑮⑯⑰ probes, seal into ledger.
+    """Run a judge function on items, fire ⑭⑮⑯⑰(⑱) probes, seal into ledger.
 
     Args:
         ledger_path: Path to the JSONL ledger.
@@ -249,26 +254,37 @@ def judge_run(
                      Two runs enables ⑭ consistency and ⑯ inter-rater checks.
         pairwise:    True = A-vs-B scores (0/1);  False = rating scores (int).
                      Controls ⑮ bias check and ledger entry fields.
+        swap_positions: If True (pairwise only), each item is additionally
+                     judged with a/b swapped and ⑱ judge_swap_check fires.
+                     Catches position bias that aggregate win-rate (⑮) misses.
+
+    Parse failures: judge responses that cannot be parsed score -1.  Items with
+    a -1 in any run are excluded from all probes; a `judge-parse` WARN fires
+    when the failure rate exceeds 10% (FAIL when nothing parsed).
 
     Returns dict with keys:
-        findings      : list[Finding] — ⑭⑮⑯⑰ probe results
-        scores        : list[int] — run-1 scores (one per item)
-        score_pairs   : list of (run1, run2) tuples if runs >= 2, else None
-        n_items       : number of items evaluated
-        runs          : number of repetitions performed
-        pairwise      : bool — whether pairwise mode was used
-        ledger_entry  : the chain-linked entry appended to the ledger
+        findings       : list[Finding] — probe results
+        scores         : list[int] — raw run-1 scores (one per item, may contain -1)
+        score_pairs    : list of (run1, run2) tuples if runs >= 2, else None
+        swap_scores    : list[int] — swapped-order scores if swap_positions, else None
+        parse_failures : number of items excluded due to unparseable responses
+        n_items        : number of items evaluated
+        runs           : number of repetitions performed
+        pairwise       : bool — whether pairwise mode was used
+        ledger_entry   : the chain-linked entry appended to the ledger
     """
     if not items:
         return {
-            "findings":     [mm.Finding("⑭ judge-consistency", "WARN",
-                                        "judge_run called with empty items list.")],
-            "scores":       [],
-            "score_pairs":  None,
-            "n_items":      0,
-            "runs":         runs,
-            "pairwise":     pairwise,
-            "ledger_entry": None,
+            "findings":       [mm.Finding("⑭ judge-consistency", "WARN",
+                                          "judge_run called with empty items list.")],
+            "scores":         [],
+            "score_pairs":    None,
+            "swap_scores":    None,
+            "parse_failures": 0,
+            "n_items":        0,
+            "runs":           runs,
+            "pairwise":       pairwise,
+            "ledger_entry":   None,
         }
 
     all_run_scores: list[list[int]] = []
@@ -276,67 +292,101 @@ def judge_run(
         run_scores: list[int] = [judge_fn(item) for item in items]
         all_run_scores.append(run_scores)
 
+    # Optional extra pass with positions swapped (⑱)
+    swap_scores: list[int] | None = None
+    if pairwise and swap_positions:
+        swapped_items = [{**item, "a": item["b"], "b": item["a"]}
+                         for item in items]
+        swap_scores = [judge_fn(item) for item in swapped_items]
+
+    # Exclude items where any run failed to parse (-1) — feeding parse noise
+    # into the probes would distort ⑮ bias and ⑰ sanity results.
+    n_total = len(items)
+    valid_idx = [i for i in range(n_total)
+                 if all(run[i] != -1 for run in all_run_scores)]
+    parse_failures = n_total - len(valid_idx)
+    parse_fail_rate = parse_failures / n_total
+
     findings: list[mm.Finding] = []
+    if parse_failures == n_total:
+        findings.append(mm.Finding(
+            "judge-parse", "FAIL",
+            f"All {n_total} judge responses unparseable — no usable scores. "
+            "Check the prompt template / response format."))
+    elif parse_fail_rate > 0.10:
+        findings.append(mm.Finding(
+            "judge-parse", "WARN",
+            f"{parse_failures}/{n_total} judge responses unparseable "
+            f"({parse_fail_rate:.0%}) — excluded from probes."))
 
-    # ⑭ consistency — requires ≥ 2 runs
-    if runs >= 2:
-        score_pairs = list(zip(all_run_scores[0], all_run_scores[1]))
-        findings.append(mm.judge_consistency_check(score_pairs))
-    else:
-        score_pairs = None
+    runs_valid = [[run[i] for i in valid_idx] for run in all_run_scores]
 
-    # ⑮ position bias — only meaningful in pairwise mode
-    if pairwise:
-        findings.append(mm.judge_bias_check(all_run_scores[0]))
+    if valid_idx:
+        # ⑭ consistency — requires ≥ 2 runs
+        if runs >= 2:
+            findings.append(mm.judge_consistency_check(
+                list(zip(runs_valid[0], runs_valid[1]))))
 
-    # ⑯ inter-rater — treat run-1 vs run-2 as two raters when runs ≥ 2
-    if runs >= 2:
-        findings.append(mm.inter_rater_agreement(
-            list(zip(all_run_scores[0], all_run_scores[1]))))
+        # ⑮ position bias — only meaningful in pairwise mode
+        if pairwise:
+            findings.append(mm.judge_bias_check(runs_valid[0]))
 
-    # ⑰ score sanity — always
-    findings.append(mm.judge_score_sanity(all_run_scores[0]))
+        # ⑯ inter-rater — treat run-1 vs run-2 as two raters when runs ≥ 2
+        if runs >= 2:
+            findings.append(mm.inter_rater_agreement(
+                list(zip(runs_valid[0], runs_valid[1]))))
+
+        # ⑰ score sanity — always
+        findings.append(mm.judge_score_sanity(runs_valid[0]))
+
+        # ⑱ position-swap — judge_swap_check filters -1 pairs internally
+        if swap_scores is not None:
+            findings.append(mm.judge_swap_check(all_run_scores[0], swap_scores))
+
+    score_pairs = (list(zip(all_run_scores[0], all_run_scores[1]))
+                   if runs >= 2 else None)
 
     # Summarise for ledger
     level_counts: dict[str, int] = {"OK": 0, "WARN": 0, "FAIL": 0}
     for f in findings:
         level_counts[f.level] = level_counts.get(f.level, 0) + 1
 
-    flips: int | None = None
-    a_win_rate: float | None = None
-    kappa: float | None = None
-    if runs >= 2:
-        pairs = list(zip(all_run_scores[0], all_run_scores[1]))
-        flips = sum(1 for a, b in pairs if a != b)
-    if pairwise and all_run_scores[0]:
-        n_a = sum(1 for s in all_run_scores[0] if s == 0)
-        a_win_rate = round(n_a / len(all_run_scores[0]), 4)
-
     entry: dict = {
         "_type":          "judge_run",
         "ts":             time.strftime("%Y-%m-%dT%H:%M:%S"),
         "claim_id":       claim_id,
-        "n_items":        len(items),
+        "n_items":        n_total,
         "runs":           runs,
         "pairwise":       pairwise,
+        "parse_failures": parse_failures,
         "findings_ok":    level_counts["OK"],
         "findings_warn":  level_counts["WARN"],
         "findings_fail":  level_counts["FAIL"],
     }
-    if flips is not None:
+    if runs >= 2 and valid_idx:
+        flips = sum(1 for a, b in zip(runs_valid[0], runs_valid[1]) if a != b)
         entry["flip_count"] = flips
-        entry["flip_rate"] = round(flips / len(items), 4)
-    if a_win_rate is not None:
-        entry["a_win_rate"] = a_win_rate
+        entry["flip_rate"] = round(flips / len(valid_idx), 4)
+    if pairwise and valid_idx:
+        n_a = sum(1 for s in runs_valid[0] if s == 0)
+        entry["a_win_rate"] = round(n_a / len(valid_idx), 4)
+    if swap_scores is not None:
+        swap_valid = [(f, s) for f, s in zip(all_run_scores[0], swap_scores)
+                      if f in (0, 1) and s in (0, 1)]
+        if swap_valid:
+            locked = sum(1 for f, s in swap_valid if f == s)
+            entry["swap_lock_rate"] = round(locked / len(swap_valid), 4)
 
     ledger_entry = _seal_judge_run(ledger_path, entry)
 
     return {
-        "findings":     findings,
-        "scores":       all_run_scores[0],
-        "score_pairs":  score_pairs,
-        "n_items":      len(items),
-        "runs":         runs,
-        "pairwise":     pairwise,
-        "ledger_entry": ledger_entry,
+        "findings":       findings,
+        "scores":         all_run_scores[0],
+        "score_pairs":    score_pairs,
+        "swap_scores":    swap_scores,
+        "parse_failures": parse_failures,
+        "n_items":        n_total,
+        "runs":           runs,
+        "pairwise":       pairwise,
+        "ledger_entry":   ledger_entry,
     }

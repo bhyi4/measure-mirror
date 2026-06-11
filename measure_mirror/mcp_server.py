@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — MCP server
 
-Exposes 20 probes + 4 utilities (anchor, calibrate, witness, retract) as MCP tools via stdio transport so any
+Exposes 21 probes + 5 utilities (anchor, calibrate, witness, retract, certificate) as MCP tools via stdio transport so any
 MCP-compatible AI (Claude Code, Cursor, Windsurf, …) can call them
 directly mid-conversation.
 
@@ -539,6 +539,63 @@ async def list_tools() -> list[types.Tool]:
                 "required": ["scores"],
             },
         ),
+        types.Tool(
+            name="mm_judge_swap_check",
+            description=(
+                "⑱ Position-swap cross-validation for a pairwise LLM judge. Each pair is "
+                "judged as (A,B) and again with positions swapped (B,A). A content-driven "
+                "judge inverts its verdict (same response wins from either slot); a "
+                "position-locked judge keeps choosing the same slot. lock_rate ≈0 = "
+                "content-driven (OK), ≈0.5 = noise (WARN), ≈1 = position-locked (FAIL). "
+                "Catches bias that aggregate win-rate (⑮) misses when content quality "
+                "is unbalanced."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "forward_results": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "[0, 1, ...] — winner per item in original (A, B) order",
+                    },
+                    "swapped_results": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "[0, 1, ...] — winner per item in swapped (B, A) order",
+                    },
+                    "position_lock_threshold": {"type": "number", "default": 0.65,
+                                                "description": "lock_rate above this → FAIL"},
+                    "noise_threshold": {"type": "number", "default": 0.35,
+                                        "description": "lock_rate above this → WARN"},
+                },
+                "required": ["forward_results", "swapped_results"],
+            },
+        ),
+        types.Tool(
+            name="mm_certificate",
+            description=(
+                "📜 Issue a sealed verification certificate for a claim. Collapses "
+                "pre-registration seal, ledger chain integrity, anchor_hash, retraction "
+                "status, and (optionally) audit findings into a single SHA-256-sealed "
+                "verdict: CERTIFIED / CERTIFIED-WITH-WARNINGS / UNVERIFIED / REJECTED. "
+                "Pass reported_acc + n to run a full audit and fold the findings in. "
+                "The anchor_hash pins the exact ledger state the certificate attests to."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ledger_path":  {"type": "string", "description": "Ledger JSONL path"},
+                    "claim_id":     {"type": "string", "description": "Claim to certify"},
+                    "reported_acc": {"type": "number",
+                                     "description": "Optional: runs audit() and folds findings in"},
+                    "n":            {"type": "integer",
+                                     "description": "Sample size (required with reported_acc)"},
+                    "reported_metric": {"type": "string", "default": "acc"},
+                    "baseline":     {"type": "number", "default": 0.5},
+                },
+                "required": ["ledger_path", "claim_id"],
+            },
+        ),
     ]
 
 
@@ -791,6 +848,32 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 arguments["scores"],
                 min_unique_ratio=arguments.get("min_unique_ratio", 0.10),
             ))
+
+        elif name == "mm_judge_swap_check":
+            result = _single(mm.judge_swap_check(
+                arguments["forward_results"],
+                arguments["swapped_results"],
+                position_lock_threshold=arguments.get("position_lock_threshold", 0.65),
+                noise_threshold=arguments.get("noise_threshold", 0.35),
+            ))
+
+        elif name == "mm_certificate":
+            fnds = None
+            if arguments.get("reported_acc") is not None and arguments.get("n") is not None:
+                fnds = mm.audit(
+                    arguments["ledger_path"],
+                    arguments["claim_id"],
+                    reported_metric=arguments.get("reported_metric", "acc"),
+                    reported_acc=arguments["reported_acc"],
+                    n=arguments["n"],
+                    baseline=arguments.get("baseline", 0.5),
+                )
+            c = mm.certificate(
+                arguments["ledger_path"],
+                arguments["claim_id"],
+                findings=fnds,
+            )
+            result = json.dumps(c, indent=2, ensure_ascii=False)
 
         else:
             result = f"Unknown tool: {name}"

@@ -158,3 +158,79 @@ def test_judge_run_empty_items(tmp_path):
     assert result["n_items"] == 0
     assert result["ledger_entry"] is None
     assert any(f.level == "WARN" for f in result["findings"])
+
+
+# ─── parse-failure handling tests ────────────────────────────
+
+def test_judge_run_filters_unparseable(tmp_path):
+    """Items scoring -1 in any run are excluded from probes."""
+    ledger = str(tmp_path / "l.jsonl")
+    items = [{"prompt": f"p{i}", "a": "x", "b": "y"} for i in range(5)]
+    # run1: item2 unparseable; run2: clean → item2 excluded everywhere
+    judge_fn = _make_deterministic_judge([0, 1, -1, 0, 1,   0, 1, 0, 0, 1])
+    result = jm.judge_run(ledger, "ev_parse", judge_fn=judge_fn,
+                          items=items, runs=2, pairwise=True)
+    assert result["parse_failures"] == 1
+    # bias check saw only 4 valid items: [0, 1, 0, 1] → balanced, no phantom FAIL
+    bias = [f for f in result["findings"] if f.probe == "⑮ judge-bias"]
+    assert bias and bias[0].level == "OK"
+    assert result["ledger_entry"]["parse_failures"] == 1
+
+
+def test_judge_run_warn_high_parse_failure(tmp_path):
+    """Parse failure rate > 10% → judge-parse WARN appended."""
+    ledger = str(tmp_path / "l.jsonl")
+    items = [{"prompt": f"p{i}", "a": "x", "b": "y"} for i in range(5)]
+    # 2/5 = 40% unparseable in run1
+    judge_fn = _make_deterministic_judge([-1, -1, 0, 1, 0,   0, 1, 0, 1, 0])
+    result = jm.judge_run(ledger, "ev_warn", judge_fn=judge_fn,
+                          items=items, runs=2, pairwise=True)
+    parse = [f for f in result["findings"] if f.probe == "judge-parse"]
+    assert parse and parse[0].level == "WARN"
+
+
+def test_judge_run_fail_all_unparseable(tmp_path):
+    """Nothing parsed → judge-parse FAIL, no probe results."""
+    ledger = str(tmp_path / "l.jsonl")
+    items = [{"prompt": "p", "a": "x", "b": "y"}] * 3
+    judge_fn = _make_deterministic_judge([-1] * 6)
+    result = jm.judge_run(ledger, "ev_fail", judge_fn=judge_fn,
+                          items=items, runs=2, pairwise=True)
+    assert result["parse_failures"] == 3
+    parse = [f for f in result["findings"] if f.probe == "judge-parse"]
+    assert parse and parse[0].level == "FAIL"
+    assert not any(f.probe.startswith("⑮") for f in result["findings"])
+
+
+# ─── swap_positions (⑱) tests ────────────────────────────────
+
+def test_judge_run_swap_fires_swap_check(tmp_path):
+    """swap_positions=True adds an extra pass and fires ⑱."""
+    ledger = str(tmp_path / "l.jsonl")
+    items = [{"prompt": f"p{i}", "a": "x", "b": "y"} for i in range(4)]
+    # 2 runs × 4 + 1 swap pass × 4 = 12 calls
+    # forward [0,1,0,1]; swap pass [1,0,1,0] → all inverted → content-driven OK
+    judge_fn = _make_deterministic_judge(
+        [0, 1, 0, 1,   0, 1, 0, 1,   1, 0, 1, 0])
+    result = jm.judge_run(ledger, "ev_swap", judge_fn=judge_fn,
+                          items=items, runs=2, pairwise=True,
+                          swap_positions=True)
+    swap = [f for f in result["findings"] if f.probe == "⑱ judge-swap"]
+    assert swap and swap[0].level == "OK"
+    assert result["swap_scores"] == [1, 0, 1, 0]
+    assert result["ledger_entry"]["swap_lock_rate"] == 0.0
+
+
+def test_judge_run_swap_catches_position_lock(tmp_path):
+    """Position-locked judge → ⑱ FAIL even when run-level bias is mixed."""
+    ledger = str(tmp_path / "l.jsonl")
+    items = [{"prompt": f"p{i}", "a": "x", "b": "y"} for i in range(4)]
+    # forward [0,0,1,1]; swap pass identical [0,0,1,1] → 100% locked
+    judge_fn = _make_deterministic_judge(
+        [0, 0, 1, 1,   0, 0, 1, 1,   0, 0, 1, 1])
+    result = jm.judge_run(ledger, "ev_lock", judge_fn=judge_fn,
+                          items=items, runs=2, pairwise=True,
+                          swap_positions=True)
+    swap = [f for f in result["findings"] if f.probe == "⑱ judge-swap"]
+    assert swap and swap[0].level == "FAIL"
+    assert result["ledger_entry"]["swap_lock_rate"] == 1.0

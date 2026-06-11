@@ -5,6 +5,42 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.11.0] — 2026-06-11
+
+### Added
+- **⑱ `judge_swap_check(forward_results, swapped_results, *, position_lock_threshold=0.65, noise_threshold=0.35)`**
+  — Position-swap cross-validation. Each pair is judged as (A,B) and again as
+  (B,A); a content-driven judge inverts its verdict, a content-blind judge keeps
+  choosing the same slot. Catches the hardest judge pathology: a deterministic,
+  balanced judge that never reads the responses **passes ⑭⑮⑯⑰ and is caught
+  only by ⑱** (see `examples/demo_judge.py`).
+  - lock_rate ≈ 0 → OK (content-driven) · ≈ 0.5 → WARN (noise) · ≈ 1 → FAIL (position-locked)
+- **`certificate(ledger_path, claim_id, *, findings=None)`** — sealed verification
+  certificate utility. Collapses prereg seal + chain integrity + retraction status
+  + optional audit findings into one SHA-256-sealed verdict:
+  `CERTIFIED / CERTIFIED-WITH-WARNINGS / UNVERIFIED / REJECTED`.
+  Embeds the ledger `anchor_hash`, pinning the exact ledger state attested to.
+- **`judge_run` upgrades**:
+  - `swap_positions=True` — extra AB→BA pass, fires ⑱ automatically,
+    records `swap_lock_rate` in the ledger entry.
+  - **Parse-failure handling** — unparseable judge responses (-1) are excluded
+    from all probes (previously they silently distorted ⑮ bias and ⑰ sanity);
+    `judge-parse` WARN fires above 10% failure rate, FAIL when nothing parsed.
+    New return keys: `swap_scores`, `parse_failures`.
+- **CLI**: `mm judge --file scores.json` (audit pre-collected judge scores,
+  probes ⑭⑮⑯⑰⑱) and `mm certify <claim_id> [--acc X --n N] [--pretty]`.
+- **2 new MCP tools**: `mm_judge_swap_check`, `mm_certificate` (26 tools total).
+- **`examples/demo_judge.py`** — mock-judge demo, no API key needed: honest
+  judge, content-blind judge (⑱-only catch), degenerate judge.
+- 17 new tests (total: 127 → 144, all passing).
+
+### Changed
+- Probe count: 17 → 18 (mm.py) / utilities 4 → 5. README "21 Probes + 5 Utilities".
+- `certificate` added to sync-gate `_MCP_UTILITY_TOOLS`.
+- `__init__.py`: exports `judge_swap_check`, `certificate`; `__version__` 0.11.0.
+
+---
+
 ## [0.10.0] — 2026-06-11
 
 ### Added

@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — probe engine (no training, pure rule+stat).
 
-17 probes:
+18 probes:
   ① Pre-registration ledger — append-only chain-hash, first-write wins,
       metric-swap detection, tamper detection, re-registration detection
   ② Fair baseline — crippled / tied / reversed baseline
@@ -21,12 +21,14 @@
   ⑮ Judge position bias — systematic A-wins / B-wins preference
   ⑯ Inter-rater agreement — Cohen's κ for multi-judge setups
   ⑰ Judge score sanity — degenerate scoring distribution
+  ⑱ Judge position-swap — AB/BA cross-validation (content vs position lock)
 
 Utilities:
-  calibrate() — self-test: run 5 synthetic known-good/known-bad cases
-  anchor()    — tamper-evident ledger snapshot for external archival
-  witness()   — execute a command and seal a tamper-evident run record
-  retract()   — append a chain-linked retraction entry to the ledger
+  calibrate()   — self-test: run 5 synthetic known-good/known-bad cases
+  anchor()      — tamper-evident ledger snapshot for external archival
+  witness()     — execute a command and seal a tamper-evident run record
+  retract()     — append a chain-linked retraction entry to the ledger
+  certificate() — issue a sealed verification certificate for a claim
 
 Design:
   - Zero dependencies (Python stdlib only). Deterministic. No trained model.
@@ -903,6 +905,73 @@ def judge_score_sanity(scores: list,
 
 
 # ─────────────────────────────────────────────────────────────
+# ⑱ Judge position-swap — AB/BA cross-validation
+# ─────────────────────────────────────────────────────────────
+def judge_swap_check(forward_results: list, swapped_results: list,
+                     *, position_lock_threshold: float = 0.65,
+                     noise_threshold: float = 0.35) -> Finding:
+    """⑱ Position-swap cross-validation for a pairwise LLM judge.
+
+    Each pair is judged twice: once as (A, B) and once with positions swapped
+    (B, A). A content-driven judge must invert its verdict when positions swap —
+    the same response wins from either slot. A judge whose verdict stays with
+    the *slot* is reading position, not content.
+
+        lock = forward[i] == swapped[i]   (same slot won both → position-driven)
+
+    This catches per-item bias that the aggregate win-rate (⑮) misses: a judge
+    with moderate position preference stays under the ⑮ threshold whenever the
+    content quality is unbalanced, but cannot survive the swap test.
+
+    Interpretation of lock_rate:
+      ~0.0  content-driven  (verdict follows the response)  → OK
+      ~0.5  noise           (verdict tracks neither)        → WARN
+      ~1.0  position-locked (verdict follows the slot)      → FAIL
+
+    Args:
+        forward_results: [0, 1, ...] — winner per item in original (A, B) order.
+        swapped_results: [0, 1, ...] — winner per item in swapped (B, A) order.
+        position_lock_threshold: lock_rate above this → FAIL (default 0.65).
+        noise_threshold: lock_rate above this → WARN (default 0.35).
+
+    Pairs containing values outside {0, 1} (e.g. -1 parse failures) are excluded.
+    """
+    if len(forward_results) != len(swapped_results):
+        return Finding("⑱ judge-swap", "FAIL",
+                       f"Length mismatch: {len(forward_results)} forward vs "
+                       f"{len(swapped_results)} swapped results. "
+                       "Each item must be judged in both orders.")
+
+    valid = [(f, s) for f, s in zip(forward_results, swapped_results)
+             if f in (0, 1) and s in (0, 1)]
+    if not valid:
+        return Finding("⑱ judge-swap", "WARN",
+                       "No valid forward/swapped result pairs to compare.")
+
+    n = len(valid)
+    locked = sum(1 for f, s in valid if f == s)
+    lock_rate = locked / n
+
+    if lock_rate > position_lock_threshold:
+        return Finding(
+            "⑱ judge-swap", "FAIL",
+            f"Position-lock rate {lock_rate:.1%} > {position_lock_threshold:.1%} "
+            f"({locked}/{n} verdicts stayed with the slot after AB→BA swap). "
+            "Judge is reading position, not content.")
+    if lock_rate > noise_threshold:
+        return Finding(
+            "⑱ judge-swap", "WARN",
+            f"Position-lock rate {lock_rate:.1%} in noise band "
+            f"({noise_threshold:.1%}–{position_lock_threshold:.1%}). "
+            "Verdicts track neither content nor position consistently — "
+            "judge signal is weak.")
+    return Finding(
+        "⑱ judge-swap", "OK",
+        f"Position-lock rate {lock_rate:.1%} ≤ {noise_threshold:.1%} "
+        f"({n - locked}/{n} verdicts inverted with the swap). Content-driven.")
+
+
+# ─────────────────────────────────────────────────────────────
 # Binary / classification metric audit
 # ─────────────────────────────────────────────────────────────
 def audit(ledger_path: str, claim_id: str, *,
@@ -1209,6 +1278,77 @@ def anchor(ledger_path: str) -> dict:
     }
 
 
+def certificate(ledger_path: str, claim_id: str, *,
+                findings: list[Finding] | None = None) -> dict:
+    """📜 Issue a sealed verification certificate for a claim.
+
+    Collapses the full integrity state of a claim into a single verifiable
+    artifact that can be embedded in a paper, README, or release notes:
+
+      - pre-registration seal (and whether it still verifies)
+      - ledger chain integrity + anchor_hash (pins the exact ledger state)
+      - retraction / cascade status
+      - optional audit findings summary (pass `findings=audit(...)`)
+
+    Verdict logic:
+      REJECTED                 — chain broken, prereg seal tampered, claim
+                                 retracted, or any FAIL finding
+      UNVERIFIED               — no pre-registration exists for this claim
+      CERTIFIED-WITH-WARNINGS  — stale dependency or WARN findings present
+      CERTIFIED                — every check is clean
+
+    The certificate embeds the ledger's anchor_hash, so it attests to one
+    specific ledger state: regenerate the certificate after any ledger change.
+    The certificate itself is sealed (SHA-256) — any field edit is detectable.
+    Not appended to the ledger; it is an output artifact like anchor().
+    """
+    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    a = anchor(ledger_path)
+    pre = _load_prereg(ledger_path, claim_id)
+    prereg_seal = pre["seal"] if pre else None
+    seal_ok = _verify_seal(pre) if pre else None
+    casc = cascade_check(ledger_path, claim_id)
+
+    f_ok = f_warn = f_fail = 0
+    if findings is not None:
+        for f in findings:
+            if f.level == "FAIL":
+                f_fail += 1
+            elif f.level == "WARN":
+                f_warn += 1
+            else:
+                f_ok += 1
+
+    if (not a["chain_ok"] or (pre is not None and not seal_ok)
+            or casc.level == "FAIL" or f_fail):
+        verdict = "REJECTED"
+    elif pre is None:
+        verdict = "UNVERIFIED"
+    elif casc.level == "WARN" or f_warn:
+        verdict = "CERTIFIED-WITH-WARNINGS"
+    else:
+        verdict = "CERTIFIED"
+
+    cert: dict = {
+        "_type":          "certificate",
+        "ts":             ts,
+        "claim_id":       claim_id,
+        "verdict":        verdict,
+        "prereg_seal":    prereg_seal,
+        "prereg_seal_ok": seal_ok,
+        "cascade":        casc.level,
+        "chain_ok":       a["chain_ok"],
+        "ledger_entries": a["entry_count"],
+        "anchor_hash":    a["anchor_hash"],
+        "findings":       ({"ok": f_ok, "warn": f_warn, "fail": f_fail}
+                           if findings is not None else None),
+    }
+    cert["seal"] = hashlib.sha256(
+        json.dumps(cert, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()[:16]
+    return cert
+
+
 def witness(ledger_path: str, claim_id: str, command: list[str], *,
             timeout: int | None = None) -> dict:
     """Execute command and seal a tamper-evident witness record in the ledger.
@@ -1292,7 +1432,8 @@ def _auto(name: str, ledger: str = "mm_ledger.jsonl") -> None:
 
 def _cli() -> None:
     import argparse, sys
-    _SUBCMDS = {"register", "audit", "calibrate", "run", "anchor", "retract", "negative"}
+    _SUBCMDS = {"register", "audit", "calibrate", "run", "anchor", "retract",
+                "negative", "judge", "certify"}
     if len(sys.argv) == 2 and sys.argv[1] not in _SUBCMDS \
             and not sys.argv[1].startswith("-"):
         _auto(sys.argv[1]); return
@@ -1347,6 +1488,24 @@ def _cli() -> None:
                     help="Claim IDs of independent test angles (space-separated)")
     ng.add_argument("--min-angles", type=int, default=3,
                     help="Minimum required angles (default: 3)")
+
+    jd = sub.add_parser("judge",
+                        help="Audit LLM-judge scores from a JSON file (probes ⑭⑮⑯⑰⑱)")
+    jd.add_argument("--file", required=True,
+                    help="JSON with any of: score_pairs, pairwise_results, "
+                         "ratings_matrix, scores, forward_results+swapped_results")
+
+    ct = sub.add_parser("certify",
+                        help="Issue a sealed verification certificate for a claim")
+    ct.add_argument("claim_id")
+    ct.add_argument("--acc", type=float, default=None,
+                    help="Optional: reported accuracy — runs audit() and folds findings in")
+    ct.add_argument("--n", type=int, default=None,
+                    help="Sample size (required with --acc)")
+    ct.add_argument("--metric", default="acc")
+    ct.add_argument("--baseline", type=float, default=0.5)
+    ct.add_argument("--pretty", action="store_true",
+                    help="Pretty-print JSON (default: compact single line for piping)")
 
     rn = sub.add_parser("run",
                         help="Calibrate + witness-execute a command, sealing the run record")
@@ -1409,6 +1568,33 @@ def _cli() -> None:
         report("Negative-claim audit",
                [negative_audit(args.ledger, angles=args.angles,
                                min_angles=args.min_angles)])
+    elif args.cmd == "judge":
+        d = json.load(open(args.file, encoding="utf-8"))
+        fs: list[Finding] = []
+        if "score_pairs" in d:
+            fs.append(judge_consistency_check([tuple(x) for x in d["score_pairs"]]))
+        if "pairwise_results" in d:
+            fs.append(judge_bias_check(d["pairwise_results"]))
+        if "ratings_matrix" in d:
+            fs.append(inter_rater_agreement([tuple(x) for x in d["ratings_matrix"]]))
+        if "scores" in d:
+            fs.append(judge_score_sanity(d["scores"]))
+        if "forward_results" in d and "swapped_results" in d:
+            fs.append(judge_swap_check(d["forward_results"], d["swapped_results"]))
+        if not fs:
+            p.error("judge --file JSON must contain at least one of: score_pairs, "
+                    "pairwise_results, ratings_matrix, scores, "
+                    "forward_results+swapped_results")
+        report(f"LLM-judge audit ({args.file})", fs)
+    elif args.cmd == "certify":
+        fnds = None
+        if args.acc is not None:
+            if args.n is None:
+                p.error("certify --acc requires --n")
+            fnds = audit(args.ledger, args.claim_id, reported_metric=args.metric,
+                         reported_acc=args.acc, n=args.n, baseline=args.baseline)
+        c = certificate(args.ledger, args.claim_id, findings=fnds)
+        print(json.dumps(c, indent=2 if args.pretty else None, ensure_ascii=False))
     elif args.cmd == "run":
         cmd = [c for c in (args.command or []) if c != "--"]
         if not cmd:

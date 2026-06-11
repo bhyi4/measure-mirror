@@ -11,7 +11,7 @@
 > 스스로의 연구를 정직하게 죽이는 과정에서 만들어진 도구입니다.  
 > 만든 사람들이 자신에게 먼저 실행해봤습니다. → [🦋 탄생 배경](docs/CHRONICLE.md)
 
-**[📖 프로브 완전 가이드 →](docs/GUIDE_KO.md)** — 20개 프로브 전체 설명·예제·워크플로우
+**[📖 프로브 완전 가이드 →](docs/GUIDE_KO.md)** — 21개 프로브 전체 설명·예제·워크플로우
 
 ---
 
@@ -125,7 +125,7 @@ def test_my_model_is_real():
 
 ---
 
-## 20종 Probe + 4 유틸리티 전체 목록
+## 21종 Probe + 5 유틸리티 전체 목록
 
 | Probe | 번호 | 잡아내는 것 |
 |---|---|---|
@@ -149,6 +149,7 @@ def test_my_model_is_real():
 | `judge_bias_check` | ⑮ | 판정자가 A 또는 B 위치를 체계적으로 선호 — 위치 편향 감지 |
 | `inter_rater_agreement` | ⑯ | Cohen's κ 미달 — 두 판정자(런) 간 일치도 부족 |
 | `judge_score_sanity` | ⑰ | 판정자가 동일/근사 점수만 부여 — 퇴화 분포 감지 |
+| `judge_swap_check` | ⑱ | AB→BA 교환 후에도 같은 슬롯 선택 — 내용 아닌 위치를 읽는 판정자 |
 
 | 유틸리티 | 역할 |
 |---|---|
@@ -156,6 +157,7 @@ def test_my_model_is_real():
 | `calibrate` | 자가 테스트: 5종 합성 케이스로 도구 정상 작동 확인 |
 | `witness` | 커맨드 실행·출력 캡처·변조 방지 실행 봉인 원장에 기록 |
 | `retract` | 체인 연결 철회 엔트리 추가 → 의존 주장 cascade_check에서 STALE |
+| `certificate` | 봉인된 검증 인증서 발행: CERTIFIED / WITH-WARNINGS / UNVERIFIED / REJECTED |
 
 ### 체인 해시 원장 (① 확장)
 
@@ -301,18 +303,19 @@ pairs = [
 ]
 
 # judge_run: judge_fn을 runs×len(items)회 호출하고,
-# ⑭⑮⑯⑰를 자동 발화한 뒤 체인 연결 원장 엔트리를 봉인합니다.
+# ⑭⑮⑯⑰(⑱)를 자동 발화한 뒤 체인 연결 원장 엔트리를 봉인합니다.
 result = judge_run("mm_ledger.jsonl", "my_llm_eval",
                    judge_fn=judge_fn,
                    items=pairs,
-                   runs=2,        # 동일 아이템 2회 실행 → ⑭ 일관성
-                   pairwise=True) # A-vs-B → ⑮ 편향 검사
+                   runs=2,               # 동일 아이템 2회 실행 → ⑭ 일관성
+                   pairwise=True,        # A-vs-B → ⑮ 편향 검사
+                   swap_positions=True)  # AB→BA 추가 패스 → ⑱ 스왑 검사
 
 for f in result["findings"]:
     print(f"  {f.level}  [{f.probe}]  {f.msg}")
 ```
 
-**`judge_run`이 자동으로 실행하는 4가지 검사:**
+**`judge_run`이 자동으로 실행하는 5가지 검사:**
 
 | 프로브 | 잡아내는 것 |
 |---|---|
@@ -320,6 +323,19 @@ for f in result["findings"]:
 | `judge_bias_check` ⑮ | 내용에 관계없이 A 또는 B 위치를 체계적으로 선호 |
 | `inter_rater_agreement` ⑯ | 두 런의 일치도가 우연 수준 (Cohen's κ 미달) |
 | `judge_score_sanity` ⑰ | 모든 것에 동일하거나 거의 동일한 점수 부여 |
+| `judge_swap_check` ⑱ | AB→BA 교환 후에도 같은 슬롯 선택 (내용을 안 읽는 판정자) |
+
+파싱 불가 응답은 -1로 기록되고 **모든 프로브에서 제외**됩니다. 실패율 10% 초과 시
+`judge-parse` WARN, 전부 실패 시 FAIL이 발화됩니다.
+
+**⑱이 중요한 이유** — 응답을 전혀 안 읽는 결정론적 판정자는 ⑭(완벽한 일관성),
+⑮(균형 잡힌 승률), ⑯(κ=1.0), ⑰(다양한 점수)를 전부 통과합니다.
+A와 B를 교환하는 것만이 정체를 드러냅니다: 내용을 읽는 판정자는 판정을 뒤집어야 하고,
+내용을 안 읽는 판정자는 같은 슬롯을 계속 고릅니다. 데모로 확인하세요:
+
+```bash
+python examples/demo_judge.py   # API 키 불필요 — mock 판정자
+```
 
 **단독 사용 (점수 리스트를 직접 전달):**
 
@@ -345,7 +361,55 @@ f = mm.inter_rater_agreement(matrix, min_kappa=0.40)
 scores = [8, 8, 8, 8, 8, 8, 8, 7, 8, 8]  # 90%가 8
 f = mm.judge_score_sanity(scores)
 # ⚠️  90% of scores are '8' — near-degenerate distribution.
+
+# ⑱ 위치 스왑 — 판정이 내용을 따르나, 슬롯을 따르나?
+forward = [0, 1, 0, 1, 0]   # (A, B) 순서 승자
+swapped = [0, 1, 0, 1, 0]   # AB→BA 교환 후 승자 — 동일 = 위치 고착!
+f = mm.judge_swap_check(forward, swapped)
+# 🔴  Position-lock rate 100.0% > 65.0%. 판정자가 내용이 아닌 위치를 읽고 있음.
 ```
+
+```bash
+# CLI: 수집된 판정 점수를 JSON 파일로 감사
+mm judge --file judge_scores.json
+# 키: score_pairs / pairwise_results / ratings_matrix / scores /
+#     forward_results + swapped_results
+```
+
+### 인증서(Certificate) 📜 — 주장당 하나의 봉인된 판정
+
+`certificate()`는 주장의 전체 무결성 상태를 논문·README·릴리스 노트에 삽입 가능한
+하나의 검증 가능 산출물로 압축합니다:
+
+```python
+# 구조 인증서 (사전등록 봉인 + 체인 + 철회 상태)
+cert = mm.certificate("mm_ledger.jsonl", "my_model")
+
+# 완전 인증서 — 감사 결과까지 포함
+findings = mm.audit("mm_ledger.jsonl", "my_model",
+                    reported_metric="acc", reported_acc=0.72, n=500)
+cert = mm.certificate("mm_ledger.jsonl", "my_model", findings=findings)
+# {"verdict": "CERTIFIED", "prereg_seal": "6c802655ab095e8b",
+#  "anchor_hash": "sha256...", "findings": {"ok": 4, "warn": 0, "fail": 0},
+#  "seal": "9d1e83a4b72f0c5e", ...}
+```
+
+```bash
+# CLI
+mm certify my_model --pretty                  # 구조만
+mm certify my_model --acc 0.72 --n 500        # + 감사 결과 포함
+mm certify my_model | gh gist create -        # 외부 공개
+```
+
+| 판정 | 의미 |
+|---|---|
+| `CERTIFIED` | 사전등록·체인 무결·미철회·FAIL/WARN 없음 |
+| `CERTIFIED-WITH-WARNINGS` | 유효하나 오래된 의존성 또는 WARN 존재 |
+| `UNVERIFIED` | 사전등록 없음 — 인증할 기준이 없음 |
+| `REJECTED` | 체인 파손·봉인 변조·철회됨·FAIL 존재 |
+
+인증서는 원장의 `anchor_hash`를 포함하므로 **특정 원장 상태 하나**를 보증합니다.
+인증서 자체도 봉인되어 있어 필드 수정은 즉시 탐지됩니다.
 
 ### 앵커(Anchor) ⎈
 
@@ -429,13 +493,14 @@ pip install "measure-mirror[mcp]"
 
 **기타 MCP 클라이언트** — stdio 서버 명령으로 `mm-mcp`를 실행하세요.
 
-20종 probe + 4 유틸리티 전부 MCP 도구로 노출됩니다:  
+21종 probe + 5 유틸리티 전부 MCP 도구로 노출됩니다:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
 `mm_falsifiability_check` · `mm_cascade_check` · `mm_negative_audit` ·  
-`mm_judge_consistency_check` · `mm_judge_bias_check` · `mm_inter_rater_agreement` · `mm_judge_score_sanity` ·  
-`mm_anchor` · `mm_calibrate` · `mm_witness` · `mm_retract`
+`mm_judge_consistency_check` · `mm_judge_bias_check` · `mm_inter_rater_agreement` ·  
+`mm_judge_score_sanity` · `mm_judge_swap_check` ·  
+`mm_anchor` · `mm_calibrate` · `mm_witness` · `mm_retract` · `mm_certificate`
 
 ---
 
@@ -472,8 +537,8 @@ python examples/demo_field.py    # Field 후보 거짓양성
 ```
 measure-mirror/
 ├── measure_mirror/
-│   ├── mm.py              # 17종 probe + CLI + DB 조회 (의존성 없음)
-│   ├── mcp_server.py      # MCP 서버 — 20개 도구 (pip install .[mcp])
+│   ├── mm.py              # 18종 probe + CLI + DB 조회 (의존성 없음)
+│   ├── mcp_server.py      # MCP 서버 — 26개 도구 (pip install .[mcp])
 │   ├── judge.py           # LLM-as-a-Judge 러너 (pip install .[judge])
 │   └── pytest_plugin.py   # assert_clean() — CI 게이트
 ├── docs/
@@ -483,6 +548,7 @@ measure-mirror/
 │   ├── quickstart.py      # 정상 경로 데모
 │   ├── demo_zero.py       # ZERO 거짓양성 (도그푸딩)
 │   ├── demo_field.py      # Field 거짓양성 (도그푸딩)
+│   ├── demo_judge.py      # LLM 판정자 실패 유형 (API 키 불필요)
 │   └── mcp_example.py     # MCP 도구 사용 참고
 ├── db/                    # 공유 무결성 데이터베이스 (서버 불요, git 기반)
 │   ├── baselines.json         작업별 공정 기준선
@@ -492,8 +558,8 @@ measure-mirror/
 │   ├── false_negative_guards.jsonl
 │   └── self_catches.jsonl     자체 적발 거짓양성
 └── tests/
-    ├── test_mm.py         # 109개 코어 프로브 테스트, CI 강제
-    ├── test_judge.py      # 11개 judge.py 모듈 테스트
+    ├── test_mm.py         # 121개 코어 프로브 테스트, CI 강제
+    ├── test_judge.py      # 16개 judge.py 모듈 테스트
     └── test_sync.py       # sync gate: probe ↔ MCP ↔ 테스트 ↔ README ↔ 노출 ↔ 버전
 ```
 

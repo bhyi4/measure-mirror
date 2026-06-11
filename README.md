@@ -15,7 +15,7 @@ Zero training · Deterministic · Zero dependencies (Python 3.10+ stdlib only).
 > Built while honestly killing our own project.  
 > The makers ran it on themselves first. → [🦋 Origin Story](docs/CHRONICLE.md)
 
-**[📖 Full Probe Guide →](docs/GUIDE.md)** — detailed explanations, worked examples, and workflows for all 20 probes
+**[📖 Full Probe Guide →](docs/GUIDE.md)** — detailed explanations, worked examples, and workflows for all 21 probes
 
 ---
 
@@ -129,7 +129,7 @@ def test_my_model_is_real():
 
 ---
 
-## All 20 Probes + 4 Utilities
+## All 21 Probes + 5 Utilities
 
 | Probe | Check # | Catches |
 |---|---|---|
@@ -153,6 +153,7 @@ def test_my_model_is_real():
 | `judge_bias_check` | ⑮ | Judge systematically favors position A or B — position bias detector |
 | `inter_rater_agreement` | ⑯ | Cohen's κ between two judges below threshold — poor agreement |
 | `judge_score_sanity` | ⑰ | Judge assigns identical/near-identical scores — degenerate distribution |
+| `judge_swap_check` | ⑱ | Verdict stays with the slot after AB→BA swap — judge reads position, not content |
 
 | Utility | Purpose |
 |---|---|
@@ -160,6 +161,7 @@ def test_my_model_is_real():
 | `calibrate` | Self-test: 5 synthetic known-good/bad cases; confirms tool health |
 | `witness` | Execute a command, capture output, seal tamper-evident run record |
 | `retract` | Append a chain-linked retraction entry; cascades to dependents via cascade_check |
+| `certificate` | Issue a sealed verification certificate: CERTIFIED / WITH-WARNINGS / UNVERIFIED / REJECTED |
 
 ### Chain hash ledger (① extended)
 
@@ -332,18 +334,19 @@ pairs = [
 ]
 
 # judge_run calls judge_fn runs×len(items) times,
-# fires ⑭⑮⑯⑰ automatically, and seals a chain-linked entry.
+# fires ⑭⑮⑯⑰(⑱) automatically, and seals a chain-linked entry.
 result = judge_run("mm_ledger.jsonl", "my_llm_eval",
                    judge_fn=judge_fn,
                    items=pairs,
-                   runs=2,        # run each item twice → ⑭ consistency
-                   pairwise=True) # A-vs-B → ⑮ bias check
+                   runs=2,               # run each item twice → ⑭ consistency
+                   pairwise=True,        # A-vs-B → ⑮ bias check
+                   swap_positions=True)  # extra AB→BA pass → ⑱ swap test
 
 for f in result["findings"]:
     print(f"  {f.level}  [{f.probe}]  {f.msg}")
 ```
 
-**The four checks triggered by `judge_run`:**
+**The five checks triggered by `judge_run`:**
 
 | Probe | Catches |
 |---|---|
@@ -351,6 +354,19 @@ for f in result["findings"]:
 | `judge_bias_check` ⑮ | Judge systematically favors position A or B regardless of content |
 | `inter_rater_agreement` ⑯ | Two runs disagree beyond chance (Cohen's κ below threshold) |
 | `judge_score_sanity` ⑰ | Judge assigns identical / near-identical scores to everything |
+| `judge_swap_check` ⑱ | Verdict stays with the slot after AB→BA swap (content-blind judge) |
+
+Unparseable judge responses score -1 and are **excluded from all probes**; a
+`judge-parse` WARN fires when the failure rate exceeds 10% (FAIL when nothing parsed).
+
+**Why ⑱ matters** — a deterministic judge that never reads the responses passes
+⑭ (perfectly consistent), ⑮ (balanced win-rate), ⑯ (κ=1.0), and ⑰ (varied scores).
+Only swapping A and B exposes it: a content-driven judge must invert its verdict,
+a content-blind judge keeps choosing the same slot. Run the demo:
+
+```bash
+python examples/demo_judge.py   # no API key needed — mock judges
+```
 
 **Standalone usage (bring-your-own scores):**
 
@@ -376,7 +392,55 @@ f = mm.inter_rater_agreement(matrix, min_kappa=0.40)
 scores = [8, 8, 8, 8, 8, 8, 8, 7, 8, 8]  # 90% are 8
 f = mm.judge_score_sanity(scores)
 # ⚠️  90% of scores are '8' — near-degenerate distribution.
+
+# ⑱ position-swap — does the verdict follow content or slot?
+forward = [0, 1, 0, 1, 0]   # winners in (A, B) order
+swapped = [0, 1, 0, 1, 0]   # winners after AB→BA swap — identical = locked!
+f = mm.judge_swap_check(forward, swapped)
+# 🔴  Position-lock rate 100.0% > 65.0%. Judge is reading position, not content.
 ```
+
+```bash
+# CLI: audit pre-collected judge scores from a JSON file
+mm judge --file judge_scores.json
+# keys: score_pairs / pairwise_results / ratings_matrix / scores /
+#       forward_results + swapped_results
+```
+
+### Certificate 📜 — one sealed verdict per claim
+
+`certificate()` collapses the full integrity state of a claim into a single
+verifiable artifact you can embed in a paper, README, or release notes:
+
+```python
+# Structural certificate (prereg seal + chain + retraction status)
+cert = mm.certificate("mm_ledger.jsonl", "my_model")
+
+# Full certificate — fold audit findings in
+findings = mm.audit("mm_ledger.jsonl", "my_model",
+                    reported_metric="acc", reported_acc=0.72, n=500)
+cert = mm.certificate("mm_ledger.jsonl", "my_model", findings=findings)
+# {"verdict": "CERTIFIED", "prereg_seal": "6c802655ab095e8b",
+#  "anchor_hash": "sha256...", "findings": {"ok": 4, "warn": 0, "fail": 0},
+#  "seal": "9d1e83a4b72f0c5e", ...}
+```
+
+```bash
+# CLI
+mm certify my_model --pretty                  # structural only
+mm certify my_model --acc 0.72 --n 500        # + audit findings folded in
+mm certify my_model | gh gist create -        # publish externally
+```
+
+| Verdict | Meaning |
+|---|---|
+| `CERTIFIED` | Pre-registered, chain intact, not retracted, no FAIL/WARN findings |
+| `CERTIFIED-WITH-WARNINGS` | Valid but has stale dependencies or WARN findings |
+| `UNVERIFIED` | No pre-registration exists — nothing to certify against |
+| `REJECTED` | Chain broken, seal tampered, retracted, or FAIL findings |
+
+The certificate embeds the ledger's `anchor_hash`, so it attests to **one specific
+ledger state** — and the certificate itself is sealed, so any field edit is detectable.
 
 ### Anchor ⎈
 
@@ -471,13 +535,14 @@ pip install "measure-mirror[mcp]"
 
 **Other MCP clients** — run `mm-mcp` as the stdio server command.
 
-All 20 probes + 4 utilities are exposed as MCP tools:  
+All 21 probes + 5 utilities are exposed as MCP tools:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
 `mm_falsifiability_check` · `mm_cascade_check` · `mm_negative_audit` ·  
-`mm_judge_consistency_check` · `mm_judge_bias_check` · `mm_inter_rater_agreement` · `mm_judge_score_sanity` ·  
-`mm_anchor` · `mm_calibrate` · `mm_witness` · `mm_retract`
+`mm_judge_consistency_check` · `mm_judge_bias_check` · `mm_inter_rater_agreement` ·  
+`mm_judge_score_sanity` · `mm_judge_swap_check` ·  
+`mm_anchor` · `mm_calibrate` · `mm_witness` · `mm_retract` · `mm_certificate`
 
 ---
 
@@ -514,8 +579,8 @@ python examples/demo_field.py    # Field candidate false positives
 ```
 measure-mirror/
 ├── measure_mirror/
-│   ├── mm.py              # 17 probes + CLI + DB lookup (zero deps)
-│   ├── mcp_server.py      # MCP server — 20 tools (pip install .[mcp])
+│   ├── mm.py              # 18 probes + CLI + DB lookup (zero deps)
+│   ├── mcp_server.py      # MCP server — 26 tools (pip install .[mcp])
 │   ├── judge.py           # LLM-as-a-Judge runner (pip install .[judge])
 │   └── pytest_plugin.py   # assert_clean() for CI gates
 ├── docs/
@@ -525,6 +590,7 @@ measure-mirror/
 │   ├── quickstart.py      # happy path demo
 │   ├── demo_zero.py       # ZERO false-positive (dog-food)
 │   ├── demo_field.py      # Field false-positive (dog-food)
+│   ├── demo_judge.py      # LLM-judge failure modes (no API key needed)
 │   └── mcp_example.py     # MCP tool usage reference
 ├── db/                    # shared integrity database (git-based, no server)
 │   ├── baselines.json         task-level fair baselines
@@ -534,8 +600,8 @@ measure-mirror/
 │   ├── false_negative_guards.jsonl
 │   └── self_catches.jsonl     our own false positives
 └── tests/
-    ├── test_mm.py         # 109 tests for core probes, CI-enforced
-    ├── test_judge.py      # 11 tests for judge.py module
+    ├── test_mm.py         # 121 tests for core probes, CI-enforced
+    ├── test_judge.py      # 16 tests for judge.py module
     └── test_sync.py       # sync gate: probe ↔ MCP ↔ tests ↔ README ↔ exports ↔ version
 ```
 

@@ -996,3 +996,119 @@ def test_judge_score_sanity_warn_empty():
     """Empty scores list → WARN."""
     f = mm.judge_score_sanity([])
     assert f.level == "WARN"
+
+
+# ─── ⑱ judge_swap_check tests ────────────────────────────────
+
+def test_judge_swap_ok_content_driven():
+    """Verdict inverts with the swap → content-driven → OK."""
+    forward = [0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
+    swapped = [1, 0, 1, 0, 1, 0, 1, 0, 1, 0]  # all inverted
+    f = mm.judge_swap_check(forward, swapped)
+    assert f.level == "OK"
+    assert f.probe == "⑱ judge-swap"
+
+
+def test_judge_swap_fail_position_locked():
+    """Verdict stays with the slot → position-locked → FAIL."""
+    forward = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]
+    swapped = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]  # identical = locked
+    f = mm.judge_swap_check(forward, swapped)
+    assert f.level == "FAIL"
+    assert "position" in f.msg.lower()
+
+
+def test_judge_swap_warn_noise_band():
+    """~50% lock rate → noise band → WARN."""
+    forward = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    swapped = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]  # 5/10 locked
+    f = mm.judge_swap_check(forward, swapped)
+    assert f.level == "WARN"
+
+
+def test_judge_swap_fail_length_mismatch():
+    """Different lengths → FAIL usage error."""
+    f = mm.judge_swap_check([0, 1, 0], [0, 1])
+    assert f.level == "FAIL"
+    assert "mismatch" in f.msg.lower()
+
+
+def test_judge_swap_filters_parse_failures():
+    """-1 entries excluded from lock-rate computation."""
+    forward = [0, -1, 1, 0, -1]
+    swapped = [1, 0, 0, 1, 1]  # valid pairs: (0,1),(1,0),(0,1) — all inverted
+    f = mm.judge_swap_check(forward, swapped)
+    assert f.level == "OK"
+
+
+def test_judge_swap_warn_no_valid_pairs():
+    """All pairs contain -1 → WARN."""
+    f = mm.judge_swap_check([-1, -1], [0, 1])
+    assert f.level == "WARN"
+
+
+# ─── certificate tests ───────────────────────────────────────
+
+def test_certificate_certified(tmp_path):
+    """Clean claim with valid prereg → CERTIFIED."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.4)
+    c = mm.certificate(ledger, "exp1")
+    assert c["verdict"] == "CERTIFIED"
+    assert c["prereg_seal_ok"] is True
+    assert c["chain_ok"] is True
+    assert len(c["seal"]) == 16
+
+
+def test_certificate_unverified_no_prereg(tmp_path):
+    """No prereg entry → UNVERIFIED."""
+    ledger = str(tmp_path / "l.jsonl")
+    c = mm.certificate(ledger, "ghost")
+    assert c["verdict"] == "UNVERIFIED"
+    assert c["prereg_seal"] is None
+
+
+def test_certificate_rejected_retracted(tmp_path):
+    """Retracted claim → REJECTED."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.4)
+    mm.retract(ledger, "exp1", "fabricated data")
+    c = mm.certificate(ledger, "exp1")
+    assert c["verdict"] == "REJECTED"
+    assert c["cascade"] == "FAIL"
+
+
+def test_certificate_warns_stale_dependency(tmp_path):
+    """Stale dependency → CERTIFIED-WITH-WARNINGS."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "base", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.4)
+    mm.preregister(ledger, "exp1", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.4,
+                   depends_on=["base"])
+    mm.retract(ledger, "base", "flaw found")
+    c = mm.certificate(ledger, "exp1")
+    assert c["verdict"] == "CERTIFIED-WITH-WARNINGS"
+    assert c["cascade"] == "WARN"
+
+
+def test_certificate_rejected_on_fail_findings(tmp_path):
+    """FAIL finding folded in → REJECTED."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=200, baseline=0.5, pass_threshold=0.6)
+    findings = mm.audit(ledger, "exp1",
+                        reported_metric="acc", reported_acc=0.556, n=9)  # small-sample FAIL
+    c = mm.certificate(ledger, "exp1", findings=findings)
+    assert c["verdict"] == "REJECTED"
+    assert c["findings"]["fail"] >= 1
+
+
+def test_certificate_embeds_anchor_hash(tmp_path):
+    """Certificate pins the ledger state via anchor_hash."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.4)
+    c1 = mm.certificate(ledger, "exp1")
+    a = mm.anchor(ledger)
+    assert c1["anchor_hash"] == a["anchor_hash"]
+    # ledger change → new certificate has a different anchor_hash
+    mm.preregister(ledger, "exp2", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.4)
+    c2 = mm.certificate(ledger, "exp1")
+    assert c2["anchor_hash"] != c1["anchor_hash"]
