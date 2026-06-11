@@ -211,6 +211,18 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="mm_leakage_check",
+            description="④a Detect train∩test data contamination via hash intersection.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "train_items": {"type": "array", "items": {}, "description": "Train set items"},
+                    "test_items":  {"type": "array", "items": {}, "description": "Test set items"},
+                },
+                "required": ["train_items", "test_items"],
+            },
+        ),
+        types.Tool(
             name="mm_too_good_check",
             description="⑦ Flag suspiciously large improvement before believing it.",
             inputSchema={
@@ -374,6 +386,12 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 arguments["seed_results"],
                 baseline=arguments.get("baseline", 0.5),
                 cv_threshold=arguments.get("cv_threshold", 0.10),
+            ))
+
+        elif name == "mm_leakage_check":
+            result = _single(mm.leakage_check(
+                arguments["train_items"],
+                arguments["test_items"],
             ))
 
         elif name == "mm_scope_check":
