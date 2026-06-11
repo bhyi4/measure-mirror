@@ -56,6 +56,31 @@ audit / full_audit           ← 결과가 나온 후 전체 프로브 실행
 
 ---
 
+## 검증 3단계
+
+| 단계 | 방법 | 용도 |
+|---|---|---|
+| **풀 검증** | `mm.verify(ledger, data)` / `mm verify --file data.json` | 원샷 감사 — `data`에 입력이 있는 모든 프로브 실행 |
+| **그룹단위 검증** | `mm.verify(ledger, data, groups=["judge"])` / `--groups judge` | 하나의 검증 관심사에 집중 |
+| **개별검증** | `mm.grim_check(...)`, `mm.judge_swap_check(...)` 등 | 정밀 제어, 커스텀 파이프라인 |
+
+검증 그룹 (`mm verify --list-groups` 또는 `mm.GROUPS`):
+
+| 그룹 | 프로브 | 답하는 질문 |
+|---|---|---|
+| `ledger` | ① ⑫ + 체인 | 사전등록 기록이 무결하고 철회되지 않았나? |
+| `stats` | ④ ⑤ ⑦ ⑧ ⑨ ⑩ | 숫자가 통계적으로 진짜인가? |
+| `design` | ② ③ ⑥ ⑪ | 실험이 공정하게 설계됐나? |
+| `negative` | ⑬ | 이 음성 종결이 성급하지 않나? |
+| `judge` | ⑭ ⑮ ⑯ ⑰ ⑱ | LLM 판정자가 신뢰할 만한가? |
+| `ranking` | ⑲ ⑳ | 리더보드가 진짜인가? |
+
+`verify()`는 입력 주도형입니다: `data` 딕셔너리에 키가 있는 프로브만 실행되므로,
+풀 검증은 입력 누락으로 에러나지 않습니다 — 데이터가 지원하는 만큼만 돕니다.
+`group_of(finding)`으로 어떤 Finding이든 소속 그룹을 알 수 있습니다.
+
+---
+
 ## 프로브 레퍼런스
 
 프로브는 잡아내는 무결성 실패의 종류별로 묶었습니다.
@@ -821,7 +846,7 @@ print(result["ledger_entry"])  # 봉인된 원장 엔트리
 |---|---|
 | ⑭ `judge_consistency_check` | `runs ≥ 2`일 때 항상 |
 | ⑮ `judge_bias_check` | `pairwise=True`일 때 항상 |
-| ⑯ `inter_rater_agreement` | `runs ≥ 2`일 때 항상 |
+| ⑯ `inter_rater_agreement` | **자동발화 안 함** — 단독 전용, 서로 다른 두 판정자용 (같은 판정자 재실행은 ⑭의 몫) |
 | ⑰ `judge_score_sanity` | 항상 |
 | ⑱ `judge_swap_check` | `swap_positions=True`일 때 (pairwise 전용) |
 | `judge-parse` | 파싱 실패율 >10% 시 WARN; 전부 실패 시 FAIL |

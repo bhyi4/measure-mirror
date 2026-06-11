@@ -5,6 +5,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.13.0] — 2026-06-11
+
+**Simplification release** — three verification tiers, no new probes.
+
+### Added
+- **`verify(ledger_path, data, *, groups=None)`** — single entry point.
+  Input-driven: every probe whose keys exist in `data` runs; nothing else does.
+  - FULL tier: `verify(ledger, data)` — one-shot, everything applicable
+  - GROUP tier: `verify(ledger, data, groups=["judge"])` — restrict to groups
+  - INDIVIDUAL tier: existing probe functions, unchanged
+- **`GROUPS` registry + `group_of(finding)`** — 6 verification groups:
+  `ledger` (①⑫+chain) · `stats` (④⑤⑦⑧⑨⑩) · `design` (②③⑥⑪) ·
+  `negative` (⑬) · `judge` (⑭–⑱) · `ranking` (⑲⑳).
+- **CLI `mm verify --file data.json [--groups ...] [--list-groups]`**.
+- **MCP `mm_verify`** — full/group verification for agents (30 tools total).
+
+### Changed
+- **`judge_run` no longer auto-fires ⑯ inter_rater_agreement** — run-1 vs
+  run-2 of the same judge duplicates the signal ⑭ already measures. ⑯ remains
+  available standalone for two genuinely different judges.
+- README probe tables reorganized by verification group; "Three Verification
+  Tiers" section added (EN/KO). GUIDE: tier/group overview section (EN/KO).
+- 9 new tests (total: 160 → 169, all passing).
+- `__init__.py`: exports `verify`, `GROUPS`, `group_of`; `__version__` 0.13.0.
+
+---
+
 ## [0.12.0] — 2026-06-11
 
 ### Added

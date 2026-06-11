@@ -125,31 +125,91 @@ def test_my_model_is_real():
 
 ---
 
-## 23종 Probe + 6 유틸리티 전체 목록
+## 검증 3단계
 
-| Probe | 번호 | 잡아내는 것 |
+23개 프로브를 외울 필요 없습니다 — 사용법은 정확히 세 가지입니다:
+
+```bash
+# 풀 검증 — 한 번에, 적용 가능한 모든 프로브 자동 실행
+mm verify --file results.json
+
+# 그룹단위 검증 — 검증 그룹으로 좁히기
+mm verify --file results.json --groups stats judge
+mm verify --list-groups
+
+# 개별검증 — 아무 프로브나 직접 호출 (Python)
+mm.grim_check(reported_acc=0.33, n=10)
+```
+
+```python
+from measure_mirror import mm
+
+# 풀: data에 있는 키 기준으로 프로브가 자동 활성화
+findings = mm.verify("ledger.jsonl", {
+    "claim_id": "my_model", "acc": 0.72, "n": 500,        # → ledger + stats
+    "seed_results": [0.70, 0.72, 0.74],                    # → ⑤
+    "scores": [3, 7, 5, 8, 4],                             # → judge ⑰
+})
+
+# 그룹: 같은 data, judge 그룹만
+findings = mm.verify("ledger.jsonl", data, groups=["judge"])
+```
+
+`verify()`는 입력이 존재하는 프로브만 실행합니다 — 키가 없으면 안 돌고,
+키를 추가하면 그만큼 더 돕니다. `data` 키는 JSON 파일 형식과 동일합니다.
+
+## 검증 그룹별 Probe 목록
+
+### `ledger` — 사전등록·원장 무결성
+
+| Probe | # | 잡아내는 것 |
 |---|---|---|
 | `preregister` / `audit` | ① | 사후 지표 교체 · 표본 미달 · 원장 위변조 |
 | `verify_chain` | ① | 엔트리 삭제/삽입 · 원장 위변조 |
-| `baseline_fairness` | ② | 허약한 / 동점 / 역전된 기준선 |
-| `gaming_check` | ③ | 보상/손실에 평가 지표 직접 포함 (자기충족) |
+| `cascade_check` | ⑫ | 주장 자신 또는 전이 의존성 철회 → FAIL/WARN 오래됨 |
+
+### `stats` — 통계 유효성
+
+| Probe | # | 잡아내는 것 |
+|---|---|---|
 | `audit` — Wilson CI | ④a | 통계적으로 우연과 구별 불가 (소표본) |
 | `audit` — direction | ④a | 기준선보다 낮은 성능 (역신호) |
-| `leakage_check` | ④a | 훈련∩테스트 데이터 오염 |
 | `multiseed_check` | ⑤ | 불안정한 신호 / 운 좋은 시드 |
-| `scope_check` | ⑥ | 주장 범위 > 검증 범위 (과대 일반화) |
 | `too_good_check` | ⑦ | 기준선 대비 지나치게 큰 개선폭 |
 | `power_check` | ⑧ | n이 너무 작아 진짜 효과를 못 잡음 (거짓음성 가드) |
 | `multiple_comparisons_check` | ⑨ | 같은 레저에 k>1 실험 → Bonferroni 교정 경보 |
 | `grim_check` | ⑩ | 보고된 acc × n이 정수 k와 일치 불가 (수치 조작 적발) |
+
+### `design` — 실험 설계 공정성
+
+| Probe | # | 잡아내는 것 |
+|---|---|---|
+| `baseline_fairness` | ② | 허약한 / 동점 / 역전된 기준선 |
+| `gaming_check` | ③ | 보상/손실에 평가 지표 직접 포함 (자기충족) |
+| `leakage_check` | ④a | 훈련∩테스트 데이터 오염 |
+| `scope_check` | ⑥ | 주장 범위 > 검증 범위 (과대 일반화) |
 | `falsifiability_check` | ⑪ | kill-condition 없음→반증불가; kill_threshold 발화→주장 사망 |
-| `cascade_check` | ⑫ | 주장 자신 또는 전이 의존성 철회 → FAIL/WARN 오래됨 |
+
+### `negative` — 음성 종결 게이트
+
+| Probe | # | 잡아내는 것 |
+|---|---|---|
 | `negative_audit` | ⑬ | 음성 결론에 독립 각도 부족·미등록 각도·범위 초과 탐지 |
+
+### `judge` — LLM 판정자 신뢰성
+
+| Probe | # | 잡아내는 것 |
+|---|---|---|
 | `judge_consistency_check` | ⑭ | LLM 판정자 뒤집기율 초과 — 신뢰 불가 판정자 감지 |
 | `judge_bias_check` | ⑮ | 판정자가 A 또는 B 위치를 체계적으로 선호 — 위치 편향 감지 |
-| `inter_rater_agreement` | ⑯ | Cohen's κ 미달 — 두 판정자(런) 간 일치도 부족 |
+| `inter_rater_agreement` | ⑯ | 서로 *다른* 두 판정자 간 Cohen's κ 미달 (단독 전용) |
 | `judge_score_sanity` | ⑰ | 판정자가 동일/근사 점수만 부여 — 퇴화 분포 감지 |
 | `judge_swap_check` | ⑱ | AB→BA 교환 후에도 같은 슬롯 선택 — 내용 아닌 위치를 읽는 판정자 |
+
+### `ranking` — 순위(리더보드) 무결성
+
+| Probe | # | 잡아내는 것 |
+|---|---|---|
 | `judge_transitivity_check` | ⑲ | A>B>C>A 순환 선호 — 일관된 품질 척도가 없는 판정자 |
 | `ranking_stability_check` | ⑳ | "A가 B를 이김"이 부트스트랩 리샘플링에서 뒤집힘 — 순위 신기루 |
 
@@ -318,15 +378,17 @@ for f in result["findings"]:
     print(f"  {f.level}  [{f.probe}]  {f.msg}")
 ```
 
-**`judge_run`이 자동으로 실행하는 5가지 검사:**
+**`judge_run`이 자동으로 실행하는 검사:**
 
 | 프로브 | 잡아내는 것 |
 |---|---|
 | `judge_consistency_check` ⑭ | 재실행 시 다른 판정 (확률적 / 신뢰 불가) |
 | `judge_bias_check` ⑮ | 내용에 관계없이 A 또는 B 위치를 체계적으로 선호 |
-| `inter_rater_agreement` ⑯ | 두 런의 일치도가 우연 수준 (Cohen's κ 미달) |
 | `judge_score_sanity` ⑰ | 모든 것에 동일하거나 거의 동일한 점수 부여 |
 | `judge_swap_check` ⑱ | AB→BA 교환 후에도 같은 슬롯 선택 (내용을 안 읽는 판정자) |
+
+⑯ `inter_rater_agreement`은 **단독 전용**입니다: 서로 다른 두 판정자를 비교하는
+용도이며, 같은 판정자의 재실행은 ⑭가 이미 커버합니다.
 
 파싱 불가 응답은 -1로 기록되고 **모든 프로브에서 제외**됩니다. 실패율 10% 초과 시
 `judge-parse` WARN, 전부 실패 시 FAIL이 발화됩니다.
@@ -525,7 +587,8 @@ pip install "measure-mirror[mcp]"
 
 **기타 MCP 클라이언트** — stdio 서버 명령으로 `mm-mcp`를 실행하세요.
 
-23종 probe + 6 유틸리티 전부 MCP 도구로 노출됩니다:  
+23종 probe + 6 유틸리티 + `mm_verify` 우산까지 전부 MCP 도구로 노출됩니다:  
+`mm_verify` (풀 / 그룹 필터) ·  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
@@ -570,8 +633,8 @@ python examples/demo_field.py    # Field 후보 거짓양성
 ```
 measure-mirror/
 ├── measure_mirror/
-│   ├── mm.py              # 20종 probe + CLI + DB 조회 (의존성 없음)
-│   ├── mcp_server.py      # MCP 서버 — 29개 도구 (pip install .[mcp])
+│   ├── mm.py              # verify() + 20종 probe + CLI + DB 조회 (의존성 없음)
+│   ├── mcp_server.py      # MCP 서버 — 30개 도구 (pip install .[mcp])
 │   ├── judge.py           # LLM-as-a-Judge 러너 (pip install .[judge])
 │   └── pytest_plugin.py   # assert_clean() — CI 게이트
 ├── docs/
@@ -591,8 +654,8 @@ measure-mirror/
 │   ├── false_negative_guards.jsonl
 │   └── self_catches.jsonl     자체 적발 거짓양성
 └── tests/
-    ├── test_mm.py         # 137개 코어 프로브 테스트, CI 강제
-    ├── test_judge.py      # 16개 judge.py 모듈 테스트
+    ├── test_mm.py         # 145개 코어 프로브 테스트, CI 강제
+    ├── test_judge.py      # 17개 judge.py 모듈 테스트
     └── test_sync.py       # sync gate: probe ↔ MCP ↔ 테스트 ↔ README ↔ 노출 ↔ 버전
 ```
 

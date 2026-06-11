@@ -102,7 +102,7 @@ def test_judge_run_basic(tmp_path):
 
 
 def test_judge_run_fires_all_probes(tmp_path):
-    """judge_run with runs=2, pairwise=True fires probes ⑭⑮⑯⑰."""
+    """judge_run with runs=2, pairwise=True fires probes ⑭⑮⑰."""
     ledger = str(tmp_path / "l.jsonl")
     items = [{"prompt": f"p{i}", "a": "x", "b": "y"} for i in range(10)]
     # Alternating 0/1 → no flip (same across runs), balanced bias, varied scores
@@ -114,8 +114,17 @@ def test_judge_run_fires_all_probes(tmp_path):
     probes = {f.probe for f in result["findings"]}
     assert "⑭ judge-consistency" in probes
     assert "⑮ judge-bias" in probes
-    assert "⑯ inter-rater" in probes
     assert "⑰ judge-score-sanity" in probes
+
+
+def test_judge_run_does_not_autofire_inter_rater(tmp_path):
+    """⑯ is standalone-only: same-judge re-runs are already covered by ⑭."""
+    ledger = str(tmp_path / "l.jsonl")
+    items = [{"prompt": f"p{i}", "a": "x", "b": "y"} for i in range(4)]
+    judge_fn = _make_deterministic_judge([0, 1, 0, 1, 0, 1, 0, 1])
+    result = jm.judge_run(ledger, "ev_no16", judge_fn=judge_fn,
+                          items=items, runs=2, pairwise=True)
+    assert not any(f.probe.startswith("⑯") for f in result["findings"])
 
 
 def test_judge_run_no_bias_probe_without_pairwise(tmp_path):

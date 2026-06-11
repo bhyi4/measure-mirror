@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — MCP server
 
-Exposes 23 probes + 6 utilities (anchor, calibrate, witness, retract, certificate, badge) as MCP tools via stdio transport so any
+Exposes 23 probes + 6 utilities + the verify() umbrella (full / group-filtered) as MCP tools via stdio transport so any
 MCP-compatible AI (Claude Code, Cursor, Windsurf, …) can call them
 directly mid-conversation.
 
@@ -642,6 +642,37 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="mm_verify",
+            description=(
+                "🪞 Single entry point — runs every probe whose inputs are present in "
+                "`data` (FULL verification), optionally restricted to groups (GROUP "
+                "verification). Groups: ledger (prereg/chain/cascade), stats (CI, "
+                "multi-seed, too-good, power, multiplicity, GRIM), design (baseline, "
+                "gaming, leakage, scope, falsifiability), negative (closure gate), "
+                "judge (⑭⑮⑯⑰⑱), ranking (⑲⑳). data keys: claim_id, metric, acc, n, "
+                "baseline, competing_name+competing_acc, reward_terms, "
+                "train_items+test_items, seed_results, claimed_scope+tested_scope, "
+                "min_detectable_effect, check_multiplicity, angles, score_pairs, "
+                "pairwise_results, ratings_matrix, scores, "
+                "forward_results+swapped_results, matches, scores_a+scores_b."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ledger_path": {"type": "string", "description": "Ledger JSONL path"},
+                    "data":        {"type": "object",
+                                    "description": "Probe inputs — only probes whose keys "
+                                                   "are present will run"},
+                    "groups":      {"type": "array",
+                                    "items": {"type": "string",
+                                              "enum": ["ledger", "stats", "design",
+                                                       "negative", "judge", "ranking"]},
+                                    "description": "Optional: restrict to these groups"},
+                },
+                "required": ["ledger_path", "data"],
+            },
+        ),
+        types.Tool(
             name="mm_badge",
             description=(
                 "🏷 Render a claim's certificate as an embeddable badge. fmt='markdown' "
@@ -953,6 +984,15 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 seed=arguments.get("seed", 0),
                 min_stability=arguments.get("min_stability", 0.95),
             ))
+
+        elif name == "mm_verify":
+            findings = mm.verify(
+                arguments["ledger_path"],
+                arguments["data"],
+                groups=arguments.get("groups"),
+            )
+            result = (_findings_to_text(findings) if findings
+                      else "No probes activated — data contains no recognized keys.")
 
         elif name == "mm_badge":
             c = mm.certificate(

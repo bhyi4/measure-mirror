@@ -56,6 +56,31 @@ audit / full_audit           ← run all probes after results are in
 
 ---
 
+## Three verification tiers
+
+| Tier | How | When |
+|---|---|---|
+| **FULL** | `mm.verify(ledger, data)` / `mm verify --file data.json` | one-shot audit — every probe whose inputs exist in `data` runs |
+| **GROUP** | `mm.verify(ledger, data, groups=["judge"])` / `--groups judge` | focus on one verification concern |
+| **INDIVIDUAL** | `mm.grim_check(...)`, `mm.judge_swap_check(...)`, … | precise control, custom pipelines |
+
+Verification groups (see `mm verify --list-groups` or `mm.GROUPS`):
+
+| Group | Probes | Question it answers |
+|---|---|---|
+| `ledger` | ① ⑫ + chain | Is the pre-registration record intact and un-retracted? |
+| `stats` | ④ ⑤ ⑦ ⑧ ⑨ ⑩ | Are the numbers statistically real? |
+| `design` | ② ③ ⑥ ⑪ | Is the experiment designed fairly? |
+| `negative` | ⑬ | Is this negative closure premature? |
+| `judge` | ⑭ ⑮ ⑯ ⑰ ⑱ | Is the LLM judge reliable? |
+| `ranking` | ⑲ ⑳ | Is the leaderboard real? |
+
+`verify()` is input-driven: a probe runs only when its keys are present in the
+`data` dict, so the FULL tier never errors on missing inputs — it simply runs
+whatever the data supports. `group_of(finding)` maps any Finding back to its group.
+
+---
+
 ## Probe reference
 
 Probes are grouped by the type of integrity failure they catch.
@@ -845,7 +870,7 @@ print(result["ledger_entry"])  # the sealed ledger entry
 |---|---|
 | ⑭ `judge_consistency_check` | always when `runs ≥ 2` |
 | ⑮ `judge_bias_check` | always when `pairwise=True` |
-| ⑯ `inter_rater_agreement` | always when `runs ≥ 2` |
+| ⑯ `inter_rater_agreement` | **never auto-fired** — standalone-only, for two genuinely different judges (same-judge re-runs are ⑭'s job) |
 | ⑰ `judge_score_sanity` | always |
 | ⑱ `judge_swap_check` | when `swap_positions=True` (pairwise only) |
 | `judge-parse` | WARN when >10% of responses unparseable; FAIL when none parsed |

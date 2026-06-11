@@ -7,8 +7,8 @@ from .mm import (
     # ledger + utilities
     preregister, verify_chain, retract, anchor, calibrate, witness,
     certificate, badge,
-    # audits
-    audit, continuous_audit, full_audit,
+    # audits — three tiers: verify (full/group) · umbrellas · individual probes
+    verify, audit, continuous_audit, full_audit, GROUPS, group_of,
     # probes
     baseline_fairness, gaming_check, leakage_check, multiseed_check,
     scope_check, too_good_check, power_check, multiple_comparisons_check,
@@ -23,7 +23,7 @@ from .mm import (
 __all__ = [
     "preregister", "verify_chain", "retract", "anchor", "calibrate", "witness",
     "certificate", "badge",
-    "audit", "continuous_audit", "full_audit",
+    "verify", "audit", "continuous_audit", "full_audit", "GROUPS", "group_of",
     "baseline_fairness", "gaming_check", "leakage_check", "multiseed_check",
     "scope_check", "too_good_check", "power_check", "multiple_comparisons_check",
     "grim_check", "falsifiability_check", "cascade_check", "negative_audit",
@@ -32,4 +32,4 @@ __all__ = [
     "ranking_stability_check",
     "wilson_ci", "lookup_baseline", "report", "Finding",
 ]
-__version__ = "0.12.0"
+__version__ = "0.13.0"

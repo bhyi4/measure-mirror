@@ -129,31 +129,91 @@ def test_my_model_is_real():
 
 ---
 
-## All 23 Probes + 6 Utilities
+## Three Verification Tiers
 
-| Probe | Check # | Catches |
+You don't need to memorize 23 probes — there are exactly three ways to use the mirror:
+
+```bash
+# FULL — one shot, everything applicable runs automatically
+mm verify --file results.json
+
+# GROUP — restrict to verification groups
+mm verify --file results.json --groups stats judge
+mm verify --list-groups
+
+# INDIVIDUAL — any probe directly (Python)
+mm.grim_check(reported_acc=0.33, n=10)
+```
+
+```python
+from measure_mirror import mm
+
+# FULL: probes activate based on which keys exist in data
+findings = mm.verify("ledger.jsonl", {
+    "claim_id": "my_model", "acc": 0.72, "n": 500,        # → ledger + stats
+    "seed_results": [0.70, 0.72, 0.74],                    # → ⑤
+    "scores": [3, 7, 5, 8, 4],                             # → judge ⑰
+})
+
+# GROUP: same data, judge group only
+findings = mm.verify("ledger.jsonl", data, groups=["judge"])
+```
+
+`verify()` runs only the probes whose inputs are present — an empty key fires nothing,
+extra keys fire extra probes. The `data` keys are identical to the JSON file format.
+
+## Probes by Verification Group
+
+### `ledger` — pre-registration & ledger integrity
+
+| Probe | # | Catches |
 |---|---|---|
 | `preregister` / `audit` | ① | Post-hoc metric swap · sample underrun · ledger tampering |
 | `verify_chain` | ① | Deleted/inserted entries · ledger tampering |
-| `baseline_fairness` | ② | Crippled / tied / reversed baseline |
-| `gaming_check` | ③ | Metric directly in reward/loss (self-fulfilling) |
+| `cascade_check` | ⑫ | Claim or transitive dependency retracted → FAIL/WARN stale |
+
+### `stats` — statistical validity
+
+| Probe | # | Catches |
+|---|---|---|
 | `audit` — Wilson CI | ④a | Results indistinguishable from chance (small sample) |
 | `audit` — direction | ④a | Performance worse than baseline (anti-signal) |
-| `leakage_check` | ④a | Train∩test data contamination |
 | `multiseed_check` | ⑤ | Unstable signal / lucky seed |
-| `scope_check` | ⑥ | Claimed scope wider than tested scope |
 | `too_good_check` | ⑦ | Suspiciously large Δ over baseline |
 | `power_check` | ⑧ | n too small to detect minimum effect (false-negative guard) |
 | `multiple_comparisons_check` | ⑨ | k>1 experiments in ledger — Bonferroni correction alarm |
 | `grim_check` | ⑩ | Reported acc × n is arithmetically impossible (fabricated value) |
+
+### `design` — experiment-design fairness
+
+| Probe | # | Catches |
+|---|---|---|
+| `baseline_fairness` | ② | Crippled / tied / reversed baseline |
+| `gaming_check` | ③ | Metric directly in reward/loss (self-fulfilling) |
+| `leakage_check` | ④a | Train∩test data contamination |
+| `scope_check` | ⑥ | Claimed scope wider than tested scope |
 | `falsifiability_check` | ⑪ | No kill-condition → unfalsifiable; kill_threshold triggered → claim is dead |
-| `cascade_check` | ⑫ | Claim or transitive dependency retracted → FAIL/WARN stale |
+
+### `negative` — Resolved-Negative closure gate
+
+| Probe | # | Catches |
+|---|---|---|
 | `negative_audit` | ⑬ | Negative conclusion has too few independent angles, unregistered angles, or scope overshoot |
+
+### `judge` — LLM-judge reliability
+
+| Probe | # | Catches |
+|---|---|---|
 | `judge_consistency_check` | ⑭ | LLM judge flip-rate too high — unreliable judge detector |
 | `judge_bias_check` | ⑮ | Judge systematically favors position A or B — position bias detector |
-| `inter_rater_agreement` | ⑯ | Cohen's κ between two judges below threshold — poor agreement |
+| `inter_rater_agreement` | ⑯ | Cohen's κ between two *different* judges below threshold (standalone-only) |
 | `judge_score_sanity` | ⑰ | Judge assigns identical/near-identical scores — degenerate distribution |
 | `judge_swap_check` | ⑱ | Verdict stays with the slot after AB→BA swap — judge reads position, not content |
+
+### `ranking` — leaderboard integrity
+
+| Probe | # | Catches |
+|---|---|---|
 | `judge_transitivity_check` | ⑲ | A>B>C>A preference cycles — judge has no consistent quality scale |
 | `ranking_stability_check` | ⑳ | "A beats B" flips under bootstrap resampling — ranking mirage |
 
@@ -349,15 +409,17 @@ for f in result["findings"]:
     print(f"  {f.level}  [{f.probe}]  {f.msg}")
 ```
 
-**The five checks triggered by `judge_run`:**
+**The checks triggered by `judge_run`:**
 
 | Probe | Catches |
 |---|---|
 | `judge_consistency_check` ⑭ | Judge gives different verdict on re-run (stochastic / unreliable) |
 | `judge_bias_check` ⑮ | Judge systematically favors position A or B regardless of content |
-| `inter_rater_agreement` ⑯ | Two runs disagree beyond chance (Cohen's κ below threshold) |
 | `judge_score_sanity` ⑰ | Judge assigns identical / near-identical scores to everything |
 | `judge_swap_check` ⑱ | Verdict stays with the slot after AB→BA swap (content-blind judge) |
+
+⑯ `inter_rater_agreement` is **standalone-only**: it compares two genuinely
+different judges; re-running the same judge is already covered by ⑭.
 
 Unparseable judge responses score -1 and are **excluded from all probes**; a
 `judge-parse` WARN fires when the failure rate exceeds 10% (FAIL when nothing parsed).
@@ -568,7 +630,8 @@ pip install "measure-mirror[mcp]"
 
 **Other MCP clients** — run `mm-mcp` as the stdio server command.
 
-All 23 probes + 6 utilities are exposed as MCP tools:  
+All 23 probes + 6 utilities + the `mm_verify` umbrella are exposed as MCP tools:  
+`mm_verify` (full / group-filtered) ·  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
@@ -613,8 +676,8 @@ python examples/demo_field.py    # Field candidate false positives
 ```
 measure-mirror/
 ├── measure_mirror/
-│   ├── mm.py              # 20 probes + CLI + DB lookup (zero deps)
-│   ├── mcp_server.py      # MCP server — 29 tools (pip install .[mcp])
+│   ├── mm.py              # verify() + 20 probes + CLI + DB lookup (zero deps)
+│   ├── mcp_server.py      # MCP server — 30 tools (pip install .[mcp])
 │   ├── judge.py           # LLM-as-a-Judge runner (pip install .[judge])
 │   └── pytest_plugin.py   # assert_clean() for CI gates
 ├── docs/
@@ -634,8 +697,8 @@ measure-mirror/
 │   ├── false_negative_guards.jsonl
 │   └── self_catches.jsonl     our own false positives
 └── tests/
-    ├── test_mm.py         # 137 tests for core probes, CI-enforced
-    ├── test_judge.py      # 16 tests for judge.py module
+    ├── test_mm.py         # 145 tests for core probes, CI-enforced
+    ├── test_judge.py      # 17 tests for judge.py module
     └── test_sync.py       # sync gate: probe ↔ MCP ↔ tests ↔ README ↔ exports ↔ version
 ```
 

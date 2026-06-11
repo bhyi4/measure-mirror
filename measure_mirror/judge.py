@@ -8,12 +8,14 @@ This module provides:
   openai_judge()    — returns a judge callable backed by the OpenAI API
   anthropic_judge() — returns a judge callable backed by the Anthropic API
   judge_run()       — runs the judge, chain-links results to the ledger,
-                      and automatically fires probes ⑭⑮⑯⑰ (and ⑱ with
+                      and automatically fires probes ⑭⑮⑰ (and ⑱ with
                       swap_positions=True)
 
 Probes ⑭⑮⑯⑰⑱ (judge_consistency_check, judge_bias_check,
 inter_rater_agreement, judge_score_sanity, judge_swap_check) live in mm.py
 so they stay zero-dependency and can be called standalone with any score list.
+⑯ inter_rater_agreement is standalone-only: it is meant for two genuinely
+different judges, and re-running the same judge is already covered by ⑭.
 
 Unparseable judge responses score -1 and are excluded from probes; a
 `judge-parse` WARN fires when the failure rate exceeds 10%.
@@ -251,7 +253,7 @@ def judge_run(
         items:       List of item dicts.  For pairwise: {"prompt", "a", "b"}.
                      For rating: {"prompt", "response"}.
         runs:        How many times to call judge_fn per item (default 2).
-                     Two runs enables ⑭ consistency and ⑯ inter-rater checks.
+                     Two runs enables the ⑭ consistency check.
         pairwise:    True = A-vs-B scores (0/1);  False = rating scores (int).
                      Controls ⑮ bias check and ledger entry fields.
         swap_positions: If True (pairwise only), each item is additionally
@@ -331,10 +333,9 @@ def judge_run(
         if pairwise:
             findings.append(mm.judge_bias_check(runs_valid[0]))
 
-        # ⑯ inter-rater — treat run-1 vs run-2 as two raters when runs ≥ 2
-        if runs >= 2:
-            findings.append(mm.inter_rater_agreement(
-                list(zip(runs_valid[0], runs_valid[1]))))
+        # ⑯ inter-rater is NOT auto-fired: run-1 vs run-2 of the same judge is
+        # the same signal ⑭ already measures.  Call mm.inter_rater_agreement()
+        # directly when you have two genuinely different judges.
 
         # ⑰ score sanity — always
         findings.append(mm.judge_score_sanity(runs_valid[0]))

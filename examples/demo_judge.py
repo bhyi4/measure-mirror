@@ -5,8 +5,8 @@ Three mock judges show the three failure modes the mirror catches:
 
   1. content_judge      — reads the responses; survives every probe
   2. content_blind_judge — deterministic but never reads the responses:
-                           passes ⑭ (consistent), ⑮ (balanced), ⑯ (κ=1),
-                           ⑰ (varied) — ONLY the ⑱ swap test exposes it
+                           passes ⑭ (consistent), ⑮ (balanced), ⑰ (varied)
+                           — ONLY the ⑱ swap test exposes it
   3. lazy_judge          — returns the same rating for everything; caught by ⑰
 
 Run:  python examples/demo_judge.py
@@ -40,9 +40,9 @@ def content_judge(item):
 def content_blind_judge(item):
     """The hardest case: deterministic, balanced — and never reads a response.
     Verdict depends only on the prompt, so it is perfectly consistent (⑭ OK),
-    unbiased on aggregate (⑮ OK ≈50%), self-agreeing (⑯ κ=1), and varied
-    (⑰ OK).  But swap A and B and the verdict stays with the slot:
-    the ⑱ swap test is the ONLY probe that exposes it."""
+    unbiased on aggregate (⑮ OK ≈50%), and varied (⑰ OK).  But swap A and B
+    and the verdict stays with the slot: the ⑱ swap test is the ONLY probe
+    that exposes it."""
     return hash(item["prompt"]) % 2
 
 

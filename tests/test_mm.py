@@ -1254,3 +1254,87 @@ def test_badge_shields_escaping(tmp_path):
     # verdict CERTIFIED-WITH-WARNINGS would need escaping too
     mm.retract(ledger, "dep", "x")  # unrelated; keep cert CERTIFIED
     assert "img.shields.io/badge/" in b
+
+
+# ─── verify() three-tier entry point tests ───────────────────
+
+def test_verify_full_runs_all_applicable(tmp_path):
+    """FULL tier: probes from multiple groups fire when their inputs exist."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "m1", metric="acc", min_n=50, baseline=0.5,
+                   pass_threshold=0.4)
+    data = {
+        "claim_id": "m1", "metric": "acc", "acc": 0.72, "n": 500,
+        "scores": [3, 7, 5, 8, 4, 6, 9, 2, 7, 5],          # judge ⑰
+        "matches": [("A", "B", 0), ("B", "C", 0), ("A", "C", 0)],  # ranking ⑲
+    }
+    findings = mm.verify(ledger, data)
+    groups_seen = {mm.group_of(f) for f in findings}
+    assert "stats" in groups_seen
+    assert "judge" in groups_seen
+    assert "ranking" in groups_seen
+
+
+def test_verify_group_filter(tmp_path):
+    """GROUP tier: groups=['judge'] keeps only judge findings."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "m1", metric="acc", min_n=50, baseline=0.5,
+                   pass_threshold=0.4)
+    data = {
+        "claim_id": "m1", "acc": 0.72, "n": 500,
+        "scores": [3, 7, 5, 8, 4, 6, 9, 2, 7, 5],
+    }
+    findings = mm.verify(ledger, data, groups=["judge"])
+    assert findings, "judge probe should have fired"
+    assert all(mm.group_of(f) == "judge" for f in findings)
+
+
+def test_verify_stats_only_excludes_ledger(tmp_path):
+    """groups=['stats'] drops ① ledger findings emitted by the core audit."""
+    ledger = str(tmp_path / "l.jsonl")
+    data = {"claim_id": "ghost", "acc": 0.72, "n": 500}
+    findings = mm.verify(ledger, data, groups=["stats"])
+    assert findings
+    assert all(mm.group_of(f) == "stats" for f in findings)
+    assert not any(f.probe.startswith("①") for f in findings)
+
+
+def test_verify_unknown_group_raises(tmp_path):
+    import pytest
+    with pytest.raises(ValueError, match="Unknown group"):
+        mm.verify(str(tmp_path / "l.jsonl"), {"acc": 0.7, "n": 100},
+                  groups=["statz"])
+
+
+def test_verify_negative_without_acc(tmp_path):
+    """⑬ fires from angles alone — no reported result needed."""
+    ledger = str(tmp_path / "l.jsonl")
+    for cid in ["a1", "a2", "a3"]:
+        mm.preregister(ledger, cid, metric="acc", min_n=50, baseline=0.5,
+                       pass_threshold=0.6)
+    findings = mm.verify(ledger, {"angles": ["a1", "a2", "a3"]})
+    assert any(f.probe.startswith("⑬") for f in findings)
+
+
+def test_verify_empty_data_no_findings(tmp_path):
+    """Empty data dict → nothing to verify → empty list."""
+    findings = mm.verify(str(tmp_path / "l.jsonl"), {})
+    assert findings == []
+
+
+def test_verify_ranking_keys(tmp_path):
+    """⑳ fires from scores_a + scores_b."""
+    findings = mm.verify(str(tmp_path / "l.jsonl"), {
+        "scores_a": [9, 8, 9, 9, 8, 9, 8, 9],
+        "scores_b": [3, 2, 3, 2, 3, 2, 3, 2],
+    })
+    assert any(f.probe.startswith("⑳") for f in findings)
+
+
+def test_groups_registry_covers_all_symbols():
+    """Every probe symbol ①–⑳ maps to a group (no orphan probes)."""
+    symbols = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩",
+               "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳"]
+    for s in symbols:
+        assert s in mm._SYMBOL_GROUP, f"symbol {s} has no group"
+        assert mm._SYMBOL_GROUP[s] in mm.GROUPS

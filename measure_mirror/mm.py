@@ -25,6 +25,19 @@
   ⑲ Judge transitivity — A>B>C>A cycle detection in pairwise tournaments
   ⑳ Ranking stability — bootstrap resampling guard against ranking mirages
 
+Three verification tiers (사용 3단계):
+  verify(ledger, data)                — FULL: every probe whose inputs are present
+  verify(ledger, data, groups=[...]) — GROUP: restrict to named groups
+  <probe>(...)                        — INDIVIDUAL: call any probe directly
+
+Groups (GROUPS registry):
+  ledger   ①⑫  pre-registration, chain integrity, retraction cascade
+  stats    ④⑤⑦⑧⑨⑩  statistical validity of the numbers
+  design   ②③⑥⑪  experiment-design fairness
+  negative ⑬  Resolved-Negative closure gate
+  judge    ⑭⑮⑯⑰⑱  LLM-judge reliability
+  ranking  ⑲⑳  leaderboard integrity
+
 Utilities:
   calibrate()   — self-test: run 5 synthetic known-good/known-bad cases
   anchor()      — tamper-evident ledger snapshot for external archival
@@ -1339,6 +1352,149 @@ def full_audit(ledger_path: str, claim_id: str, *,
 
 
 # ─────────────────────────────────────────────────────────────
+# Verification groups + verify() — the three-tier entry point
+# ─────────────────────────────────────────────────────────────
+GROUPS: dict[str, list[str]] = {
+    "ledger":   ["preregister", "verify_chain", "cascade_check"],
+    "stats":    ["audit (Wilson CI/direction)", "multiseed_check",
+                 "too_good_check", "power_check",
+                 "multiple_comparisons_check", "grim_check"],
+    "design":   ["baseline_fairness", "gaming_check", "leakage_check",
+                 "scope_check", "falsifiability_check"],
+    "negative": ["negative_audit"],
+    "judge":    ["judge_consistency_check", "judge_bias_check",
+                 "inter_rater_agreement", "judge_score_sanity",
+                 "judge_swap_check"],
+    "ranking":  ["judge_transitivity_check", "ranking_stability_check"],
+}
+
+# Finding probe-label symbol → group (labels all start with their symbol)
+_SYMBOL_GROUP = {
+    "①": "ledger", "⑫": "ledger",
+    "④": "stats", "⑤": "stats", "⑦": "stats", "⑧": "stats",
+    "⑨": "stats", "⑩": "stats",
+    "②": "design", "③": "design", "⑥": "design", "⑪": "design",
+    "⑬": "negative",
+    "⑭": "judge", "⑮": "judge", "⑯": "judge", "⑰": "judge", "⑱": "judge",
+    "⑲": "ranking", "⑳": "ranking",
+}
+
+
+def group_of(finding: Finding) -> str | None:
+    """Return the verification group a Finding belongs to (None if ungrouped)."""
+    if finding.probe.startswith("judge-parse"):
+        return "judge"
+    return _SYMBOL_GROUP.get(finding.probe[:1])
+
+
+def verify(ledger_path: str, data: dict, *,
+           groups: list[str] | None = None) -> list[Finding]:
+    """Single entry point — run every probe whose inputs are present in `data`.
+
+    Three tiers of use:
+      FULL        verify(ledger, data)                  — everything applicable
+      GROUP       verify(ledger, data, groups=["judge"]) — restrict to groups
+      INDIVIDUAL  call any probe function directly
+
+    `data` keys (all optional — a probe runs only when its inputs are present):
+      claim_id, metric, acc, n, baseline          → core audit (①④a⑩⑪⑫ + ⑦)
+      competing_name + competing_acc              → ② baseline fairness
+      reward_terms                                → ③ gaming
+      train_items + test_items                    → ④a leakage
+      seed_results                                → ⑤ multi-seed
+      claimed_scope + tested_scope                → ⑥ scope
+      min_detectable_effect                       → ⑧ power
+      check_multiplicity (bool)                   → ⑨ multiple comparisons
+      angles [, min_angles, conclusion_scope]     → ⑬ negative audit
+      score_pairs                                 → ⑭ judge consistency
+      pairwise_results                            → ⑮ judge bias
+      ratings_matrix                              → ⑯ inter-rater κ
+      scores                                      → ⑰ judge score sanity
+      forward_results + swapped_results           → ⑱ position swap
+      matches                                     → ⑲ transitivity
+      scores_a + scores_b                         → ⑳ ranking stability
+
+    Same key names as the `mm verify --file` / `mm judge --file` JSON formats.
+    Raises ValueError on unknown group names.
+    """
+    if groups:
+        unknown = [g for g in groups if g not in GROUPS]
+        if unknown:
+            raise ValueError(
+                f"Unknown group(s): {unknown}. Valid: {sorted(GROUPS)}")
+    wanted = set(groups) if groups else set(GROUPS)
+
+    findings: list[Finding] = []
+
+    # Core experiment audit (ledger/stats/design/negative groups)
+    if (wanted & {"ledger", "stats", "design", "negative"}):
+        if data.get("acc") is not None and data.get("n") is not None:
+            findings.extend(full_audit(
+                ledger_path, data.get("claim_id", "?"),
+                reported_metric=data.get("metric", "acc"),
+                reported_acc=data["acc"], n=data["n"],
+                baseline=data.get("baseline"), task=data.get("task"),
+                competing_name=data.get("competing_name"),
+                competing_acc=data.get("competing_acc"),
+                reward_terms=data.get("reward_terms"),
+                train_items=data.get("train_items"),
+                test_items=data.get("test_items"),
+                seed_results=data.get("seed_results"),
+                claimed_scope=data.get("claimed_scope"),
+                tested_scope=data.get("tested_scope"),
+                min_detectable_effect=data.get("min_detectable_effect"),
+                check_multiplicity=data.get("check_multiplicity", False),
+                angles=data.get("angles"),
+                min_angles=data.get("min_angles", 3)))
+        else:
+            # No reported result — still run what doesn't need acc/n
+            if data.get("angles") is not None:
+                findings.append(negative_audit(
+                    ledger_path, angles=data["angles"],
+                    min_angles=data.get("min_angles", 3),
+                    conclusion_scope=data.get("conclusion_scope"),
+                    tested_scope=data.get("tested_scope")))
+            if data.get("claim_id"):
+                casc = cascade_check(ledger_path, data["claim_id"])
+                if casc.level != "OK":
+                    findings.append(casc)
+            for f in verify_chain(ledger_path):
+                if f.level != "OK":
+                    findings.append(f)
+
+    # Judge group
+    if "judge" in wanted:
+        if "score_pairs" in data:
+            findings.append(judge_consistency_check(
+                [tuple(p) for p in data["score_pairs"]]))
+        if "pairwise_results" in data:
+            findings.append(judge_bias_check(data["pairwise_results"]))
+        if "ratings_matrix" in data:
+            findings.append(inter_rater_agreement(
+                [tuple(r) for r in data["ratings_matrix"]]))
+        if "scores" in data:
+            findings.append(judge_score_sanity(data["scores"]))
+        if "forward_results" in data and "swapped_results" in data:
+            findings.append(judge_swap_check(
+                data["forward_results"], data["swapped_results"]))
+
+    # Ranking group
+    if "ranking" in wanted:
+        if "matches" in data:
+            findings.append(judge_transitivity_check(
+                [tuple(m) for m in data["matches"]]))
+        if "scores_a" in data and "scores_b" in data:
+            findings.append(ranking_stability_check(
+                data["scores_a"], data["scores_b"]))
+
+    # Group filter (full_audit emits across groups — keep only requested)
+    if groups:
+        findings = [f for f in findings if group_of(f) in wanted]
+
+    return findings
+
+
+# ─────────────────────────────────────────────────────────────
 # Report printer
 # ─────────────────────────────────────────────────────────────
 def report(title: str, findings: list[Finding]) -> None:
@@ -1664,7 +1820,7 @@ def _auto(name: str, ledger: str = "mm_ledger.jsonl") -> None:
 def _cli() -> None:
     import argparse, sys
     _SUBCMDS = {"register", "audit", "calibrate", "run", "anchor", "retract",
-                "negative", "judge", "certify"}
+                "negative", "judge", "certify", "verify"}
     if len(sys.argv) == 2 and sys.argv[1] not in _SUBCMDS \
             and not sys.argv[1].startswith("-"):
         _auto(sys.argv[1]); return
@@ -1719,6 +1875,16 @@ def _cli() -> None:
                     help="Claim IDs of independent test angles (space-separated)")
     ng.add_argument("--min-angles", type=int, default=3,
                     help="Minimum required angles (default: 3)")
+
+    vf = sub.add_parser("verify",
+                        help="One-shot verification: full or group-filtered, from a JSON file")
+    vf.add_argument("--file", default=None,
+                    help="JSON data file — same keys as the Python verify() data dict")
+    vf.add_argument("--groups", nargs="+", choices=sorted(GROUPS), default=None,
+                    help="Restrict to verification group(s) "
+                         f"(default: all — {', '.join(sorted(GROUPS))})")
+    vf.add_argument("--list-groups", action="store_true",
+                    help="List verification groups and their probes, then exit")
 
     jd = sub.add_parser("judge",
                         help="Audit LLM-judge scores from a JSON file (probes ⑭⑮⑯⑰⑱)")
@@ -1801,6 +1967,22 @@ def _cli() -> None:
         report("Negative-claim audit",
                [negative_audit(args.ledger, angles=args.angles,
                                min_angles=args.min_angles)])
+    elif args.cmd == "verify":
+        if args.list_groups:
+            print("🪞 Verification groups:")
+            for g in sorted(GROUPS):
+                print(f"   {g:<9} {', '.join(GROUPS[g])}")
+            return
+        if not args.file:
+            p.error("verify requires --file (or use --list-groups)")
+        d = json.load(open(args.file, encoding="utf-8"))
+        fs = verify(args.ledger, d, groups=args.groups)
+        if not fs:
+            print("🪞 No probes activated — the data file contains no "
+                  "recognized keys (see `mm verify --list-groups`).")
+            return
+        scope_note = f" [{', '.join(args.groups)}]" if args.groups else " [full]"
+        report(f"verify{scope_note} ({args.file})", fs)
     elif args.cmd == "judge":
         d = json.load(open(args.file, encoding="utf-8"))
         fs: list[Finding] = []
