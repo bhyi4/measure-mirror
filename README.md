@@ -15,6 +15,8 @@ Zero training · Deterministic · Zero dependencies (Python 3.10+ stdlib only).
 > Built while honestly killing our own project.  
 > The makers ran it on themselves first. → [🦋 Origin Story](docs/CHRONICLE.md)
 
+**[📖 Full Probe Guide →](docs/GUIDE.md)** — detailed explanations, worked examples, and workflows for all 16 probes
+
 ---
 
 ## The Problem
