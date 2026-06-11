@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — MCP server
 
-Exposes 15 probes + 4 utilities (anchor, calibrate, witness, retract) as MCP tools via stdio transport so any
+Exposes 16 probes + 4 utilities (anchor, calibrate, witness, retract) as MCP tools via stdio transport so any
 MCP-compatible AI (Claude Code, Cursor, Windsurf, …) can call them
 directly mid-conversation.
 
@@ -106,6 +106,39 @@ async def list_tools() -> list[types.Tool]:
                     "reason":      {"type": "string", "description": "Reason for retraction"},
                 },
                 "required": ["ledger_path", "claim_id", "reason"],
+            },
+        ),
+        types.Tool(
+            name="mm_negative_audit",
+            description=(
+                "⑬ Gate a Resolved-Negative conclusion: angle-count gate + optional scope check. "
+                "A negative conclusion is only trustworthy when multiple independent "
+                "pre-registered experiments have all converged. "
+                "FAIL when fewer than min_angles (default 3) are provided, when any angle "
+                "lacks a preregister entry, or when conclusion_scope is broader than tested_scope. "
+                "WARN when angles are sufficient but at least one is retracted (weakened case). "
+                "OK when all checks pass."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ledger_path":       {"type": "string",
+                                          "description": "Path to the JSONL ledger file"},
+                    "angles":            {"type": "array", "items": {"type": "string"},
+                                          "description":
+                                          "Claim IDs of independent test angles"},
+                    "min_angles":        {"type": "integer", "default": 3,
+                                          "description": "Minimum required angles (default 3)"},
+                    "conclusion_scope":  {"type": "array", "items": {"type": "string"},
+                                          "description":
+                                          "Scope of the negative conclusion (optional)",
+                                          "default": None},
+                    "tested_scope":      {"type": "array", "items": {"type": "string"},
+                                          "description":
+                                          "Scopes actually tested (optional)",
+                                          "default": None},
+                },
+                "required": ["ledger_path", "angles"],
             },
         ),
         types.Tool(
@@ -476,6 +509,15 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             result = _single(mm.cascade_check(
                 arguments["ledger_path"],
                 arguments["claim_id"],
+            ))
+
+        elif name == "mm_negative_audit":
+            result = _single(mm.negative_audit(
+                arguments["ledger_path"],
+                angles=arguments["angles"],
+                min_angles=arguments.get("min_angles", 3),
+                conclusion_scope=arguments.get("conclusion_scope"),
+                tested_scope=arguments.get("tested_scope"),
             ))
 
         elif name == "mm_retract":

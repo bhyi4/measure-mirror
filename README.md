@@ -126,7 +126,7 @@ def test_my_model_is_real():
 
 ---
 
-## All 15 Probes + 4 Utilities
+## All 16 Probes + 4 Utilities
 
 | Probe | Check # | Catches |
 |---|---|---|
@@ -145,6 +145,7 @@ def test_my_model_is_real():
 | `grim_check` | ⑩ | Reported acc × n is arithmetically impossible (fabricated value) |
 | `falsifiability_check` | ⑪ | No kill-condition → unfalsifiable; kill_threshold triggered → claim is dead |
 | `cascade_check` | ⑫ | Claim or transitive dependency retracted → FAIL/WARN stale |
+| `negative_audit` | ⑬ | Negative conclusion has too few independent angles, unregistered angles, or scope overshoot |
 
 | Utility | Purpose |
 |---|---|
@@ -256,6 +257,49 @@ The retraction entry is **chain-linked** — deleting it from the ledger breaks 
 chain and is detected by `verify_chain()`. Retraction propagates regardless of
 publication order: a claim built on a retracted foundation is automatically stale.
 
+### Negative-claim audit ⑬ — the premature-closure gate
+
+A single negative result may reflect a frame flaw, not a universal wall.
+`negative_audit` gates "Resolved-Negative" conclusions: you must present
+≥ `min_angles` independent pre-registered experiments before closing.
+
+```python
+# Register each independent angle BEFORE running the experiment
+for angle_id in ["oee_test_wave", "oee_test_bilinear", "oee_test_alife"]:
+    mm.preregister("mm_ledger.jsonl", angle_id,
+                   metric="oee_score", min_n=100, baseline=0.5, pass_threshold=0.0)
+
+# After all angles converge negative — gate the closure
+f = mm.negative_audit("mm_ledger.jsonl",
+                      angles=["oee_test_wave", "oee_test_bilinear", "oee_test_alife"],
+                      min_angles=3)
+# ✅ [⑬ negative-audit] 3/3 independent pre-registered angle(s) verified —
+#    negative conclusion is supported.
+
+# Optional scope check: negative conclusion must not overgeneralize
+f = mm.negative_audit("mm_ledger.jsonl",
+                      angles=["oee_test_wave", "oee_test_bilinear", "oee_test_alife"],
+                      conclusion_scope=["all_substrates"],   # claimed scope
+                      tested_scope=["in_silico"])            # actually tested
+# 🔴 [⑬ negative-audit] conclusion scope includes untested domain(s): ['all_substrates'].
+```
+
+```bash
+# CLI
+mm negative --angles oee_test_wave oee_test_bilinear oee_test_alife --min-angles 3
+
+# Or activate inside full_audit
+findings = mm.full_audit(LEDGER, "main_claim", ..., angles=["a1", "a2", "a3"])
+```
+
+| Condition | Level |
+|---|---|
+| `len(angles) < min_angles` | FAIL — premature closure |
+| Any angle not pre-registered | FAIL — unverifiable evidence |
+| `conclusion_scope ⊄ tested_scope` | FAIL — scope overshoot |
+| A registered angle is retracted | WARN — weakened case |
+| All checks pass | OK |
+
 ### Anchor ⎈
 
 ```bash
@@ -349,11 +393,12 @@ pip install "measure-mirror[mcp]"
 
 **Other MCP clients** — run `mm-mcp` as the stdio server command.
 
-All 15 probes + 4 utilities are exposed as MCP tools:  
+All 16 probes + 4 utilities are exposed as MCP tools:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
-`mm_falsifiability_check` · `mm_cascade_check` · `mm_anchor` · `mm_calibrate` · `mm_witness` · `mm_retract`
+`mm_falsifiability_check` · `mm_cascade_check` · `mm_negative_audit` ·  
+`mm_anchor` · `mm_calibrate` · `mm_witness` · `mm_retract`
 
 ---
 

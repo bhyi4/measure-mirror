@@ -5,6 +5,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.9.0] — 2026-06-11
+
+### Added
+- **⑬ `negative_audit(ledger_path, *, angles, min_angles=3, conclusion_scope, tested_scope)`**
+  — Negative-claim audit / premature-closure gate. A "Resolved-Negative" conclusion is
+  only trustworthy when multiple independent pre-registered experiments converge.
+  - `FAIL` — fewer than `min_angles` (default 3) angles provided; any angle lacks a
+    preregister entry; or `conclusion_scope` is broader than `tested_scope`.
+  - `WARN` — angle count is sufficient but at least one angle has been retracted
+    (weakened case — not yet invalid).
+  - `OK` — all checks pass.
+  - Optional `conclusion_scope` / `tested_scope` pair activates scope check at the
+    same call (complements the existing `scope_check` probe for positive claims).
+- **`full_audit()` gains `angles` and `min_angles` optional params** — if `angles` is
+  provided, `negative_audit` runs automatically and appends its finding.
+- **CLI `mm negative --angles <id1> [id2 ...]  [--min-angles N]`** — standalone
+  negative-claim audit from the command line.
+- **`mm_negative_audit`** MCP tool.
+- 8 new tests (total: 93 → 101, all passing).
+
+### Changed
+- Probe count: 15 → 16. README / README_KO updated: "16 Probes + 4 Utilities".
+- Module docstring: updated to list ⑬.
+
+---
+
 ## [0.8.0] — 2026-06-11
 
 ### Added

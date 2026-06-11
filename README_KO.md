@@ -122,7 +122,7 @@ def test_my_model_is_real():
 
 ---
 
-## 15종 Probe + 4 유틸리티 전체 목록
+## 16종 Probe + 4 유틸리티 전체 목록
 
 | Probe | 번호 | 잡아내는 것 |
 |---|---|---|
@@ -141,6 +141,7 @@ def test_my_model_is_real():
 | `grim_check` | ⑩ | 보고된 acc × n이 정수 k와 일치 불가 (수치 조작 적발) |
 | `falsifiability_check` | ⑪ | kill-condition 없음→반증불가; kill_threshold 발화→주장 사망 |
 | `cascade_check` | ⑫ | 주장 자신 또는 전이 의존성 철회 → FAIL/WARN 오래됨 |
+| `negative_audit` | ⑬ | 음성 결론에 독립 각도 부족·미등록 각도·범위 초과 탐지 |
 
 | 유틸리티 | 역할 |
 |---|---|
@@ -240,6 +241,34 @@ mm retract dataset_v1 --reason "훈련/테스트 중복 발견"
 철회 엔트리는 **체인 연결**되어 있어 삭제하면 `verify_chain()`에서 즉시 탐지됩니다.
 발표 순서와 관계없이 철회가 전파됩니다: 철회된 기반 위에 세운 주장은 자동으로 오래된 것이 됩니다.
 
+### 음성 주장 감사 ⑬ — 성급종결 게이트
+
+단일 음성 결과는 frame 결함일 수 있습니다. `negative_audit`는 "Resolved-Negative"
+결론에 대한 게이트입니다: 종결 전 최소 `min_angles`개의 독립 사전등록 실험이 수렴해야 합니다.
+
+```python
+# 각 독립 각도를 실험 전 등록
+for angle_id in ["oee_test_wave", "oee_test_bilinear", "oee_test_alife"]:
+    mm.preregister("mm_ledger.jsonl", angle_id,
+                   metric="oee_score", min_n=100, baseline=0.5, pass_threshold=0.0)
+
+# 모든 각도가 음성으로 수렴한 후 — 결론 게이트
+f = mm.negative_audit("mm_ledger.jsonl",
+                      angles=["oee_test_wave", "oee_test_bilinear", "oee_test_alife"])
+# ✅ [⑬ negative-audit] 3/3 독립 사전등록 각도 검증 — 음성 결론 지지
+
+# 선택사항: 결론 범위가 검증 범위보다 넓으면 FAIL
+f = mm.negative_audit("mm_ledger.jsonl",
+                      angles=["oee_test_wave", "oee_test_bilinear", "oee_test_alife"],
+                      conclusion_scope=["all_substrates"],
+                      tested_scope=["in_silico"])
+# 🔴 [⑬ negative-audit] 검증되지 않은 범위 포함: ['all_substrates']
+```
+
+```bash
+mm negative --angles oee_test_wave oee_test_bilinear oee_test_alife --min-angles 3
+```
+
 ### 앵커(Anchor) ⎈
 
 ```bash
@@ -322,11 +351,12 @@ pip install "measure-mirror[mcp]"
 
 **기타 MCP 클라이언트** — stdio 서버 명령으로 `mm-mcp`를 실행하세요.
 
-15종 probe + 4 유틸리티 전부 MCP 도구로 노출됩니다:  
+16종 probe + 4 유틸리티 전부 MCP 도구로 노출됩니다:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
-`mm_falsifiability_check` · `mm_cascade_check` · `mm_anchor` · `mm_calibrate` · `mm_witness` · `mm_retract`
+`mm_falsifiability_check` · `mm_cascade_check` · `mm_negative_audit` ·  
+`mm_anchor` · `mm_calibrate` · `mm_witness` · `mm_retract`
 
 ---
 

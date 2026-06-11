@@ -16,6 +16,7 @@
   ⑩ GRIM — arithmetic consistency (acc × n must be a whole-number count)
   ⑪ Falsifiability — Popper gate (kill-condition registered? triggered?)
   ⑫ Retraction cascade — claim or transitive dependency retracted?
+  ⑬ Negative-claim audit — angle-count gate + scope for Resolved-Negative closures
 
 Utilities:
   calibrate() — self-test: run 5 synthetic known-good/known-bad cases
@@ -628,6 +629,75 @@ def cascade_check(ledger_path: str, claim_id: str) -> Finding:
 
 
 # ─────────────────────────────────────────────────────────────
+# ⑬ Negative-claim audit — angle-count gate
+# ─────────────────────────────────────────────────────────────
+def negative_audit(ledger_path: str, *,
+                   angles: list[str],
+                   min_angles: int = 3,
+                   conclusion_scope: list[str] | None = None,
+                   tested_scope: list[str] | None = None) -> Finding:
+    """⑬ Gate a Resolved-Negative conclusion: angle-count + optional scope check.
+
+    A negative conclusion ("X does not work") is only trustworthy when multiple
+    independent pre-registered experiments have all converged on the same result.
+    Too few angles = premature closure (single failure may reflect a frame flaw,
+    not a universal wall).
+
+    Checks (in priority order):
+      1. len(angles) >= min_angles (default 3) — angle-count gate
+      2. Each angle has a preregister entry in the ledger — unregistered angles
+         cannot be trusted as independent evidence
+      3. No angle is retracted (WARN — weakened case, not outright FAIL)
+      4. If conclusion_scope and tested_scope provided:
+         conclusion must not be broader than tested scope (FAIL if over-claimed)
+
+    Levels:
+      FAIL — fewer angles than min_angles, unregistered angle(s), or scope overshoot
+      WARN — all FAIL checks pass but at least one angle is retracted
+      OK   — all checks pass
+    """
+    fails: list[str] = []
+    warns: list[str] = []
+
+    # Check 1: angle-count gate
+    if len(angles) < min_angles:
+        fails.append(
+            f"only {len(angles)} angle(s) provided (need ≥{min_angles}) — "
+            "premature closure risk")
+
+    # Check 2+3: load ledger once for registration + retraction status
+    deps, retracted_set = _load_dependency_graph(ledger_path)
+    unregistered = [a for a in angles if a not in deps]
+    if unregistered:
+        fails.append(
+            "unregistered angle(s): "
+            + ", ".join(f"'{u}'" for u in unregistered))
+
+    retracted_angles = [a for a in angles if a in retracted_set]
+    if retracted_angles:
+        warns.append(
+            "retracted angle(s) weaken the case: "
+            + ", ".join(f"'{r}'" for r in retracted_angles))
+
+    # Check 4: scope (optional)
+    if conclusion_scope is not None and tested_scope is not None:
+        over = [s for s in conclusion_scope if s not in tested_scope]
+        if over:
+            fails.append(
+                "conclusion scope includes untested domain(s): "
+                + str(over))
+
+    if fails:
+        return Finding("⑬ negative-audit", "FAIL", "; ".join(fails) + ".")
+    if warns:
+        return Finding("⑬ negative-audit", "WARN", "; ".join(warns) + ".")
+    n = len(angles)
+    return Finding("⑬ negative-audit", "OK",
+                   f"{n}/{n} independent pre-registered angle(s) verified — "
+                   "negative conclusion is supported.")
+
+
+# ─────────────────────────────────────────────────────────────
 # Binary / classification metric audit
 # ─────────────────────────────────────────────────────────────
 def audit(ledger_path: str, claim_id: str, *,
@@ -766,7 +836,9 @@ def full_audit(ledger_path: str, claim_id: str, *,
                claimed_scope=None, tested_scope=None,      # ⑥
                min_detectable_effect: float | None = None, # ⑧
                check_chain: bool = True,                   # ① chain
-               check_multiplicity: bool = False) -> list[Finding]:  # ⑨
+               check_multiplicity: bool = False,           # ⑨
+               angles: list[str] | None = None,            # ⑬
+               min_angles: int = 3) -> list[Finding]:      # ⑬
     """Run all probes in one call. Optional probes activate when args are provided."""
     _baseline = baseline
     if _baseline is None:
@@ -809,6 +881,10 @@ def full_audit(ledger_path: str, claim_id: str, *,
     # ⑨ multiple comparisons (optional)
     if check_multiplicity:
         findings.append(multiple_comparisons_check(ledger_path))
+    # ⑬ negative audit (optional)
+    if angles is not None:
+        findings.append(negative_audit(ledger_path, angles=angles,
+                                       min_angles=min_angles))
 
     return findings
 
@@ -1011,7 +1087,7 @@ def _auto(name: str, ledger: str = "mm_ledger.jsonl") -> None:
 
 def _cli() -> None:
     import argparse, sys
-    _SUBCMDS = {"register", "audit", "calibrate", "run", "anchor", "retract"}
+    _SUBCMDS = {"register", "audit", "calibrate", "run", "anchor", "retract", "negative"}
     if len(sys.argv) == 2 and sys.argv[1] not in _SUBCMDS \
             and not sys.argv[1].startswith("-"):
         _auto(sys.argv[1]); return
@@ -1059,6 +1135,13 @@ def _cli() -> None:
     rt.add_argument("claim_id", help="Claim ID to retract")
     rt.add_argument("--reason", required=True,
                     help="Reason for retraction (e.g. 'data labelling error discovered')")
+
+    ng = sub.add_parser("negative",
+                        help="Gate a Resolved-Negative conclusion: angle-count + scope check")
+    ng.add_argument("--angles", nargs="+", required=True,
+                    help="Claim IDs of independent test angles (space-separated)")
+    ng.add_argument("--min-angles", type=int, default=3,
+                    help="Minimum required angles (default: 3)")
 
     rn = sub.add_parser("run",
                         help="Calibrate + witness-execute a command, sealing the run record")
@@ -1117,6 +1200,10 @@ def _cli() -> None:
     elif args.cmd == "retract":
         e = retract(args.ledger, args.claim_id, args.reason)
         print(f"🚫 Retracted: {args.claim_id}  reason={args.reason!r}  seal={e['seal']}")
+    elif args.cmd == "negative":
+        report("Negative-claim audit",
+               [negative_audit(args.ledger, angles=args.angles,
+                               min_angles=args.min_angles)])
     elif args.cmd == "run":
         cmd = [c for c in (args.command or []) if c != "--"]
         if not cmd:

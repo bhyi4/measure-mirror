@@ -799,3 +799,90 @@ def test_depends_on_sealed_in_entry(tmp_path):
     assert e["depends_on"] == ["baseline_v1", "data_v2"]
     findings = mm.verify_chain(ledger)
     assert all(f.level == "OK" for f in findings), findings
+
+
+# ─── ⑬ negative_audit tests ──────────────────────────────────
+
+def _reg(ledger, cid):
+    """Helper: register a claim with minimal args."""
+    mm.preregister(ledger, cid, metric="acc", min_n=50, baseline=0.5, pass_threshold=0.6)
+
+
+def test_negative_audit_ok(tmp_path):
+    """3 pre-registered angles, none retracted → OK."""
+    ledger = str(tmp_path / "l.jsonl")
+    for cid in ["a1", "a2", "a3"]:
+        _reg(ledger, cid)
+    f = mm.negative_audit(ledger, angles=["a1", "a2", "a3"])
+    assert f.level == "OK"
+    assert f.probe == "⑬ negative-audit"
+
+
+def test_negative_audit_fail_too_few(tmp_path):
+    """Only 2 angles with min_angles=3 → FAIL premature closure."""
+    ledger = str(tmp_path / "l.jsonl")
+    for cid in ["a1", "a2"]:
+        _reg(ledger, cid)
+    f = mm.negative_audit(ledger, angles=["a1", "a2"], min_angles=3)
+    assert f.level == "FAIL"
+    assert "2" in f.msg
+
+
+def test_negative_audit_fail_unregistered(tmp_path):
+    """One angle not pre-registered → FAIL."""
+    ledger = str(tmp_path / "l.jsonl")
+    _reg(ledger, "a1")
+    _reg(ledger, "a2")
+    # "ghost" is not registered
+    f = mm.negative_audit(ledger, angles=["a1", "a2", "ghost"], min_angles=3)
+    assert f.level == "FAIL"
+    assert "ghost" in f.msg
+
+
+def test_negative_audit_warn_retracted(tmp_path):
+    """3 angles registered but one retracted → WARN weakened."""
+    ledger = str(tmp_path / "l.jsonl")
+    for cid in ["a1", "a2", "a3"]:
+        _reg(ledger, cid)
+    mm.retract(ledger, "a3", "error in experiment design")
+    f = mm.negative_audit(ledger, angles=["a1", "a2", "a3"])
+    assert f.level == "WARN"
+    assert "a3" in f.msg
+
+
+def test_negative_audit_fail_empty_angles(tmp_path):
+    """Empty angles list → FAIL (0 < min_angles=3)."""
+    f = mm.negative_audit(str(tmp_path / "l.jsonl"), angles=[], min_angles=3)
+    assert f.level == "FAIL"
+
+
+def test_negative_audit_ok_custom_min(tmp_path):
+    """1 angle, min_angles=1 → OK."""
+    ledger = str(tmp_path / "l.jsonl")
+    _reg(ledger, "solo")
+    f = mm.negative_audit(ledger, angles=["solo"], min_angles=1)
+    assert f.level == "OK"
+
+
+def test_negative_audit_scope_fail(tmp_path):
+    """conclusion_scope broader than tested_scope → FAIL."""
+    ledger = str(tmp_path / "l.jsonl")
+    for cid in ["a1", "a2", "a3"]:
+        _reg(ledger, cid)
+    f = mm.negative_audit(ledger, angles=["a1", "a2", "a3"],
+                          conclusion_scope=["general_OEE", "all_substrates"],
+                          tested_scope=["gray_scott"])
+    assert f.level == "FAIL"
+    assert "general_OEE" in f.msg or "all_substrates" in f.msg
+
+
+def test_negative_audit_in_full_audit(tmp_path):
+    """full_audit with angles param appends ⑬ finding."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "main", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.4)
+    for cid in ["a1", "a2", "a3"]:
+        _reg(ledger, cid)
+    findings = mm.full_audit(ledger, "main",
+                             reported_metric="acc", reported_acc=0.72, n=200,
+                             angles=["a1", "a2", "a3"])
+    assert any(f.probe == "⑬ negative-audit" for f in findings)
