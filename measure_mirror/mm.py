@@ -17,6 +17,7 @@
 
 Utilities:
   calibrate() — self-test: run 5 synthetic known-good/known-bad cases
+  anchor()    — tamper-evident ledger snapshot for external archival
   witness()   — execute a command and seal a tamper-evident run record
 
 Design:
@@ -666,6 +667,62 @@ def calibrate() -> list[Finding]:
                     "5/5 synthetic cases correct — mirror is calibrated.")]
 
 
+def anchor(ledger_path: str) -> dict:
+    """Compute a tamper-evident snapshot of the ledger's current state.
+
+    Outputs a compact dict suitable for piping to any external storage:
+      ts:           ISO timestamp
+      entry_count:  number of entries currently in the ledger
+      head_seal:    seal of the last entry ('empty' if ledger is missing/empty)
+      anchor_hash:  SHA-256 of the entire ledger file bytes — changes on any
+                    modification (add, edit, delete, replace)
+      chain_ok:     True if verify_chain() found no failures
+
+    This is the recommended defence against complete ledger replacement, which
+    chain hashes alone cannot detect.  Pipe to wherever you trust:
+
+        mm anchor >> ~/Dropbox/mm_anchors.jsonl
+        mm anchor | gh gist create -
+        mm anchor | aws s3 cp - s3://bucket/mm_anchor.json
+
+    The receiver has an independent timestamp proof of what the ledger contained.
+    """
+    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    if not os.path.exists(ledger_path):
+        return {
+            "_type":        "anchor",
+            "ts":           ts,
+            "ledger_path":  ledger_path,
+            "entry_count":  0,
+            "head_seal":    "empty",
+            "anchor_hash":  "empty",
+            "chain_ok":     True,
+        }
+
+    with open(ledger_path, "rb") as f:
+        raw = f.read()
+
+    anchor_hash = hashlib.sha256(raw).hexdigest()
+    entry_count = sum(
+        1 for line in raw.decode("utf-8", errors="replace").splitlines()
+        if line.strip()
+    )
+    head_seal = _get_last_seal(ledger_path)
+    chain_ok = not any(
+        f.level == "FAIL" for f in verify_chain(ledger_path)
+    )
+    return {
+        "_type":        "anchor",
+        "ts":           ts,
+        "ledger_path":  ledger_path,
+        "entry_count":  entry_count,
+        "head_seal":    head_seal,
+        "anchor_hash":  anchor_hash,
+        "chain_ok":     chain_ok,
+    }
+
+
 def witness(ledger_path: str, claim_id: str, command: list[str], *,
             timeout: int | None = None) -> dict:
     """Execute command and seal a tamper-evident witness record in the ledger.
@@ -749,7 +806,7 @@ def _auto(name: str, ledger: str = "mm_ledger.jsonl") -> None:
 
 def _cli() -> None:
     import argparse, sys
-    _SUBCMDS = {"register", "audit", "calibrate", "run"}
+    _SUBCMDS = {"register", "audit", "calibrate", "run", "anchor"}
     if len(sys.argv) == 2 and sys.argv[1] not in _SUBCMDS \
             and not sys.argv[1].startswith("-"):
         _auto(sys.argv[1]); return
@@ -778,6 +835,11 @@ def _cli() -> None:
 
     sub.add_parser("calibrate",
                    help="Self-test: verify the mirror's probes return expected outcomes")
+
+    an = sub.add_parser("anchor",
+                        help="Print tamper-evident ledger snapshot to stdout for external archival")
+    an.add_argument("--pretty", action="store_true",
+                    help="Pretty-print JSON (default: compact single line for piping)")
 
     rn = sub.add_parser("run",
                         help="Calibrate + witness-execute a command, sealing the run record")
@@ -811,6 +873,12 @@ def _cli() -> None:
                           reported_acc=acc, n=n, baseline=baseline))
     elif args.cmd == "calibrate":
         report("Mirror Calibration", calibrate())
+    elif args.cmd == "anchor":
+        a = anchor(args.ledger)
+        if args.pretty:
+            print(json.dumps(a, indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(a, ensure_ascii=False))
     elif args.cmd == "run":
         cmd = [c for c in (args.command or []) if c != "--"]
         if not cmd:

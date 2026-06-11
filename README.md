@@ -146,6 +146,7 @@ def test_my_model_is_real():
 
 | Utility | Purpose |
 |---|---|
+| `anchor` | Print tamper-evident ledger snapshot (hash + head seal) to stdout for external archival |
 | `calibrate` | Self-test: 5 synthetic known-good/bad cases; confirms tool health |
 | `witness` | Execute a command, capture output, seal tamper-evident run record |
 
@@ -185,6 +186,27 @@ f = mm.multiple_comparisons_check("mm_ledger.jsonl")
 # or activate via full_audit
 findings = mm.full_audit(LEDGER, "my_model", ..., check_multiplicity=True)
 ```
+
+### Anchor ⎈
+
+```bash
+# Print tamper-evident ledger snapshot to stdout — pipe wherever you trust
+mm anchor                              # compact JSON (default)
+mm anchor --pretty                     # human-readable
+
+# External archival examples (zero new dependencies)
+mm anchor >> ~/Dropbox/mm_anchors.jsonl          # local backup
+mm anchor | gh gist create -                     # GitHub Gist
+mm anchor | aws s3 cp - s3://bucket/anchor.json  # S3
+```
+
+```python
+a = mm.anchor("mm_ledger.jsonl")
+# {"_type": "anchor", "ts": "...", "entry_count": 3,
+#  "head_seal": "a3b9f2c1", "anchor_hash": "sha256hex...", "chain_ok": true}
+```
+
+The `anchor_hash` (full SHA-256 of the ledger file) detects even **complete file replacement** — the one attack that chain hashes alone cannot catch. Save it externally before publishing results.
 
 ### Calibrate + Witness run
 
@@ -258,11 +280,11 @@ pip install "measure-mirror[mcp]"
 
 **Other MCP clients** — run `mm-mcp` as the stdio server command.
 
-All 13 probes + 2 utilities are exposed as MCP tools:  
+All 13 probes + 3 utilities are exposed as MCP tools:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
-`mm_calibrate` · `mm_witness`
+`mm_anchor` · `mm_calibrate` · `mm_witness`
 
 ---
 

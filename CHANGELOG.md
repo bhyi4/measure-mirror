@@ -5,6 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.6.0] — 2026-06-11
+
+### Added
+- **`anchor(ledger_path)`** — tamper-evident ledger snapshot utility. Computes
+  the SHA-256 of the full ledger file (`anchor_hash`) plus the last entry's
+  seal (`head_seal`), entry count, and `chain_ok` (from `verify_chain()`).
+  Printed to stdout as compact JSON so users can pipe it to any external
+  storage they trust (Dropbox, Gist, S3, etc.). The `anchor_hash` detects
+  **complete ledger file replacement** — the one attack chain hashes cannot
+  catch alone. Available as `mm anchor [--pretty]` CLI command and
+  `mm_anchor` MCP tool.
+- 5 new tests (total: 67 → 72, all passing).
+- Sync gate: `"anchor"` added to `_MCP_UTILITY_TOOLS` exclusion list.
+
+### Changed
+- MCP server: 15 → 16 tools (13 probes + 3 utilities: anchor, calibrate, witness).
+- Probe + utility table in README/README_KO updated to "13 Probes + 3 Utilities".
+
+---
+
 ## [0.5.0] — 2026-06-11
 
 ### Added

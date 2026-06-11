@@ -516,3 +516,64 @@ def test_witness_nonzero_exit(tmp_path):
                    [sys.executable, "-c", "import sys; sys.exit(42)"])
     assert e["returncode"] == 42
     assert e["run_status"] == "ok"
+
+
+# ─── 📎 anchor tests ──────────────────────────────────────────
+
+def test_anchor_missing_ledger(tmp_path):
+    """Anchor on non-existent ledger returns empty sentinel values."""
+    a = mm.anchor(str(tmp_path / "none.jsonl"))
+    assert a["entry_count"] == 0
+    assert a["head_seal"] == "empty"
+    assert a["anchor_hash"] == "empty"
+    assert a["chain_ok"] is True
+    assert a["_type"] == "anchor"
+
+
+def test_anchor_basic(tmp_path):
+    """Anchor returns expected keys and correct entry_count."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1",
+                   metric="acc", min_n=100, baseline=0.5, pass_threshold=0.6)
+    mm.preregister(ledger, "exp2",
+                   metric="f1",  min_n=50,  baseline=0.5, pass_threshold=0.7)
+    a = mm.anchor(ledger)
+    assert a["entry_count"] == 2
+    assert a["chain_ok"] is True
+    assert len(a["anchor_hash"]) == 64  # full SHA-256 hex
+    assert a["head_seal"] != "empty"
+
+
+def test_anchor_hash_changes_on_new_entry(tmp_path):
+    """Adding an entry changes anchor_hash (detects any modification)."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1",
+                   metric="acc", min_n=100, baseline=0.5, pass_threshold=0.6)
+    a1 = mm.anchor(ledger)
+    mm.preregister(ledger, "exp2",
+                   metric="f1",  min_n=50,  baseline=0.5, pass_threshold=0.7)
+    a2 = mm.anchor(ledger)
+    assert a1["anchor_hash"] != a2["anchor_hash"]
+
+
+def test_anchor_head_seal_matches_last_entry(tmp_path):
+    """anchor head_seal equals the last registered entry's seal."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "e1", metric="acc", min_n=10, baseline=0.5, pass_threshold=0.6)
+    pre = mm.preregister(ledger, "e2", metric="f1",  min_n=10, baseline=0.5, pass_threshold=0.7)
+    a = mm.anchor(ledger)
+    assert a["head_seal"] == pre["seal"]
+
+
+def test_anchor_chain_ok_false_on_tamper(tmp_path):
+    """Tampered ledger → chain_ok is False in anchor."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1",
+                   metric="acc", min_n=100, baseline=0.5, pass_threshold=0.6)
+    with open(ledger) as f:
+        entry = json.loads(f.read())
+    entry["baseline"] = 0.9  # tamper without updating seal
+    with open(ledger, "w") as f:
+        f.write(json.dumps(entry) + "\n")
+    a = mm.anchor(ledger)
+    assert a["chain_ok"] is False

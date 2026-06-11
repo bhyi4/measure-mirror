@@ -142,6 +142,7 @@ def test_my_model_is_real():
 
 | 유틸리티 | 역할 |
 |---|---|
+| `anchor` | 변조 방지 원장 스냅샷(해시+헤드 봉인) stdout 출력 → 외부 보관 |
 | `calibrate` | 자가 테스트: 5종 합성 케이스로 도구 정상 작동 확인 |
 | `witness` | 커맨드 실행·출력 캡처·변조 방지 실행 봉인 원장에 기록 |
 
@@ -180,6 +181,26 @@ f = mm.multiple_comparisons_check("mm_ledger.jsonl")
 # full_audit에서 활성화
 findings = mm.full_audit(LEDGER, "my_model", ..., check_multiplicity=True)
 ```
+
+### 앵커(Anchor) ⎈
+
+```bash
+# 변조 방지 원장 스냅샷을 stdout으로 출력 — 신뢰하는 곳에 파이프
+mm anchor                              # 컴팩트 JSON (기본)
+mm anchor --pretty                     # 사람이 읽기 쉬운 형태
+
+# 외부 보관 예시 (추가 의존성 없음)
+mm anchor >> ~/Dropbox/mm_anchors.jsonl        # 로컬 백업
+mm anchor | gh gist create -                   # GitHub Gist
+```
+
+```python
+a = mm.anchor("mm_ledger.jsonl")
+# {"_type": "anchor", "ts": "...", "entry_count": 3,
+#  "head_seal": "a3b9f2c1", "anchor_hash": "sha256hex...", "chain_ok": true}
+```
+
+`anchor_hash`(원장 파일 전체 SHA-256)는 **파일 통째 교체**까지 감지합니다 — 체인 해시만으로는 잡을 수 없는 유일한 공격. 결과 공개 전 외부에 저장하세요.
 
 ### 보정(Calibrate) + 증인실행(Witness run)
 
@@ -243,11 +264,11 @@ pip install "measure-mirror[mcp]"
 
 **기타 MCP 클라이언트** — stdio 서버 명령으로 `mm-mcp`를 실행하세요.
 
-13종 probe + 2 유틸리티 전부 MCP 도구로 노출됩니다:  
+13종 probe + 3 유틸리티 전부 MCP 도구로 노출됩니다:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
-`mm_calibrate` · `mm_witness`
+`mm_anchor` · `mm_calibrate` · `mm_witness`
 
 ---
 

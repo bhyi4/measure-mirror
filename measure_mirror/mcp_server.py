@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — MCP server
 
-Exposes 13 probes + 2 utilities (calibrate, witness) as MCP tools via stdio transport so any
+Exposes 13 probes + 3 utilities (anchor, calibrate, witness) as MCP tools via stdio transport so any
 MCP-compatible AI (Claude Code, Cursor, Windsurf, …) can call them
 directly mid-conversation.
 
@@ -22,6 +22,7 @@ Claude Code (.mcp.json in project root):
 Other MCP clients: run `mm-mcp` as the stdio server command.
 """
 import asyncio
+import json
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp import types
@@ -273,6 +274,23 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="mm_anchor",
+            description=(
+                "📎 Compute a tamper-evident snapshot of the ledger's current state. "
+                "Returns entry_count, head_seal, and anchor_hash (SHA-256 of the full "
+                "ledger file). Pipe/save this externally to detect complete ledger "
+                "replacement — the one attack that chain hashes alone cannot catch. "
+                "chain_ok confirms the internal chain is also intact."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ledger_path": {"type": "string", "description": "Path to the JSONL ledger"},
+                },
+                "required": ["ledger_path"],
+            },
+        ),
+        types.Tool(
             name="mm_calibrate",
             description=(
                 "⚙ Self-test: run 5 synthetic known-good/known-bad cases through the "
@@ -476,6 +494,10 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 arguments["ledger_path"],
                 alpha=arguments.get("alpha", 0.05),
             ))
+
+        elif name == "mm_anchor":
+            a = mm.anchor(arguments["ledger_path"])
+            result = json.dumps(a, indent=2, ensure_ascii=False)
 
         elif name == "mm_calibrate":
             result = _findings_to_text(mm.calibrate())
