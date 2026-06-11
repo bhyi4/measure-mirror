@@ -1,19 +1,23 @@
 """
 🪞 Measurement Mirror — probe engine (no training, pure rule+stat).
 
-7 checks:
-  ① Pre-registration ledger (append-only, first-write wins) + metric-swap + tamper detection
+9 probes:
+  ① Pre-registration ledger — append-only chain-hash, first-write wins,
+      metric-swap detection, tamper detection, re-registration detection
   ② Fair baseline — crippled / tied / reversed baseline
   ③ Gaming boundary — metric directly in reward/loss
   ④a Small-sample Wilson CI + direction + data leakage (hash intersection)
+      + effect-size (continuous metrics)
   ⑤ Multi-seed reproduction — cross-seed variance alarm
-  ⑥ Scope — claimed scope wider than tested scope (over-generalization)
-  ⑦ Self-catch — suspiciously good result alarm
+  ⑥ Scope — claimed scope wider than tested scope
+  ⑦ Too-good — suspiciously large improvement alarm
+  ⑧ Power — false-negative guard (n vs. minimum detectable effect)
+  ⑨ Multiple comparisons — Bonferroni alarm for k>1 experiments in ledger
 
 Design:
-  - No learned model. Deterministic. Zero dependencies (Python stdlib only).
-  - Each probe is an independent function. Add new checks without touching existing ones.
-  - Ledger = append-only JSONL + first-write wins + SHA-256 seal = technical heart of integrity.
+  - Zero dependencies (Python stdlib only). Deterministic. No trained model.
+  - Each probe is an independent function. Add without touching existing ones.
+  - Ledger = append-only JSONL + chain hash + first-write wins + SHA-256 seal.
 """
 from __future__ import annotations
 import json, math, time, hashlib, os, statistics
@@ -31,15 +35,40 @@ class Finding:
 
 
 # ─────────────────────────────────────────────────────────────
-# ① Pre-registration ledger (append-only)
+# ① Pre-registration ledger (append-only, chain-hashed)
 # ─────────────────────────────────────────────────────────────
+def _get_last_seal(ledger_path: str) -> str:
+    """Return the seal of the last entry in the ledger, or 'genesis'."""
+    if not os.path.exists(ledger_path):
+        return "genesis"
+    last_seal = "genesis"
+    with open(ledger_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                e = json.loads(line)
+                if "seal" in e:
+                    last_seal = e["seal"]
+            except json.JSONDecodeError:
+                continue
+    return last_seal
+
+
 def preregister(ledger_path: str, claim_id: str, *, metric: str,
                 min_n: int, baseline: float, pass_threshold: float) -> dict:
-    """Seal evaluation criteria BEFORE seeing results. Append-only. SHA-256 sealed.
+    """Seal evaluation criteria BEFORE seeing results.
 
-    Re-registration for the same claim_id is silently ignored —
-    only the first registration counts in audit().
+    Each entry is cryptographically linked to the previous one (chain hash).
+    Re-registration for the same claim_id is silently ignored — only the
+    first registration counts in audit().
+
+    Chain link: deleting or inserting entries breaks the chain and is
+    detected by verify_chain(). Complete ledger replacement is NOT caught
+    here — use git commit anchoring for that guarantee.
     """
+    prev_seal = _get_last_seal(ledger_path)
     entry = {
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "claim_id": claim_id,
@@ -47,6 +76,7 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
         "min_n": min_n,
         "baseline": baseline,
         "pass_threshold": pass_threshold,
+        "prev_seal": prev_seal,
     }
     entry["seal"] = hashlib.sha256(
         json.dumps(entry, sort_keys=True, ensure_ascii=False).encode()
@@ -70,18 +100,76 @@ def _load_prereg(ledger_path: str, claim_id: str) -> dict | None:
             except json.JSONDecodeError:
                 continue
             if e.get("claim_id") == claim_id:
-                return e  # first match — return immediately
+                return e
     return None
 
 
 def _verify_seal(entry: dict) -> bool:
-    """Recompute the SHA-256 seal and compare with stored value."""
+    """Recompute SHA-256 seal. Works for legacy (no prev_seal) and chained entries."""
     stored = entry.get("seal", "")
     check = {k: v for k, v in entry.items() if k != "seal"}
     expected = hashlib.sha256(
         json.dumps(check, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()[:16]
     return stored == expected
+
+
+def verify_chain(ledger_path: str) -> list[Finding]:
+    """Verify full ledger integrity: individual seals + chain links.
+
+    Catches: tampered entries, deleted entries, inserted entries.
+    Does NOT catch: complete ledger file deletion + fresh re-registration
+    (use git commit anchoring for that guarantee).
+    """
+    if not os.path.exists(ledger_path):
+        return [Finding("① chain-integrity", "OK", "Empty ledger.")]
+
+    entries = []
+    bad_lines = []
+    with open(ledger_path, encoding="utf-8") as f:
+        for i, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entries.append(json.loads(line))
+            except json.JSONDecodeError:
+                bad_lines.append(i)
+
+    if bad_lines:
+        return [Finding("① chain-integrity", "FAIL",
+            f"Malformed JSON at line(s) {bad_lines}. Ledger corrupted.")]
+
+    if not entries:
+        return [Finding("① chain-integrity", "OK", "Empty ledger.")]
+
+    findings = []
+    prev_seal = "genesis"
+
+    for i, entry in enumerate(entries):
+        cid = entry.get("claim_id", "?")
+
+        if not _verify_seal(entry):
+            findings.append(Finding("① chain-integrity", "FAIL",
+                f"Seal mismatch at entry {i + 1} (claim_id={cid}). Entry was tampered."))
+            prev_seal = entry.get("seal", "")
+            continue
+
+        # Chain link — only for entries that carry prev_seal (new format).
+        # Legacy entries without prev_seal are skipped gracefully.
+        entry_prev = entry.get("prev_seal")
+        if entry_prev is not None and entry_prev != prev_seal:
+            findings.append(Finding("① chain-integrity", "FAIL",
+                f"Chain break before entry {i + 1} (claim_id={cid}). "
+                f"Expected prev={prev_seal[:8]}…, got {entry_prev[:8]}…. "
+                f"An entry was deleted or inserted before this point."))
+
+        prev_seal = entry.get("seal", "")
+
+    if not findings:
+        return [Finding("① chain-integrity", "OK",
+            f"Chain intact — {len(entries)} entries verified.")]
+    return findings
 
 
 # ─────────────────────────────────────────────────────────────
@@ -108,9 +196,8 @@ def leakage_check(train_items, test_items) -> Finding:
     if inter:
         frac = len(inter) / max(1, len(eh))
         return Finding("④a data-leakage", "FAIL",
-            f"train∩test = {len(inter)} items ({frac:.1%} of test). "
-            f"Evaluation set contaminated.")
-    return Finding("④a data-leakage", "OK", "train∩test = 0. No leakage detected.")
+            f"train∩test = {len(inter)} items ({frac:.1%} of test). Contaminated.")
+    return Finding("④a data-leakage", "OK", "train∩test = 0. No leakage.")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -122,20 +209,19 @@ def baseline_fairness(name: str, claimed: float, baseline: float, *,
     if diff <= -margin:
         return Finding("② fair-baseline", "FAIL",
             f"{name}: claimed {claimed:.3f} is WORSE than baseline {baseline:.3f}. "
-            f"Baseline wins — claim invalid / gaming.")
+            f"Baseline wins — claim invalid.")
     if abs(diff) < margin:
         return Finding("② fair-baseline", "FAIL",
             f"{name}: claimed {claimed:.3f} ≈ baseline {baseline:.3f} "
             f"(Δ{diff:+.3f} < {margin}). Tied — no genuine advantage.")
     return Finding("② fair-baseline", "OK",
-        f"{name}: claimed {claimed:.3f} exceeds baseline {baseline:.3f} (Δ{diff:+.3f}).")
+        f"{name}: claimed {claimed:.3f} beats baseline {baseline:.3f} (Δ{diff:+.3f}).")
 
 
 # ─────────────────────────────────────────────────────────────
 # Shared baseline DB lookup
 # ─────────────────────────────────────────────────────────────
 def lookup_baseline(task: str | None, db_dir: str | None = None) -> float | None:
-    """Look up a task-level fair baseline from db/baselines.json. Returns None if not found."""
     if not task:
         return None
     p = os.path.join(db_dir or "db", "baselines.json")
@@ -153,45 +239,33 @@ def lookup_baseline(task: str | None, db_dir: str | None = None) -> float | None
 # ③ Gaming boundary — metric directly in reward/loss
 # ─────────────────────────────────────────────────────────────
 def gaming_check(metric: str, reward_terms: list[str]) -> Finding:
-    """Detect if the evaluation metric appears directly in the training reward/loss.
-
-    reward_terms: list of component names in the training objective.
-    """
     metric_lower = metric.lower()
     hits = [t for t in reward_terms if metric_lower in t.lower()]
     if hits:
         return Finding("③ gaming", "FAIL",
-            f"Eval metric '{metric}' found in reward/loss terms {hits}. "
-            f"Self-fulfilling artifact — remove or replace the term for an honest signal.")
+            f"Eval metric '{metric}' found in reward/loss terms {hits}. Self-fulfilling.")
     return Finding("③ gaming", "OK",
-        f"Eval metric '{metric}' not found in reward/loss. No gaming detected.")
+        f"Eval metric '{metric}' not in reward/loss. No gaming detected.")
 
 
 # ─────────────────────────────────────────────────────────────
-# ⑤ Multi-seed reproduction — cross-seed variance alarm
+# ⑤ Multi-seed reproduction
 # ─────────────────────────────────────────────────────────────
 def multiseed_check(seed_results: list[float], *, baseline: float = 0.5,
                     cv_threshold: float = 0.10) -> Finding:
-    """Alarm if cross-seed variance is large or if baseline falls within the result range.
-
-    cv_threshold: coefficient-of-variation threshold (std/mean). Default 0.10 (10%).
-    """
     if len(seed_results) < 2:
         return Finding("⑤ multi-seed", "WARN",
-            f"Only {len(seed_results)} seed result(s) — cannot verify reproducibility. "
-            f"Minimum 2 required.")
+            f"Only {len(seed_results)} seed result(s) — cannot verify reproducibility.")
     mean = statistics.mean(seed_results)
     std = statistics.stdev(seed_results)
     cv = std / mean if mean != 0 else float("inf")
     lo, hi = min(seed_results), max(seed_results)
     if lo <= baseline <= hi:
         return Finding("⑤ multi-seed", "FAIL",
-            f"Seed range [{lo:.3f}, {hi:.3f}] includes baseline({baseline}). "
-            f"Result falls below baseline on some seeds — signal is unstable.")
+            f"Seed range [{lo:.3f}, {hi:.3f}] includes baseline({baseline}). Unstable.")
     if cv >= cv_threshold:
         return Finding("⑤ multi-seed", "WARN",
-            f"CV={cv:.2%} ≥ {cv_threshold:.0%}. "
-            f"mean={mean:.3f}, std={std:.3f} — high cross-seed variance.")
+            f"CV={cv:.2%} ≥ {cv_threshold:.0%}. mean={mean:.3f}, std={std:.3f}.")
     return Finding("⑤ multi-seed", "OK",
         f"{len(seed_results)} seeds: mean={mean:.3f}, std={std:.3f}, CV={cv:.2%}. Stable.")
 
@@ -200,31 +274,103 @@ def multiseed_check(seed_results: list[float], *, baseline: float = 0.5,
 # ⑥ Scope — over-generalization
 # ─────────────────────────────────────────────────────────────
 def scope_check(claimed_scope, tested_scope) -> Finding:
-    """Flag when the claimed scope is wider than the tested evidence."""
     tested = set(tested_scope)
     untested = [c for c in claimed_scope if c not in tested]
     if untested:
         return Finding("⑥ scope", "FAIL",
-            f"Claimed scope {untested} not tested (evidence={list(tested_scope)}). "
-            f"Over-generalization — narrow the claim to tested scope.")
+            f"Claimed {untested} not tested (evidence={list(tested_scope)}). "
+            f"Over-generalization.")
     return Finding("⑥ scope", "OK",
-        f"Claimed scope ⊆ tested scope {list(tested_scope)}. No over-generalization.")
+        f"Claimed scope ⊆ tested scope {list(tested_scope)}.")
 
 
 # ─────────────────────────────────────────────────────────────
-# ⑦ Self-catch — suspiciously good result alarm
+# ⑦ Too-good — suspiciously large improvement
 # ─────────────────────────────────────────────────────────────
 def too_good_check(name: str, claimed: float, baseline: float, *,
                    suspicious_margin: float = 0.30) -> Finding:
-    """Warn when Δ over baseline exceeds suspicious_margin. Suspect first."""
     diff = claimed - baseline
     if diff >= suspicious_margin:
         return Finding("⑦ too-good", "WARN",
-            f"{name}: claimed={claimed:.3f}, baseline={baseline:.3f}, "
-            f"Δ={diff:+.3f} ≥ {suspicious_margin}. "
-            f"Suspiciously large — check for measurement defects or gaming first.")
-    return Finding("⑦ too-good", "OK",
-        f"{name}: Δ={diff:+.3f} — within normal range.")
+            f"{name}: Δ={diff:+.3f} ≥ {suspicious_margin}. "
+            f"Suspiciously large — check for measurement defects first.")
+    return Finding("⑦ too-good", "OK", f"{name}: Δ={diff:+.3f} — within normal range.")
+
+
+# ─────────────────────────────────────────────────────────────
+# ⑧ Power — false-negative guard
+# ─────────────────────────────────────────────────────────────
+def power_check(n: int, baseline: float, *,
+                min_detectable_effect: float = 0.05,
+                alpha: float = 0.05,
+                target_power: float = 0.80) -> Finding:
+    """Warn when n is too small to detect the minimum detectable effect.
+
+    Closes the gap between "bidirectional" (false positive AND negative)
+    and the actual implementation — false negatives are silently missed
+    without this probe.
+
+    Uses a two-sample z-test approximation for binary proportion metrics.
+    Defaults: alpha=0.05 (two-sided 95% CI), target_power=0.80.
+    """
+    z_alpha2 = 1.96   # two-sided alpha = 0.05
+    z_beta = 0.842    # 80% power
+    p1 = min(1.0, baseline + min_detectable_effect)
+    var = (baseline * (1 - baseline) + p1 * (1 - p1)) / 2  # pooled under H1
+    n_required = math.ceil(
+        ((z_alpha2 + z_beta) ** 2 * var) / (min_detectable_effect ** 2)
+    )
+    if n < n_required:
+        return Finding("⑧ power", "WARN",
+            f"n={n} insufficient to detect Δ={min_detectable_effect:+.2f} above "
+            f"baseline={baseline} at {target_power:.0%} power (need n≥{n_required}). "
+            f"High false-negative risk — a true effect may go undetected.")
+    return Finding("⑧ power", "OK",
+        f"n={n} ≥ {n_required} — sufficient for Δ={min_detectable_effect:+.2f} "
+        f"at {target_power:.0%} power.")
+
+
+# ─────────────────────────────────────────────────────────────
+# ⑨ Multiple comparisons — garden-of-forking-paths
+# ─────────────────────────────────────────────────────────────
+def multiple_comparisons_check(ledger_path: str, *, alpha: float = 0.05) -> Finding:
+    """Detect k>1 distinct experiments in the same ledger (Bonferroni alarm).
+
+    Running k experiments and reporting only the best inflates the
+    false-positive rate. Shows the Bonferroni-corrected alpha = alpha/k.
+
+    Best practice: use separate ledgers per independent project, or
+    pre-register all k hypotheses before running any of them.
+    """
+    if not os.path.exists(ledger_path):
+        return Finding("⑨ multiple-comparisons", "OK",
+            "No ledger — single experiment assumed.")
+
+    unique_claims: set[str] = set()
+    with open(ledger_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                e = json.loads(line)
+                cid = e.get("claim_id")
+                if cid:
+                    unique_claims.add(cid)
+            except json.JSONDecodeError:
+                continue
+
+    k = len(unique_claims)
+    if k <= 1:
+        return Finding("⑨ multiple-comparisons", "OK",
+            f"k={k} — single experiment, no correction needed.")
+
+    corrected = alpha / k
+    return Finding("⑨ multiple-comparisons", "WARN",
+        f"k={k} distinct experiments in ledger → "
+        f"Bonferroni α={corrected:.4f} (not {alpha}). "
+        f"95% CI threshold is too lenient. "
+        f"Use separate ledgers per project, or pre-register all k hypotheses.")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -244,63 +390,49 @@ def audit(ledger_path: str, claim_id: str, *,
             baseline = 0.5
     if not (0.0 <= reported_acc <= 1.0):
         findings.append(Finding("④a acc-range", "FAIL",
-            f"reported_acc={reported_acc:.3f} must be between 0.0 and 1.0."))
+            f"reported_acc={reported_acc:.3f} out of [0, 1]."))
         return findings
     if n < 0:
-        findings.append(Finding("④a n-range", "FAIL",
-            f"n={n} must be ≥ 0."))
+        findings.append(Finding("④a n-range", "FAIL", f"n={n} must be ≥ 0."))
         return findings
 
     k = round(reported_acc * n)
     lo, hi = wilson_ci(k, n)
 
-    # ④a-1 small-sample CI + direction
     if lo <= baseline <= hi:
-        findings.append(Finding(
-            "④a small-sample CI", "FAIL",
+        findings.append(Finding("④a small-sample CI", "FAIL",
             f"n={n}, acc={reported_acc:.3f} → 95%CI [{lo:.3f}, {hi:.3f}] "
-            f"⊃ baseline({baseline}).{db_note} "
-            f"Statistically indistinguishable from chance."))
+            f"⊃ baseline({baseline}).{db_note} Indistinguishable from chance."))
     elif hi < baseline:
-        findings.append(Finding(
-            "④a direction(anti-signal)", "FAIL",
+        findings.append(Finding("④a direction(anti-signal)", "FAIL",
             f"n={n}, acc={reported_acc:.3f} → CI [{lo:.3f}, {hi:.3f}] "
-            f"< baseline({baseline}). Worse than chance — anti-signal detected."))
+            f"< baseline({baseline}). Worse than chance."))
     else:
-        findings.append(Finding(
-            "④a small-sample CI", "OK",
+        findings.append(Finding("④a small-sample CI", "OK",
             f"n={n}, acc={reported_acc:.3f} → CI [{lo:.3f}, {hi:.3f}] "
             f"clears baseline({baseline})."))
 
-    # ① pre-registration check
+    # ① pre-registration
     pre = _load_prereg(ledger_path, claim_id)
     if pre is None:
-        findings.append(Finding(
-            "① pre-registration", "WARN",
-            f"No pre-registration found for '{claim_id}'. "
-            f"Metric may have been defined after seeing results."))
+        findings.append(Finding("① pre-registration", "WARN",
+            f"No pre-registration found for '{claim_id}'."))
     else:
         if not _verify_seal(pre):
-            findings.append(Finding(
-                "① seal-tamper", "FAIL",
-                f"Seal mismatch for '{claim_id}'. "
-                f"Ledger file may have been modified — pre-registration is invalid."))
+            findings.append(Finding("① seal-tamper", "FAIL",
+                f"Seal mismatch for '{claim_id}'. Ledger modified."))
         else:
             if n < pre["min_n"]:
-                findings.append(Finding(
-                    "① pre-registration(min_n)", "FAIL",
-                    f"Reported n={n} < registered min_n={pre['min_n']}. "
-                    f"Sample size requirement not met."))
+                findings.append(Finding("① pre-registration(min_n)", "FAIL",
+                    f"n={n} < registered min_n={pre['min_n']}."))
             if reported_metric != pre["metric"]:
-                findings.append(Finding(
-                    "① pre-registration(metric-swap)", "FAIL",
+                findings.append(Finding("① pre-registration(metric-swap)", "FAIL",
                     f"Reported metric '{reported_metric}' ≠ registered '{pre['metric']}'. "
-                    f"Post-hoc metric swap detected. (seal={pre['seal']})"))
+                    f"Post-hoc swap. (seal={pre['seal']})"))
             if reported_acc < pre["pass_threshold"]:
-                findings.append(Finding(
-                    "① pre-registration(pass-threshold)", "FAIL",
-                    f"acc={reported_acc:.3f} < registered pass_threshold={pre['pass_threshold']:.3f}. "
-                    f"Below pre-registered bar. (seal={pre['seal']})"))
+                findings.append(Finding("① pre-registration(pass-threshold)", "FAIL",
+                    f"acc={reported_acc:.3f} < registered pass_threshold="
+                    f"{pre['pass_threshold']:.3f}. (seal={pre['seal']})"))
 
     return findings
 
@@ -313,47 +445,39 @@ def continuous_audit(ledger_path: str, claim_id: str, *,
                      baseline_value: float, n: int,
                      std: float | None = None,
                      higher_better: bool = True) -> list[Finding]:
-    """Audit continuous/regression metrics (Pearson r, MSE, RMSE, …).
-
-    Uses direction + effect-size (when std is provided) instead of Wilson CI.
-    """
+    """Audit continuous/regression metrics (Pearson r, MSE, RMSE, …)."""
     findings: list[Finding] = []
 
-    # ④a direction
     diff = (reported_value - baseline_value) if higher_better else (baseline_value - reported_value)
     if diff <= 0:
         symbol = "≤" if higher_better else "≥"
         findings.append(Finding("④a direction", "FAIL",
-            f"value={reported_value:.4f} {symbol} baseline={baseline_value:.4f}. "
-            f"Baseline wins — claim invalid."))
+            f"value={reported_value:.4f} {symbol} baseline={baseline_value:.4f}. Baseline wins."))
     else:
         findings.append(Finding("④a direction", "OK",
-            f"Δ={diff:+.4f} — {'higher' if higher_better else 'lower'}-is-better criterion passed."))
+            f"Δ={diff:+.4f} — {'higher' if higher_better else 'lower'}-is-better met."))
 
-    # ④a effect size (only when std provided)
     if std is not None and std > 0:
         z = abs(reported_value - baseline_value) / std
         if z < 1.0:
             findings.append(Finding("④a effect-size", "WARN",
-                f"z={z:.2f} < 1.0 — practical significance is weak (n={n})."))
+                f"z={z:.2f} < 1.0 — weak practical significance (n={n})."))
         else:
-            findings.append(Finding("④a effect-size", "OK",
-                f"z={z:.2f} ≥ 1.0 — practically significant."))
+            findings.append(Finding("④a effect-size", "OK", f"z={z:.2f} ≥ 1.0."))
 
-    # ① pre-registration
     pre = _load_prereg(ledger_path, claim_id)
     if pre is None:
         findings.append(Finding("① pre-registration", "WARN",
-            f"No pre-registration found for '{claim_id}'."))
+            f"No pre-registration for '{claim_id}'."))
     else:
         if not _verify_seal(pre):
             findings.append(Finding("① seal-tamper", "FAIL",
-                f"Seal mismatch for '{claim_id}'. Ledger may be tampered."))
+                f"Seal mismatch for '{claim_id}'."))
         else:
             if reported_metric != pre["metric"]:
                 findings.append(Finding("① pre-registration(metric-swap)", "FAIL",
-                    f"Reported metric '{reported_metric}' ≠ registered '{pre['metric']}'. "
-                    f"Post-hoc metric swap. (seal={pre['seal']})"))
+                    f"'{reported_metric}' ≠ registered '{pre['metric']}'. "
+                    f"(seal={pre['seal']})"))
             if n < pre["min_n"]:
                 findings.append(Finding("① pre-registration(min_n)", "FAIL",
                     f"n={n} < registered min_n={pre['min_n']}."))
@@ -362,19 +486,22 @@ def continuous_audit(ledger_path: str, claim_id: str, *,
 
 
 # ─────────────────────────────────────────────────────────────
-# Full audit — all 7 checks in one call
+# Full audit — all probes in one call
 # ─────────────────────────────────────────────────────────────
 def full_audit(ledger_path: str, claim_id: str, *,
                reported_metric: str, reported_acc: float, n: int,
                baseline: float | None = None, task: str | None = None,
                db_dir: str | None = None,
-               competing_name: str | None = None,    # ②
-               competing_acc: float | None = None,   # ②
-               reward_terms: list[str] | None = None, # ③
-               train_items=None, test_items=None,     # ④a-2
-               seed_results: list[float] | None = None, # ⑤
-               claimed_scope=None, tested_scope=None) -> list[Finding]: # ⑥
-    """Run all 7 probes in a single call. Optional probes activate when args are provided."""
+               competing_name: str | None = None,          # ②
+               competing_acc: float | None = None,         # ②
+               reward_terms: list[str] | None = None,      # ③
+               train_items=None, test_items=None,           # ④a-2
+               seed_results: list[float] | None = None,    # ⑤
+               claimed_scope=None, tested_scope=None,      # ⑥
+               min_detectable_effect: float | None = None, # ⑧
+               check_chain: bool = True,                   # ① chain
+               check_multiplicity: bool = False) -> list[Finding]:  # ⑨
+    """Run all probes in one call. Optional probes activate when args are provided."""
     _baseline = baseline
     if _baseline is None:
         b = lookup_baseline(task, db_dir)
@@ -387,6 +514,11 @@ def full_audit(ledger_path: str, claim_id: str, *,
                           reported_metric=reported_metric,
                           reported_acc=reported_acc, n=n,
                           baseline=_baseline, task=task, db_dir=db_dir))
+    # ① chain integrity (only failures — OK is implied by absence)
+    if check_chain:
+        for f in verify_chain(ledger_path):
+            if f.level != "OK":
+                findings.append(f)
     # ②
     if competing_name is not None and competing_acc is not None:
         findings.append(baseline_fairness(competing_name, reported_acc, competing_acc))
@@ -404,6 +536,13 @@ def full_audit(ledger_path: str, claim_id: str, *,
         findings.append(scope_check(claimed_scope, tested_scope))
     # ⑦ always
     findings.append(too_good_check(claim_id, reported_acc, _baseline))
+    # ⑧ power (optional)
+    if min_detectable_effect is not None:
+        findings.append(power_check(n, _baseline,
+                                    min_detectable_effect=min_detectable_effect))
+    # ⑨ multiple comparisons (optional)
+    if check_multiplicity:
+        findings.append(multiple_comparisons_check(ledger_path))
 
     return findings
 
@@ -429,15 +568,15 @@ def _auto(name: str, ledger: str = "mm_ledger.jsonl") -> None:
     cands = [f"{name}.json", f"results/{name}.json", f"mm_results/{name}.json"]
     path = next((c for c in cands if os.path.exists(c)), None)
     if not path:
-        print(f"🪞 No result file found for '{name}'. Make your evaluation write {name}.json.")
+        print(f"🪞 No result file found for '{name}'. "
+              f"Write your evaluation result to {name}.json.")
         print(f'   Expected format: {{"acc":0.72,"n":500,"metric":"acc","baseline":0.5}}')
         sys.exit(1)
     d = json.load(open(path, encoding="utf-8"))
     cid = d.get("claim_id", name)
-    acc = d.get("acc")
-    n = d.get("n")
+    acc, n = d.get("acc"), d.get("n")
     if acc is None or n is None:
-        print(f"🪞 Error: {path} must contain 'acc' and 'n' keys.")
+        print(f"🪞 Error: {path} must contain 'acc' and 'n'.")
         sys.exit(1)
     print(f"📂 Loaded {path}")
     report(cid, audit(ledger, cid, reported_metric=d.get("metric", "acc"),
@@ -456,14 +595,15 @@ def _cli() -> None:
                    help="Ledger path (default: ./mm_ledger.jsonl)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    r = sub.add_parser("register", help="Seal evaluation criteria BEFORE running the experiment")
+    r = sub.add_parser("register",
+                       help="Seal evaluation criteria BEFORE running the experiment")
     r.add_argument("claim_id")
     r.add_argument("--metric", required=True)
     r.add_argument("--min-n", type=int, default=200)
     r.add_argument("--baseline", type=float, default=0.5)
     r.add_argument("--pass", dest="pass_threshold", type=float, default=0.60)
 
-    a = sub.add_parser("audit", help="Audit evaluation results (args or --file JSON)")
+    a = sub.add_parser("audit", help="Audit evaluation results")
     a.add_argument("claim_id", nargs="?")
     a.add_argument("--acc", type=float)
     a.add_argument("--n", type=int)

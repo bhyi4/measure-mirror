@@ -1,5 +1,6 @@
 """measure-mirror test suite — regression gate (dog-fooded)."""
 import json
+import hashlib
 import pytest
 from measure_mirror import mm
 from measure_mirror.pytest_plugin import assert_clean
@@ -95,10 +96,9 @@ def test_pass_threshold_pass(tmp_path):
     assert not any("pass-threshold" in x.probe and x.level == "FAIL" for x in findings)
 
 
-# ─── New probes ───────────────────────────────────────────────
+# ─── New probes (③⑤⑦) ─────────────────────────────────────────
 
 def test_gaming_check_fail():
-    """③ Eval metric directly in reward → FAIL."""
     assert mm.gaming_check("acc", ["acc_loss", "entropy"]).level == "FAIL"
 
 
@@ -107,12 +107,10 @@ def test_gaming_check_ok():
 
 
 def test_multiseed_unstable():
-    """⑤ Baseline within seed range → FAIL."""
     assert mm.multiseed_check([0.48, 0.72, 0.65], baseline=0.5).level == "FAIL"
 
 
 def test_multiseed_high_cv():
-    """⑤ High variance → WARN."""
     assert mm.multiseed_check([0.60, 0.90, 0.75], baseline=0.5).level == "WARN"
 
 
@@ -121,25 +119,20 @@ def test_multiseed_stable():
 
 
 def test_multiseed_single():
-    """⑤ Single seed → WARN (cannot verify reproducibility)."""
     assert mm.multiseed_check([0.75], baseline=0.5).level == "WARN"
 
 
 def test_too_good_flagged():
-    """⑦ Δ ≥ 0.30 → WARN."""
-    f = mm.too_good_check("test", 0.95, 0.5, suspicious_margin=0.30)
-    assert f.level == "WARN"
+    assert mm.too_good_check("test", 0.95, 0.5, suspicious_margin=0.30).level == "WARN"
 
 
 def test_too_good_ok():
-    f = mm.too_good_check("test", 0.60, 0.5, suspicious_margin=0.30)
-    assert f.level == "OK"
+    assert mm.too_good_check("test", 0.60, 0.5, suspicious_margin=0.30).level == "OK"
 
 
 # ─── Continuous metric audit ──────────────────────────────────
 
 def test_continuous_audit_ok():
-    """MSE: lower is better, 0.10 < baseline 0.15 → OK."""
     findings = mm.continuous_audit("/dev/null", "reg1",
                                    reported_metric="mse", reported_value=0.10,
                                    baseline_value=0.15, n=500, higher_better=False)
@@ -147,7 +140,6 @@ def test_continuous_audit_ok():
 
 
 def test_continuous_audit_direction_fail():
-    """MSE: lower is better, 0.20 > baseline 0.15 → FAIL."""
     findings = mm.continuous_audit("/dev/null", "reg2",
                                    reported_metric="mse", reported_value=0.20,
                                    baseline_value=0.15, n=500, higher_better=False)
@@ -155,7 +147,6 @@ def test_continuous_audit_direction_fail():
 
 
 def test_continuous_audit_effect_size_warn():
-    """std provided, z < 1.0 → WARN."""
     findings = mm.continuous_audit("/dev/null", "reg3",
                                    reported_metric="pearson_r", reported_value=0.55,
                                    baseline_value=0.50, n=100, std=0.20, higher_better=True)
@@ -167,25 +158,185 @@ def test_continuous_audit_ledger(tmp_path):
     ledger = str(tmp_path / "c.jsonl")
     mm.preregister(ledger, "reg4", metric="pearson_r", min_n=100, baseline=0.5, pass_threshold=0.6)
     findings = mm.continuous_audit(ledger, "reg4",
-                                   reported_metric="spearman_r",  # metric swap
+                                   reported_metric="spearman_r",
                                    reported_value=0.70, baseline_value=0.50, n=200)
     assert any("metric-swap" in x.probe for x in findings)
     assert any(x.level == "FAIL" for x in findings)
 
 
-# ─── Full audit ───────────────────────────────────────────────
+# ─── ① Chain hash tests ───────────────────────────────────────
+
+def test_chain_intact_single(tmp_path):
+    """Single registration → chain OK."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=200, baseline=0.5, pass_threshold=0.6)
+    findings = mm.verify_chain(ledger)
+    assert all(f.level == "OK" for f in findings), findings
+
+
+def test_chain_intact_two_entries(tmp_path):
+    """Two registrations → chain links correctly."""
+    ledger = str(tmp_path / "l.jsonl")
+    e1 = mm.preregister(ledger, "exp1", metric="acc", min_n=200, baseline=0.5, pass_threshold=0.6)
+    e2 = mm.preregister(ledger, "exp2", metric="f1",  min_n=100, baseline=0.5, pass_threshold=0.7)
+    # second entry must link to first
+    assert e2["prev_seal"] == e1["seal"]
+    findings = mm.verify_chain(ledger)
+    assert all(f.level == "OK" for f in findings), findings
+
+
+def test_chain_tamper_content(tmp_path):
+    """Modifying entry content → seal mismatch → FAIL."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=200, baseline=0.5, pass_threshold=0.6)
+    with open(ledger) as f:
+        entry = json.loads(f.read())
+    entry["metric"] = "f1"   # tamper without updating seal
+    with open(ledger, "w") as f:
+        f.write(json.dumps(entry) + "\n")
+    findings = mm.verify_chain(ledger)
+    assert any(f.level == "FAIL" and "chain-integrity" in f.probe for f in findings)
+
+
+def test_chain_break_deleted_middle_entry(tmp_path):
+    """Deleting a middle entry → chain break → FAIL."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=200, baseline=0.5, pass_threshold=0.6)
+    mm.preregister(ledger, "exp2", metric="f1",  min_n=100, baseline=0.5, pass_threshold=0.7)
+    mm.preregister(ledger, "exp3", metric="r2",  min_n=50,  baseline=0.0, pass_threshold=0.5)
+    # Remove middle entry (exp2)
+    with open(ledger) as f:
+        lines = f.readlines()
+    with open(ledger, "w") as f:
+        f.write(lines[0])   # exp1
+        f.write(lines[2])   # exp3 — its prev_seal points to exp2, not exp1
+    findings = mm.verify_chain(ledger)
+    assert any(f.level == "FAIL" and "chain-integrity" in f.probe for f in findings)
+
+
+def test_chain_break_first_entry_deleted(tmp_path):
+    """Deleting the first entry → chain break at entry 1 (prev≠genesis)."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=200, baseline=0.5, pass_threshold=0.6)
+    mm.preregister(ledger, "exp2", metric="f1",  min_n=100, baseline=0.5, pass_threshold=0.7)
+    # Keep only exp2 (exp1 deleted)
+    with open(ledger) as f:
+        lines = f.readlines()
+    with open(ledger, "w") as f:
+        f.write(lines[1])   # exp2 — prev_seal points to exp1, not genesis
+    findings = mm.verify_chain(ledger)
+    assert any(f.level == "FAIL" and "chain-integrity" in f.probe for f in findings)
+
+
+def test_chain_legacy_entry_no_prev_seal(tmp_path):
+    """Legacy entry without prev_seal: seal check passes, no chain check (graceful)."""
+    ledger = str(tmp_path / "l.jsonl")
+    legacy = {
+        "ts": "2025-01-01T00:00:00",
+        "claim_id": "legacy",
+        "metric": "acc",
+        "min_n": 100,
+        "baseline": 0.5,
+        "pass_threshold": 0.6,
+    }
+    legacy["seal"] = hashlib.sha256(
+        json.dumps(legacy, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()[:16]
+    with open(ledger, "w") as f:
+        f.write(json.dumps(legacy) + "\n")
+    findings = mm.verify_chain(ledger)
+    assert all(f.level == "OK" for f in findings), findings
+
+
+def test_chain_empty_ledger_no_file(tmp_path):
+    """Non-existent ledger → chain OK (empty)."""
+    findings = mm.verify_chain(str(tmp_path / "nonexistent.jsonl"))
+    assert all(f.level == "OK" for f in findings)
+
+
+# ─── ⑧ Power probe tests ─────────────────────────────────────
+
+def test_power_insufficient_small_n():
+    """n=50, Δ=0.05 above baseline=0.5 → WARN (need ~300+)."""
+    f = mm.power_check(50, 0.5, min_detectable_effect=0.05)
+    assert f.level == "WARN"
+    assert f.probe == "⑧ power"
+    assert "n≥" in f.msg
+
+
+def test_power_sufficient_large_n():
+    """n=500, Δ=0.10 → OK."""
+    f = mm.power_check(500, 0.5, min_detectable_effect=0.10)
+    assert f.level == "OK"
+
+
+def test_power_large_effect_small_n():
+    """n=50 is enough for Δ=0.20 (large effect detectable with less data)."""
+    f = mm.power_check(50, 0.5, min_detectable_effect=0.20)
+    assert f.level == "OK"
+
+
+def test_power_very_small_n_always_warn():
+    """n=10 never sufficient for small effects."""
+    f = mm.power_check(10, 0.5, min_detectable_effect=0.05)
+    assert f.level == "WARN"
+
+
+def test_power_required_n_in_message():
+    """Message includes required n."""
+    f = mm.power_check(10, 0.5, min_detectable_effect=0.05)
+    assert "n≥" in f.msg
+
+
+# ─── ⑨ Multiple comparisons tests ────────────────────────────
+
+def test_multicomp_single_experiment(tmp_path):
+    """One claim in ledger → OK."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=200, baseline=0.5, pass_threshold=0.6)
+    f = mm.multiple_comparisons_check(ledger)
+    assert f.level == "OK"
+
+
+def test_multicomp_three_experiments(tmp_path):
+    """Three distinct claims → WARN with Bonferroni α=0.05/3."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=200, baseline=0.5, pass_threshold=0.6)
+    mm.preregister(ledger, "exp2", metric="f1",  min_n=100, baseline=0.5, pass_threshold=0.7)
+    mm.preregister(ledger, "exp3", metric="r2",  min_n=50,  baseline=0.0, pass_threshold=0.5)
+    f = mm.multiple_comparisons_check(ledger)
+    assert f.level == "WARN"
+    assert f.probe == "⑨ multiple-comparisons"
+    assert "k=3" in f.msg
+    assert "0.0167" in f.msg  # 0.05/3 ≈ 0.0167
+
+
+def test_multicomp_no_ledger(tmp_path):
+    """Non-existent ledger → OK."""
+    f = mm.multiple_comparisons_check(str(tmp_path / "none.jsonl"))
+    assert f.level == "OK"
+
+
+def test_multicomp_rereg_same_claim_counts_once(tmp_path):
+    """Re-registering same claim_id counts as 1 unique — still OK."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=200, baseline=0.5, pass_threshold=0.6)
+    mm.preregister(ledger, "exp1", metric="f1",  min_n=10,  baseline=0.5, pass_threshold=0.5)
+    f = mm.multiple_comparisons_check(ledger)
+    assert f.level == "OK"  # still k=1 unique claim
+
+
+# ─── full_audit new probes integration ───────────────────────
 
 def test_full_audit_basic(tmp_path):
-    """full_audit basic run — returns findings list."""
     ledger = str(tmp_path / "f.jsonl")
     findings = mm.full_audit(ledger, "fa1",
                              reported_metric="acc", reported_acc=0.72, n=500, baseline=0.5)
-    assert isinstance(findings, list)
-    assert len(findings) > 0
+    assert isinstance(findings, list) and len(findings) > 0
 
 
 def test_full_audit_all_probes(tmp_path):
-    """full_audit — all optional probes activated."""
+    """All optional probes activated at once."""
     ledger = str(tmp_path / "f2.jsonl")
     mm.preregister(ledger, "fa2", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.65)
     findings = mm.full_audit(
@@ -204,3 +355,25 @@ def test_full_audit_all_probes(tmp_path):
     assert "⑤ multi-seed" in probes
     assert "⑥ scope" in probes
     assert "⑦ too-good" in probes
+
+
+def test_full_audit_power_probe(tmp_path):
+    """min_detectable_effect activates ⑧ power."""
+    ledger = str(tmp_path / "f3.jsonl")
+    mm.preregister(ledger, "fa3", metric="acc", min_n=10, baseline=0.5, pass_threshold=0.6)
+    findings = mm.full_audit(ledger, "fa3",
+                             reported_metric="acc", reported_acc=0.72, n=20, baseline=0.5,
+                             min_detectable_effect=0.05)
+    assert any(f.probe == "⑧ power" for f in findings)
+
+
+def test_full_audit_multiplicity_probe(tmp_path):
+    """check_multiplicity=True activates ⑨ with k=2."""
+    ledger = str(tmp_path / "f4.jsonl")
+    mm.preregister(ledger, "m1", metric="acc", min_n=10, baseline=0.5, pass_threshold=0.6)
+    mm.preregister(ledger, "m2", metric="acc", min_n=10, baseline=0.5, pass_threshold=0.6)
+    findings = mm.full_audit(ledger, "m1",
+                             reported_metric="acc", reported_acc=0.72, n=500, baseline=0.5,
+                             check_multiplicity=True)
+    probes = {f.probe for f in findings}
+    assert "⑨ multiple-comparisons" in probes
