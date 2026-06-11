@@ -5,6 +5,8 @@
 >
 > **Companion files**: [README](../README.md) (API reference) ·
 > [CHANGELOG](../CHANGELOG.md) · [CHRONICLE](CHRONICLE.md) (origin story)
+>
+> **한국어 버전**: [GUIDE_KO.md](GUIDE_KO.md)
 
 ---
 
