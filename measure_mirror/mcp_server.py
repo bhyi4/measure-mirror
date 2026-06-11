@@ -1,24 +1,27 @@
 """
-🪞 Measurement Mirror MCP 서버
+🪞 Measurement Mirror — MCP server
 
-AI가 측정거울 도구를 직접 호출할 수 있게 MCP 프로토콜로 노출.
-stdio 방식 — Claude Code .claude/settings.json 에 등록해서 사용.
+Exposes all 12 probes as MCP tools via stdio transport so any
+MCP-compatible AI (Claude Code, Cursor, Windsurf, …) can call them
+directly mid-conversation.
 
-설치:
-    pip install measure-mirror[mcp]
+Install:
+    pip install "measure-mirror[mcp]"
 
-Claude Code 등록 (.claude/settings.json):
+Claude Code (.mcp.json in project root):
     {
       "mcpServers": {
         "measure-mirror": {
           "command": "python",
-          "args": ["-m", "measure_mirror.mcp_server"]
+          "args": ["-m", "measure_mirror.mcp_server"],
+          "cwd": "/path/to/measure-mirror"
         }
       }
     }
+
+Other MCP clients: run `mm-mcp` as the stdio server command.
 """
 import asyncio
-import json
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp import types
@@ -28,7 +31,7 @@ server = Server("measure-mirror")
 
 
 # ─────────────────────────────────────────────────────────────
-# 도구 목록
+# Tool registry
 # ─────────────────────────────────────────────────────────────
 @server.list_tools()
 async def list_tools() -> list[types.Tool]:
@@ -36,39 +39,56 @@ async def list_tools() -> list[types.Tool]:
         types.Tool(
             name="mm_register",
             description=(
-                "실험 결과를 보기 *전* 기준을 봉인 등록 (사전등록). "
-                "해시로 봉인돼 나중에 변조하면 감사 때 탐지됨. "
-                "반드시 실험 실행 전에 호출해야 함."
+                "Seal evaluation criteria BEFORE running the experiment (pre-registration). "
+                "Each entry is chain-hashed to the previous one — deletions and insertions "
+                "are detected by mm_verify_chain. Must be called before the experiment runs."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "ledger_path": {"type": "string", "description": "원장 파일 경로 (JSONL)"},
-                    "claim_id":    {"type": "string", "description": "실험/주장 식별자"},
-                    "metric":      {"type": "string", "description": "평가 지표 이름 (예: acc, f1)"},
-                    "min_n":       {"type": "integer", "description": "최소 표본 수", "default": 200},
-                    "baseline":    {"type": "number",  "description": "비교 기준 성능", "default": 0.5},
-                    "pass_threshold": {"type": "number", "description": "합격 기준 성능", "default": 0.60},
+                    "ledger_path":    {"type": "string",  "description": "Path to the JSONL ledger file"},
+                    "claim_id":       {"type": "string",  "description": "Experiment / claim identifier"},
+                    "metric":         {"type": "string",  "description": "Evaluation metric name (e.g. acc, f1)"},
+                    "min_n":          {"type": "integer", "description": "Minimum required sample size", "default": 200},
+                    "baseline":       {"type": "number",  "description": "Fair comparison baseline performance", "default": 0.5},
+                    "pass_threshold": {"type": "number",  "description": "Registered passing bar", "default": 0.60},
                 },
                 "required": ["ledger_path", "claim_id", "metric"],
             },
         ),
         types.Tool(
-            name="mm_audit",
+            name="mm_verify_chain",
             description=(
-                "분류/정확도 지표 실험 결과를 7체크로 감사. "
-                "소표본 CI·사전등록 대조·봉인 위변조·pass_threshold 등 자동 적발. "
-                "결과를 보고 난 후 호출."
+                "① Verify the full ledger chain integrity. "
+                "Checks individual SHA-256 seals AND chain links (prev_seal). "
+                "Catches: tampered entries, deleted entries, inserted entries. "
+                "Call after any suspicious ledger activity, or routinely in CI."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "ledger_path":     {"type": "string", "description": "원장 파일 경로"},
-                    "claim_id":        {"type": "string", "description": "실험 식별자"},
-                    "reported_metric": {"type": "string", "description": "보고하는 지표 이름"},
-                    "reported_acc":    {"type": "number", "description": "보고하는 정확도 (0~1)"},
-                    "n":               {"type": "integer", "description": "표본 수"},
-                    "baseline":        {"type": "number", "description": "baseline 성능 (미지정 시 0.5)"},
+                    "ledger_path": {"type": "string", "description": "Path to the JSONL ledger file"},
+                },
+                "required": ["ledger_path"],
+            },
+        ),
+        types.Tool(
+            name="mm_audit",
+            description=(
+                "Audit a classification/accuracy metric result with probes ①+④a. "
+                "Runs: Wilson CI small-sample check, direction check, pre-registration "
+                "comparison (metric-swap, min_n, pass_threshold, seal tamper). "
+                "Call after the experiment has completed."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ledger_path":     {"type": "string"},
+                    "claim_id":        {"type": "string"},
+                    "reported_metric": {"type": "string", "description": "Metric name being reported"},
+                    "reported_acc":    {"type": "number", "description": "Reported accuracy (0–1)"},
+                    "n":               {"type": "integer", "description": "Sample size"},
+                    "baseline":        {"type": "number", "description": "Baseline performance (default 0.5)"},
                 },
                 "required": ["ledger_path", "claim_id", "reported_metric", "reported_acc", "n"],
             },
@@ -76,8 +96,9 @@ async def list_tools() -> list[types.Tool]:
         types.Tool(
             name="mm_continuous_audit",
             description=(
-                "회귀·연속 지표(MSE, Pearson r, RMSE 등) 실험 감사. "
-                "Wilson CI 대신 방향·효과크기·사전등록 체크."
+                "Audit a continuous/regression metric (MSE, Pearson r, RMSE, …). "
+                "Uses direction check + optional effect-size instead of Wilson CI. "
+                "Set higher_better=False for loss metrics (lower is better)."
             ),
             inputSchema={
                 "type": "object",
@@ -88,7 +109,7 @@ async def list_tools() -> list[types.Tool]:
                     "reported_value":   {"type": "number"},
                     "baseline_value":   {"type": "number"},
                     "n":                {"type": "integer"},
-                    "std":              {"type": "number", "description": "표준편차 (선택, 효과크기 계산용)"},
+                    "std":              {"type": "number", "description": "Std dev (optional, enables effect-size check)"},
                     "higher_better":    {"type": "boolean", "default": True},
                 },
                 "required": ["ledger_path", "claim_id", "reported_metric",
@@ -98,39 +119,48 @@ async def list_tools() -> list[types.Tool]:
         types.Tool(
             name="mm_full_audit",
             description=(
-                "7체크 전체를 한 번에 실행하는 통합 감사. "
-                "선택 probe(누설·게이밍·다시드·scope)는 인자를 제공할 때만 활성화."
+                "Run all probes in one call. Optional probes activate when their "
+                "arguments are provided. Includes: ① pre-registration + chain check, "
+                "② fair baseline, ③ gaming, ④a leakage, ⑤ multi-seed, ⑥ scope, "
+                "⑦ too-good, ⑧ power (min_detectable_effect), ⑨ multiple comparisons "
+                "(check_multiplicity)."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "ledger_path":     {"type": "string"},
-                    "claim_id":        {"type": "string"},
-                    "reported_metric": {"type": "string"},
-                    "reported_acc":    {"type": "number"},
-                    "n":               {"type": "integer"},
-                    "baseline":        {"type": "number"},
-                    "competing_name":  {"type": "string",  "description": "② 경쟁 baseline 이름"},
-                    "competing_acc":   {"type": "number",  "description": "② 경쟁 baseline 성능"},
-                    "reward_terms":    {"type": "array", "items": {"type": "string"},
-                                        "description": "③ reward/loss 항목 목록"},
-                    "train_items":     {"type": "array", "items": {},
-                                        "description": "④ train 데이터 항목 (누설 검사용)"},
-                    "test_items":      {"type": "array", "items": {},
-                                        "description": "④ test 데이터 항목 (누설 검사용)"},
-                    "seed_results":    {"type": "array", "items": {"type": "number"},
-                                        "description": "⑤ 시드별 결과 목록"},
-                    "claimed_scope":   {"type": "array", "items": {"type": "string"},
-                                        "description": "⑥ 주장하는 적용 범위"},
-                    "tested_scope":    {"type": "array", "items": {"type": "string"},
-                                        "description": "⑥ 실제 시험한 범위"},
+                    "ledger_path":            {"type": "string"},
+                    "claim_id":               {"type": "string"},
+                    "reported_metric":        {"type": "string"},
+                    "reported_acc":           {"type": "number"},
+                    "n":                      {"type": "integer"},
+                    "baseline":               {"type": "number"},
+                    "competing_name":         {"type": "string",  "description": "② Competing baseline name"},
+                    "competing_acc":          {"type": "number",  "description": "② Competing baseline accuracy"},
+                    "reward_terms":           {"type": "array",   "items": {"type": "string"},
+                                               "description": "③ Training reward/loss term names"},
+                    "train_items":            {"type": "array",   "items": {},
+                                               "description": "④ Train items for leakage check"},
+                    "test_items":             {"type": "array",   "items": {},
+                                               "description": "④ Test items for leakage check"},
+                    "seed_results":           {"type": "array",   "items": {"type": "number"},
+                                               "description": "⑤ Per-seed result values"},
+                    "claimed_scope":          {"type": "array",   "items": {"type": "string"},
+                                               "description": "⑥ Claimed generalization scope"},
+                    "tested_scope":           {"type": "array",   "items": {"type": "string"},
+                                               "description": "⑥ Actually tested scope"},
+                    "min_detectable_effect":  {"type": "number",
+                                               "description": "⑧ Activate power check (minimum Δ to detect)"},
+                    "check_multiplicity":     {"type": "boolean", "default": False,
+                                               "description": "⑨ Activate multiple-comparisons Bonferroni check"},
+                    "check_chain":            {"type": "boolean", "default": True,
+                                               "description": "① Include chain integrity check"},
                 },
                 "required": ["ledger_path", "claim_id", "reported_metric", "reported_acc", "n"],
             },
         ),
         types.Tool(
             name="mm_baseline_fairness",
-            description="② 경쟁 baseline 대비 동률·역전 적발.",
+            description="② Detect crippled / tied / reversed baseline comparison.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -138,14 +168,14 @@ async def list_tools() -> list[types.Tool]:
                     "claimed":       {"type": "number"},
                     "baseline":      {"type": "number"},
                     "higher_better": {"type": "boolean", "default": True},
-                    "margin":        {"type": "number", "default": 0.01},
+                    "margin":        {"type": "number",  "default": 0.01},
                 },
                 "required": ["name", "claimed", "baseline"],
             },
         ),
         types.Tool(
             name="mm_gaming_check",
-            description="③ reward/loss 항목에 평가 지표가 직접 포함됐는지 적발.",
+            description="③ Detect eval metric appearing directly in reward/loss (self-fulfilling).",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -157,20 +187,20 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="mm_multiseed_check",
-            description="⑤ 여러 시드 결과의 분산·baseline 교차 경보.",
+            description="⑤ Cross-seed variance alarm — unstable signal / lucky seed detection.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "seed_results":   {"type": "array", "items": {"type": "number"}},
-                    "baseline":       {"type": "number", "default": 0.5},
-                    "cv_threshold":   {"type": "number", "default": 0.10},
+                    "seed_results": {"type": "array", "items": {"type": "number"}},
+                    "baseline":     {"type": "number", "default": 0.5},
+                    "cv_threshold": {"type": "number", "default": 0.10},
                 },
                 "required": ["seed_results"],
             },
         ),
         types.Tool(
             name="mm_scope_check",
-            description="⑥ 주장이 증거 범위를 넘는 과대일반화 적발.",
+            description="⑥ Detect claimed scope wider than tested evidence (over-generalization).",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -182,32 +212,73 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="mm_too_good_check",
-            description="⑦ baseline 대비 너무 좋은 결과 선제 의심 경보.",
+            description="⑦ Flag suspiciously large improvement before believing it.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "name":               {"type": "string"},
-                    "claimed":            {"type": "number"},
-                    "baseline":           {"type": "number"},
-                    "suspicious_margin":  {"type": "number", "default": 0.30},
+                    "name":              {"type": "string"},
+                    "claimed":           {"type": "number"},
+                    "baseline":          {"type": "number"},
+                    "suspicious_margin": {"type": "number", "default": 0.30},
                 },
                 "required": ["name", "claimed", "baseline"],
+            },
+        ),
+        types.Tool(
+            name="mm_power_check",
+            description=(
+                "⑧ False-negative guard. Warn when n is too small to detect the "
+                "minimum detectable effect at the target power level. "
+                "Closes the gap between 'bidirectional' design and implementation."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "n":                     {"type": "integer", "description": "Sample size"},
+                    "baseline":              {"type": "number",  "description": "Baseline performance"},
+                    "min_detectable_effect": {"type": "number",  "default": 0.05,
+                                              "description": "Minimum Δ above baseline to detect"},
+                    "alpha":                 {"type": "number",  "default": 0.05},
+                    "target_power":          {"type": "number",  "default": 0.80},
+                },
+                "required": ["n", "baseline"],
+            },
+        ),
+        types.Tool(
+            name="mm_multiple_comparisons_check",
+            description=(
+                "⑨ Garden-of-forking-paths detector. Counts distinct experiments in "
+                "the ledger and warns with the Bonferroni-corrected α when k>1. "
+                "Running k experiments and reporting only the best inflates false-positive rate."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ledger_path": {"type": "string"},
+                    "alpha":       {"type": "number", "default": 0.05},
+                },
+                "required": ["ledger_path"],
             },
         ),
     ]
 
 
 # ─────────────────────────────────────────────────────────────
-# 도구 실행
+# Tool execution
 # ─────────────────────────────────────────────────────────────
 def _findings_to_text(findings: list[mm.Finding]) -> str:
     icon = {"OK": "✅", "WARN": "⚠️", "FAIL": "🔴"}
     worst = "FAIL" if any(f.level == "FAIL" for f in findings) else \
             "WARN" if any(f.level == "WARN" for f in findings) else "OK"
-    lines = [f"종합: {icon[worst]} {worst}"]
+    lines = [f"Overall: {icon[worst]} {worst}"]
     for f in findings:
         lines.append(f"{icon[f.level]} [{f.probe}] {f.msg}")
     return "\n".join(lines)
+
+
+def _single(f: mm.Finding) -> str:
+    icon = {"OK": "✅", "WARN": "⚠️", "FAIL": "🔴"}
+    return f"{icon[f.level]} [{f.probe}] {f.msg}"
 
 
 @server.call_tool()
@@ -222,7 +293,20 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 baseline=arguments.get("baseline", 0.5),
                 pass_threshold=arguments.get("pass_threshold", 0.60),
             )
-            result = f"🔒 봉인 완료\nclaim_id: {entry['claim_id']}\nmetric: {entry['metric']}\nmin_n: {entry['min_n']}\nbaseline: {entry['baseline']}\npass_threshold: {entry['pass_threshold']}\nseal: {entry['seal']}"
+            result = (
+                f"🔒 Sealed\n"
+                f"claim_id: {entry['claim_id']}\n"
+                f"metric: {entry['metric']}\n"
+                f"min_n: {entry['min_n']}\n"
+                f"baseline: {entry['baseline']}\n"
+                f"pass_threshold: {entry['pass_threshold']}\n"
+                f"prev_seal: {entry['prev_seal']}\n"
+                f"seal: {entry['seal']}"
+            )
+
+        elif name == "mm_verify_chain":
+            findings = mm.verify_chain(arguments["ledger_path"])
+            result = _findings_to_text(findings)
 
         elif name == "mm_audit":
             findings = mm.audit(
@@ -264,60 +348,74 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 seed_results=arguments.get("seed_results"),
                 claimed_scope=arguments.get("claimed_scope"),
                 tested_scope=arguments.get("tested_scope"),
+                min_detectable_effect=arguments.get("min_detectable_effect"),
+                check_chain=arguments.get("check_chain", True),
+                check_multiplicity=arguments.get("check_multiplicity", False),
             )
             result = _findings_to_text(findings)
 
         elif name == "mm_baseline_fairness":
-            f = mm.baseline_fairness(
+            result = _single(mm.baseline_fairness(
                 arguments["name"],
                 arguments["claimed"],
                 arguments["baseline"],
                 higher_better=arguments.get("higher_better", True),
                 margin=arguments.get("margin", 0.01),
-            )
-            icon = {"OK": "✅", "WARN": "⚠️", "FAIL": "🔴"}
-            result = f"{icon[f.level]} [{f.probe}] {f.msg}"
+            ))
 
         elif name == "mm_gaming_check":
-            f = mm.gaming_check(arguments["metric"], arguments["reward_terms"])
-            icon = {"OK": "✅", "WARN": "⚠️", "FAIL": "🔴"}
-            result = f"{icon[f.level]} [{f.probe}] {f.msg}"
+            result = _single(mm.gaming_check(
+                arguments["metric"],
+                arguments["reward_terms"],
+            ))
 
         elif name == "mm_multiseed_check":
-            f = mm.multiseed_check(
+            result = _single(mm.multiseed_check(
                 arguments["seed_results"],
                 baseline=arguments.get("baseline", 0.5),
                 cv_threshold=arguments.get("cv_threshold", 0.10),
-            )
-            icon = {"OK": "✅", "WARN": "⚠️", "FAIL": "🔴"}
-            result = f"{icon[f.level]} [{f.probe}] {f.msg}"
+            ))
 
         elif name == "mm_scope_check":
-            f = mm.scope_check(arguments["claimed_scope"], arguments["tested_scope"])
-            icon = {"OK": "✅", "WARN": "⚠️", "FAIL": "🔴"}
-            result = f"{icon[f.level]} [{f.probe}] {f.msg}"
+            result = _single(mm.scope_check(
+                arguments["claimed_scope"],
+                arguments["tested_scope"],
+            ))
 
         elif name == "mm_too_good_check":
-            f = mm.too_good_check(
+            result = _single(mm.too_good_check(
                 arguments["name"],
                 arguments["claimed"],
                 arguments["baseline"],
                 suspicious_margin=arguments.get("suspicious_margin", 0.30),
-            )
-            icon = {"OK": "✅", "WARN": "⚠️", "FAIL": "🔴"}
-            result = f"{icon[f.level]} [{f.probe}] {f.msg}"
+            ))
+
+        elif name == "mm_power_check":
+            result = _single(mm.power_check(
+                arguments["n"],
+                arguments["baseline"],
+                min_detectable_effect=arguments.get("min_detectable_effect", 0.05),
+                alpha=arguments.get("alpha", 0.05),
+                target_power=arguments.get("target_power", 0.80),
+            ))
+
+        elif name == "mm_multiple_comparisons_check":
+            result = _single(mm.multiple_comparisons_check(
+                arguments["ledger_path"],
+                alpha=arguments.get("alpha", 0.05),
+            ))
 
         else:
-            result = f"알 수 없는 도구: {name}"
+            result = f"Unknown tool: {name}"
 
     except Exception as e:
-        result = f"❌ 오류: {e}"
+        result = f"❌ Error: {e}"
 
     return [types.TextContent(type="text", text=result)]
 
 
 # ─────────────────────────────────────────────────────────────
-# 진입점
+# Entry point
 # ─────────────────────────────────────────────────────────────
 async def _main():
     async with stdio_server() as (read, write):

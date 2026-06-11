@@ -208,9 +208,10 @@ pip install "measure-mirror[mcp]"
 
 **Other MCP clients** — run `mm-mcp` as the stdio server command.
 
-All 9 probes are exposed as MCP tools:  
-`mm_register` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
-`mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` · `mm_too_good_check`
+All 12 probes are exposed as MCP tools:  
+`mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
+`mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
+`mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check`
 
 ---
 
