@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — probe engine (no training, pure rule+stat).
 
-18 probes:
+20 probes:
   ① Pre-registration ledger — append-only chain-hash, first-write wins,
       metric-swap detection, tamper detection, re-registration detection
   ② Fair baseline — crippled / tied / reversed baseline
@@ -22,6 +22,8 @@
   ⑯ Inter-rater agreement — Cohen's κ for multi-judge setups
   ⑰ Judge score sanity — degenerate scoring distribution
   ⑱ Judge position-swap — AB/BA cross-validation (content vs position lock)
+  ⑲ Judge transitivity — A>B>C>A cycle detection in pairwise tournaments
+  ⑳ Ranking stability — bootstrap resampling guard against ranking mirages
 
 Utilities:
   calibrate()   — self-test: run 5 synthetic known-good/known-bad cases
@@ -29,6 +31,7 @@ Utilities:
   witness()     — execute a command and seal a tamper-evident run record
   retract()     — append a chain-linked retraction entry to the ledger
   certificate() — issue a sealed verification certificate for a claim
+  badge()       — render a certificate as a markdown / SVG badge
 
 Design:
   - Zero dependencies (Python stdlib only). Deterministic. No trained model.
@@ -36,7 +39,7 @@ Design:
   - Ledger = append-only JSONL + chain hash + first-write wins + SHA-256 seal.
 """
 from __future__ import annotations
-import json, math, time, hashlib, os, statistics
+import json, math, time, hashlib, os, random, statistics
 from dataclasses import dataclass
 
 
@@ -972,6 +975,178 @@ def judge_swap_check(forward_results: list, swapped_results: list,
 
 
 # ─────────────────────────────────────────────────────────────
+# ⑲ Judge transitivity — preference-cycle detection
+# ─────────────────────────────────────────────────────────────
+def judge_transitivity_check(matches: list) -> Finding:
+    """⑲ Detect preference cycles (A>B>C>A) in a pairwise tournament.
+
+    When a judge ranks more than two models via pairwise comparisons, the
+    aggregated preferences should form a transitive order. A cycle means the
+    judge is not applying a consistent quality scale — any leaderboard built
+    from its verdicts is an artifact of match ordering, not model quality.
+
+    Args:
+        matches: [(model_a, model_b, winner), ...] — one tuple per comparison;
+                 winner is 0 (model_a won) or 1 (model_b won).  Multiple
+                 comparisons of the same pair are aggregated by majority vote;
+                 exactly tied pairs produce no edge.
+
+    Levels:
+      FAIL — at least one preference cycle exists (an example cycle is shown)
+      WARN — fewer than 3 distinct models, or no usable (non-tied) pairs
+      OK   — preference graph is acyclic (a consistent ranking exists)
+    """
+    if not matches:
+        return Finding("⑲ judge-transitivity", "WARN", "No matches provided.")
+
+    # Aggregate per unordered pair by majority vote
+    wins: dict[tuple[str, str], int] = {}   # (a, b) sorted → net wins for a
+    models: set[str] = set()
+    for a, b, winner in matches:
+        if a == b:
+            continue
+        models.update((a, b))
+        key = (a, b) if a <= b else (b, a)
+        first_won = (winner == 0) == (key == (a, b))
+        wins[key] = wins.get(key, 0) + (1 if first_won else -1)
+
+    if len(models) < 3:
+        return Finding("⑲ judge-transitivity", "WARN",
+                       f"Only {len(models)} distinct model(s) — need ≥ 3 "
+                       "to test transitivity.")
+
+    beats: dict[str, list[str]] = {m: [] for m in models}
+    ties = 0
+    for (a, b), net in wins.items():
+        if net > 0:
+            beats[a].append(b)
+        elif net < 0:
+            beats[b].append(a)
+        else:
+            ties += 1
+
+    # DFS cycle detection with path reconstruction
+    WHITE, GREY, BLACK = 0, 1, 2
+    color = {m: WHITE for m in models}
+
+    def _find_cycle(start: str) -> list[str] | None:
+        stack: list[tuple[str, int]] = [(start, 0)]
+        path: list[str] = []
+        while stack:
+            node, child_i = stack[-1]
+            if child_i == 0:
+                color[node] = GREY
+                path.append(node)
+            children = beats[node]
+            if child_i < len(children):
+                stack[-1] = (node, child_i + 1)
+                nxt = children[child_i]
+                if color[nxt] == GREY:
+                    return path[path.index(nxt):] + [nxt]
+                if color[nxt] == WHITE:
+                    stack.append((nxt, 0))
+            else:
+                color[node] = BLACK
+                path.pop()
+                stack.pop()
+        return None
+
+    for m in sorted(models):
+        if color[m] == WHITE:
+            cycle = _find_cycle(m)
+            if cycle:
+                return Finding(
+                    "⑲ judge-transitivity", "FAIL",
+                    "Preference cycle detected: "
+                    + " > ".join(cycle)
+                    + ". Judge is not applying a consistent quality scale — "
+                    "any leaderboard from these verdicts is order-dependent.")
+
+    tie_note = f" ({ties} tied pair(s) excluded)" if ties else ""
+    return Finding(
+        "⑲ judge-transitivity", "OK",
+        f"Preference graph over {len(models)} models is acyclic — "
+        f"a consistent ranking exists{tie_note}.")
+
+
+# ─────────────────────────────────────────────────────────────
+# ⑳ Ranking stability — bootstrap resampling guard
+# ─────────────────────────────────────────────────────────────
+def ranking_stability_check(scores_a: list, scores_b: list, *,
+                            n_boot: int = 1000, seed: int = 0,
+                            min_stability: float = 0.95) -> Finding:
+    """⑳ Check that "model A beats model B" survives bootstrap resampling.
+
+    A ranking claim built on per-item scores can be a mirage: with few items
+    or high variance, redrawing the same-sized sample flips the winner.  This
+    probe resamples item indices with replacement n_boot times and measures
+    how often the observed winner stays the winner.
+
+    Deterministic: uses random.Random(seed) — same inputs always produce the
+    same Finding (mirror discipline: audits must be reproducible).
+
+    Args:
+        scores_a: per-item scores for model A (paired with scores_b by index).
+        scores_b: per-item scores for model B on the same items.
+        n_boot:   bootstrap resamples (default 1000).
+        seed:     RNG seed (default 0).
+        min_stability: required fraction of resamples preserving the winner.
+
+    Levels:
+      FAIL — length mismatch, tied means (no ranking), or stability < 0.80
+      WARN — fewer than 5 items, or 0.80 ≤ stability < min_stability
+      OK   — stability ≥ min_stability
+    """
+    if len(scores_a) != len(scores_b):
+        return Finding("⑳ ranking-stability", "FAIL",
+                       f"Length mismatch: {len(scores_a)} vs {len(scores_b)} "
+                       "scores. Items must be paired.")
+    n = len(scores_a)
+    if n == 0:
+        return Finding("⑳ ranking-stability", "WARN", "No scores provided.")
+    if n < 5:
+        return Finding("⑳ ranking-stability", "WARN",
+                       f"Only {n} item(s) — too few to assess ranking stability.")
+
+    sum_a, sum_b = sum(scores_a), sum(scores_b)
+    if sum_a == sum_b:
+        return Finding("⑳ ranking-stability", "FAIL",
+                       "Observed means are exactly tied — there is no ranking "
+                       "to certify.")
+    a_wins_observed = sum_a > sum_b
+    winner, loser = ("A", "B") if a_wins_observed else ("B", "A")
+
+    rng = random.Random(seed)
+    same = 0
+    for _ in range(n_boot):
+        sa = sb = 0
+        for _ in range(n):
+            i = rng.randrange(n)
+            sa += scores_a[i]
+            sb += scores_b[i]
+        if (sa > sb) == a_wins_observed and sa != sb:
+            same += 1
+    stability = same / n_boot
+
+    if stability < 0.80:
+        return Finding(
+            "⑳ ranking-stability", "FAIL",
+            f"Ranking '{winner} > {loser}' survives only {stability:.1%} of "
+            f"{n_boot} bootstrap resamples (n={n}). The ranking is noise — "
+            "indistinguishable from a tie.")
+    if stability < min_stability:
+        return Finding(
+            "⑳ ranking-stability", "WARN",
+            f"Ranking '{winner} > {loser}' survives {stability:.1%} of "
+            f"{n_boot} resamples — below the {min_stability:.0%} bar. "
+            "Collect more items before publishing this ranking.")
+    return Finding(
+        "⑳ ranking-stability", "OK",
+        f"Ranking '{winner} > {loser}' survives {stability:.1%} of "
+        f"{n_boot} bootstrap resamples (n={n}). Stable.")
+
+
+# ─────────────────────────────────────────────────────────────
 # Binary / classification metric audit
 # ─────────────────────────────────────────────────────────────
 def audit(ledger_path: str, claim_id: str, *,
@@ -1349,6 +1524,62 @@ def certificate(ledger_path: str, claim_id: str, *,
     return cert
 
 
+_BADGE_STYLE = {
+    # verdict → (shields.io color name, hex for local SVG)
+    "CERTIFIED":               ("brightgreen", "#4c1"),
+    "CERTIFIED-WITH-WARNINGS": ("yellow",      "#dfb317"),
+    "UNVERIFIED":              ("lightgrey",   "#9f9f9f"),
+    "REJECTED":                ("red",         "#e05d44"),
+}
+
+
+def _shields_escape(s: str) -> str:
+    """Escape a string for a shields.io static-badge URL segment."""
+    return s.replace("-", "--").replace("_", "__").replace(" ", "_")
+
+
+def badge(cert: dict, *, fmt: str = "markdown") -> str:
+    """🏷 Render a certificate as an embeddable badge.
+
+    Args:
+        cert: dict returned by certificate().
+        fmt:  "markdown" — shields.io image markdown for README embedding
+              "svg"      — self-contained flat SVG (offline, no external service)
+
+    The SVG embeds the certificate seal in a <title> tooltip so the badge is
+    traceable back to the exact sealed certificate it renders.
+    """
+    verdict = cert["verdict"]
+    claim_id = cert["claim_id"]
+    if verdict not in _BADGE_STYLE:
+        raise ValueError(f"Unknown verdict: {verdict!r}")
+    color_name, color_hex = _BADGE_STYLE[verdict]
+
+    if fmt == "markdown":
+        label = _shields_escape(f"🪞 {claim_id}")
+        msg = _shields_escape(verdict)
+        return (f"![🪞 {claim_id}: {verdict}]"
+                f"(https://img.shields.io/badge/{label}-{msg}-{color_name})")
+
+    if fmt == "svg":
+        label = f"🪞 {claim_id}"
+        # ~6.5 px per char + padding; emoji counts double
+        lw = int(len(label) * 6.5) + 16
+        vw = int(len(verdict) * 6.5) + 16
+        total = lw + vw
+        return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{total}" height="20" role="img" aria-label="{label}: {verdict}">
+  <title>{label}: {verdict} (seal {cert['seal']}, anchor {cert['anchor_hash'][:16]}…)</title>
+  <rect width="{lw}" height="20" fill="#555"/>
+  <rect x="{lw}" width="{vw}" height="20" fill="{color_hex}"/>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">
+    <text x="{lw / 2:.0f}" y="14">{label}</text>
+    <text x="{lw + vw / 2:.0f}" y="14">{verdict}</text>
+  </g>
+</svg>"""
+
+    raise ValueError(f"Unknown badge format: {fmt!r} (use 'markdown' or 'svg')")
+
+
 def witness(ledger_path: str, claim_id: str, command: list[str], *,
             timeout: int | None = None) -> dict:
     """Execute command and seal a tamper-evident witness record in the ledger.
@@ -1506,6 +1737,8 @@ def _cli() -> None:
     ct.add_argument("--baseline", type=float, default=0.5)
     ct.add_argument("--pretty", action="store_true",
                     help="Pretty-print JSON (default: compact single line for piping)")
+    ct.add_argument("--badge", choices=["markdown", "svg"], default=None,
+                    help="Output an embeddable badge instead of the JSON certificate")
 
     rn = sub.add_parser("run",
                         help="Calibrate + witness-execute a command, sealing the run record")
@@ -1581,10 +1814,14 @@ def _cli() -> None:
             fs.append(judge_score_sanity(d["scores"]))
         if "forward_results" in d and "swapped_results" in d:
             fs.append(judge_swap_check(d["forward_results"], d["swapped_results"]))
+        if "matches" in d:
+            fs.append(judge_transitivity_check([tuple(m) for m in d["matches"]]))
+        if "scores_a" in d and "scores_b" in d:
+            fs.append(ranking_stability_check(d["scores_a"], d["scores_b"]))
         if not fs:
             p.error("judge --file JSON must contain at least one of: score_pairs, "
                     "pairwise_results, ratings_matrix, scores, "
-                    "forward_results+swapped_results")
+                    "forward_results+swapped_results, matches, scores_a+scores_b")
         report(f"LLM-judge audit ({args.file})", fs)
     elif args.cmd == "certify":
         fnds = None
@@ -1594,7 +1831,11 @@ def _cli() -> None:
             fnds = audit(args.ledger, args.claim_id, reported_metric=args.metric,
                          reported_acc=args.acc, n=args.n, baseline=args.baseline)
         c = certificate(args.ledger, args.claim_id, findings=fnds)
-        print(json.dumps(c, indent=2 if args.pretty else None, ensure_ascii=False))
+        if args.badge:
+            print(badge(c, fmt=args.badge))
+        else:
+            print(json.dumps(c, indent=2 if args.pretty else None,
+                             ensure_ascii=False))
     elif args.cmd == "run":
         cmd = [c for c in (args.command or []) if c != "--"]
         if not cmd:

@@ -1112,3 +1112,145 @@ def test_certificate_embeds_anchor_hash(tmp_path):
     mm.preregister(ledger, "exp2", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.4)
     c2 = mm.certificate(ledger, "exp1")
     assert c2["anchor_hash"] != c1["anchor_hash"]
+
+
+# ─── ⑲ judge_transitivity_check tests ────────────────────────
+
+def test_transitivity_ok_acyclic():
+    """Clean transitive tournament A>B>C → OK."""
+    matches = [("A", "B", 0), ("B", "C", 0), ("A", "C", 0)]
+    f = mm.judge_transitivity_check(matches)
+    assert f.level == "OK"
+    assert f.probe == "⑲ judge-transitivity"
+
+
+def test_transitivity_fail_cycle():
+    """A>B, B>C, C>A → cycle → FAIL with example path."""
+    matches = [("A", "B", 0), ("B", "C", 0), ("C", "A", 0)]
+    f = mm.judge_transitivity_check(matches)
+    assert f.level == "FAIL"
+    assert ">" in f.msg  # example cycle shown
+
+
+def test_transitivity_majority_aggregation():
+    """Repeated matches aggregate by majority: A beats B 2-1 → edge A>B."""
+    matches = [("A", "B", 0), ("A", "B", 0), ("A", "B", 1),
+               ("B", "C", 0), ("A", "C", 0)]
+    f = mm.judge_transitivity_check(matches)
+    assert f.level == "OK"
+
+
+def test_transitivity_warn_too_few_models():
+    """Only 2 models → WARN (cycle impossible)."""
+    matches = [("A", "B", 0), ("A", "B", 1)]
+    f = mm.judge_transitivity_check(matches)
+    assert f.level == "WARN"
+
+
+def test_transitivity_warn_empty():
+    """No matches → WARN."""
+    f = mm.judge_transitivity_check([])
+    assert f.level == "WARN"
+
+
+def test_transitivity_ties_no_edge():
+    """Exactly tied pair produces no edge — no false cycle."""
+    # A-B tied (1-1); B>C, C>A would only cycle if A>B existed
+    matches = [("A", "B", 0), ("A", "B", 1),
+               ("B", "C", 0), ("C", "A", 0)]
+    f = mm.judge_transitivity_check(matches)
+    assert f.level == "OK"
+    assert "tied" in f.msg
+
+
+# ─── ⑳ ranking_stability_check tests ─────────────────────────
+
+def test_ranking_stability_ok_clear_winner():
+    """Large consistent gap → stable ranking → OK."""
+    scores_a = [9, 8, 9, 9, 8, 9, 8, 9, 9, 8] * 3
+    scores_b = [3, 2, 3, 2, 3, 2, 3, 2, 3, 2] * 3
+    f = mm.ranking_stability_check(scores_a, scores_b)
+    assert f.level == "OK"
+    assert f.probe == "⑳ ranking-stability"
+    assert "A > B" in f.msg
+
+
+def test_ranking_stability_fail_noise():
+    """Tiny gap on few noisy items → ranking flips under resampling → FAIL."""
+    scores_a = [5, 9, 1, 8, 2, 7, 3]
+    scores_b = [6, 1, 9, 2, 8, 3, 7]   # nearly identical sums, high variance
+    f = mm.ranking_stability_check(scores_a, scores_b)
+    assert f.level in ("FAIL", "WARN")  # unstable either way
+    assert f.level == "FAIL" or "below" in f.msg
+
+
+def test_ranking_stability_fail_tied_means():
+    """Exactly tied sums → no ranking to certify → FAIL."""
+    f = mm.ranking_stability_check([5, 5, 5, 5, 5], [5, 5, 5, 5, 5])
+    assert f.level == "FAIL"
+    assert "tied" in f.msg
+
+
+def test_ranking_stability_fail_length_mismatch():
+    f = mm.ranking_stability_check([1, 2, 3], [1, 2])
+    assert f.level == "FAIL"
+    assert "mismatch" in f.msg.lower()
+
+
+def test_ranking_stability_warn_too_few():
+    f = mm.ranking_stability_check([9, 9, 9], [1, 1, 1])
+    assert f.level == "WARN"
+
+
+def test_ranking_stability_deterministic():
+    """Same inputs + seed → identical Finding (mirror discipline)."""
+    a = [5, 9, 1, 8, 2, 7, 3, 6, 4, 8]
+    b = [6, 1, 9, 2, 8, 3, 7, 4, 6, 2]
+    f1 = mm.ranking_stability_check(a, b, seed=0)
+    f2 = mm.ranking_stability_check(a, b, seed=0)
+    assert f1.msg == f2.msg and f1.level == f2.level
+
+
+# ─── badge tests ─────────────────────────────────────────────
+
+def test_badge_markdown_certified(tmp_path):
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.4)
+    cert = mm.certificate(ledger, "exp1")
+    b = mm.badge(cert, fmt="markdown")
+    assert "CERTIFIED" in b
+    assert "img.shields.io" in b
+    assert "brightgreen" in b
+
+
+def test_badge_svg_contains_seal(tmp_path):
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.4)
+    mm.retract(ledger, "exp1", "flaw")
+    cert = mm.certificate(ledger, "exp1")
+    b = mm.badge(cert, fmt="svg")
+    assert b.startswith("<svg")
+    assert "REJECTED" in b
+    assert cert["seal"] in b          # traceable back to the certificate
+    assert "#e05d44" in b             # red for REJECTED
+
+
+def test_badge_unknown_format_raises(tmp_path):
+    ledger = str(tmp_path / "l.jsonl")
+    cert = mm.certificate(ledger, "ghost")
+    import pytest
+    with pytest.raises(ValueError):
+        mm.badge(cert, fmt="png")
+
+
+def test_badge_shields_escaping(tmp_path):
+    """Dashes/underscores in claim_id are escaped for the shields URL."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "my-model_v2", metric="acc", min_n=50, baseline=0.5,
+                   pass_threshold=0.4)
+    cert = mm.certificate(ledger, "my-model_v2")
+    b = mm.badge(cert, fmt="markdown")
+    assert "my--model__v2" in b
+    # verdict CERTIFIED-WITH-WARNINGS would need escaping too
+    mm.retract(ledger, "dep", "x")  # unrelated; keep cert CERTIFIED
+    assert "img.shields.io/badge/" in b

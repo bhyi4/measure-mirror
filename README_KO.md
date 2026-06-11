@@ -11,7 +11,7 @@
 > 스스로의 연구를 정직하게 죽이는 과정에서 만들어진 도구입니다.  
 > 만든 사람들이 자신에게 먼저 실행해봤습니다. → [🦋 탄생 배경](docs/CHRONICLE.md)
 
-**[📖 프로브 완전 가이드 →](docs/GUIDE_KO.md)** — 21개 프로브 전체 설명·예제·워크플로우
+**[📖 프로브 완전 가이드 →](docs/GUIDE_KO.md)** — 23개 프로브 전체 설명·예제·워크플로우
 
 ---
 
@@ -125,7 +125,7 @@ def test_my_model_is_real():
 
 ---
 
-## 21종 Probe + 5 유틸리티 전체 목록
+## 23종 Probe + 6 유틸리티 전체 목록
 
 | Probe | 번호 | 잡아내는 것 |
 |---|---|---|
@@ -150,6 +150,8 @@ def test_my_model_is_real():
 | `inter_rater_agreement` | ⑯ | Cohen's κ 미달 — 두 판정자(런) 간 일치도 부족 |
 | `judge_score_sanity` | ⑰ | 판정자가 동일/근사 점수만 부여 — 퇴화 분포 감지 |
 | `judge_swap_check` | ⑱ | AB→BA 교환 후에도 같은 슬롯 선택 — 내용 아닌 위치를 읽는 판정자 |
+| `judge_transitivity_check` | ⑲ | A>B>C>A 순환 선호 — 일관된 품질 척도가 없는 판정자 |
+| `ranking_stability_check` | ⑳ | "A가 B를 이김"이 부트스트랩 리샘플링에서 뒤집힘 — 순위 신기루 |
 
 | 유틸리티 | 역할 |
 |---|---|
@@ -158,6 +160,7 @@ def test_my_model_is_real():
 | `witness` | 커맨드 실행·출력 캡처·변조 방지 실행 봉인 원장에 기록 |
 | `retract` | 체인 연결 철회 엔트리 추가 → 의존 주장 cascade_check에서 STALE |
 | `certificate` | 봉인된 검증 인증서 발행: CERTIFIED / WITH-WARNINGS / UNVERIFIED / REJECTED |
+| `badge` | 인증서를 임베드 가능한 markdown / SVG 배지로 렌더링 (verdict 색상) |
 
 ### 체인 해시 원장 (① 확장)
 
@@ -367,13 +370,24 @@ forward = [0, 1, 0, 1, 0]   # (A, B) 순서 승자
 swapped = [0, 1, 0, 1, 0]   # AB→BA 교환 후 승자 — 동일 = 위치 고착!
 f = mm.judge_swap_check(forward, swapped)
 # 🔴  Position-lock rate 100.0% > 65.0%. 판정자가 내용이 아닌 위치를 읽고 있음.
+
+# ⑲ 이행성 — 판정자에게 일관된 품질 척도가 있나?
+matches = [("gpt", "claude", 0), ("claude", "llama", 0), ("llama", "gpt", 0)]
+f = mm.judge_transitivity_check(matches)
+# 🔴  순환 선호 적발: gpt > claude > llama > gpt.
+#     이 판정으로 만든 리더보드는 대진 순서의 산물.
+
+# ⑳ 순위 안정성 — "A가 B를 이김"이 리샘플링을 버티나?
+f = mm.ranking_stability_check(scores_model_a, scores_model_b)
+# 🔴  순위 'A > B'가 1000회 부트스트랩 중 64.2%만 유지 (n=7).
+#     순위는 노이즈 — 동점과 구별 불가.
 ```
 
 ```bash
 # CLI: 수집된 판정 점수를 JSON 파일로 감사
 mm judge --file judge_scores.json
 # 키: score_pairs / pairwise_results / ratings_matrix / scores /
-#     forward_results + swapped_results
+#     forward_results + swapped_results / matches / scores_a + scores_b
 ```
 
 ### 인증서(Certificate) 📜 — 주장당 하나의 봉인된 판정
@@ -410,6 +424,24 @@ mm certify my_model | gh gist create -        # 외부 공개
 
 인증서는 원장의 `anchor_hash`를 포함하므로 **특정 원장 상태 하나**를 보증합니다.
 인증서 자체도 봉인되어 있어 필드 수정은 즉시 탐지됩니다.
+
+**배지 🏷 — verdict를 README에 임베드:**
+
+```bash
+mm certify my_model --badge markdown >> README.md   # shields.io 배지
+mm certify my_model --badge svg > badge.svg          # 오프라인 자체완결 SVG
+```
+
+```python
+cert = mm.certificate("mm_ledger.jsonl", "my_model")
+print(mm.badge(cert))                 # markdown (기본)
+print(mm.badge(cert, fmt="svg"))      # 인증서 seal이 툴팁에 포함된 SVG
+# ![🪞 my_model: CERTIFIED](https://img.shields.io/badge/🪞_my__model-CERTIFIED-brightgreen)
+```
+
+배지 색상은 verdict를 따릅니다: CERTIFIED = 초록 · WITH-WARNINGS = 노랑 ·
+UNVERIFIED = 회색 · REJECTED = 빨강. SVG 버전은 인증서 seal과 anchor-hash
+접두사를 툴팁에 내장해, 배지가 어떤 봉인된 인증서를 렌더링한 것인지 추적 가능합니다.
 
 ### 앵커(Anchor) ⎈
 
@@ -493,14 +525,15 @@ pip install "measure-mirror[mcp]"
 
 **기타 MCP 클라이언트** — stdio 서버 명령으로 `mm-mcp`를 실행하세요.
 
-21종 probe + 5 유틸리티 전부 MCP 도구로 노출됩니다:  
+23종 probe + 6 유틸리티 전부 MCP 도구로 노출됩니다:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
 `mm_falsifiability_check` · `mm_cascade_check` · `mm_negative_audit` ·  
 `mm_judge_consistency_check` · `mm_judge_bias_check` · `mm_inter_rater_agreement` ·  
-`mm_judge_score_sanity` · `mm_judge_swap_check` ·  
-`mm_anchor` · `mm_calibrate` · `mm_witness` · `mm_retract` · `mm_certificate`
+`mm_judge_score_sanity` · `mm_judge_swap_check` · `mm_judge_transitivity_check` ·  
+`mm_ranking_stability_check` ·  
+`mm_anchor` · `mm_calibrate` · `mm_witness` · `mm_retract` · `mm_certificate` · `mm_badge`
 
 ---
 
@@ -537,8 +570,8 @@ python examples/demo_field.py    # Field 후보 거짓양성
 ```
 measure-mirror/
 ├── measure_mirror/
-│   ├── mm.py              # 18종 probe + CLI + DB 조회 (의존성 없음)
-│   ├── mcp_server.py      # MCP 서버 — 26개 도구 (pip install .[mcp])
+│   ├── mm.py              # 20종 probe + CLI + DB 조회 (의존성 없음)
+│   ├── mcp_server.py      # MCP 서버 — 29개 도구 (pip install .[mcp])
 │   ├── judge.py           # LLM-as-a-Judge 러너 (pip install .[judge])
 │   └── pytest_plugin.py   # assert_clean() — CI 게이트
 ├── docs/
@@ -558,7 +591,7 @@ measure-mirror/
 │   ├── false_negative_guards.jsonl
 │   └── self_catches.jsonl     자체 적발 거짓양성
 └── tests/
-    ├── test_mm.py         # 121개 코어 프로브 테스트, CI 강제
+    ├── test_mm.py         # 137개 코어 프로브 테스트, CI 강제
     ├── test_judge.py      # 16개 judge.py 모듈 테스트
     └── test_sync.py       # sync gate: probe ↔ MCP ↔ 테스트 ↔ README ↔ 노출 ↔ 버전
 ```

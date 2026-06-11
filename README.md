@@ -15,7 +15,7 @@ Zero training · Deterministic · Zero dependencies (Python 3.10+ stdlib only).
 > Built while honestly killing our own project.  
 > The makers ran it on themselves first. → [🦋 Origin Story](docs/CHRONICLE.md)
 
-**[📖 Full Probe Guide →](docs/GUIDE.md)** — detailed explanations, worked examples, and workflows for all 21 probes
+**[📖 Full Probe Guide →](docs/GUIDE.md)** — detailed explanations, worked examples, and workflows for all 23 probes
 
 ---
 
@@ -129,7 +129,7 @@ def test_my_model_is_real():
 
 ---
 
-## All 21 Probes + 5 Utilities
+## All 23 Probes + 6 Utilities
 
 | Probe | Check # | Catches |
 |---|---|---|
@@ -154,6 +154,8 @@ def test_my_model_is_real():
 | `inter_rater_agreement` | ⑯ | Cohen's κ between two judges below threshold — poor agreement |
 | `judge_score_sanity` | ⑰ | Judge assigns identical/near-identical scores — degenerate distribution |
 | `judge_swap_check` | ⑱ | Verdict stays with the slot after AB→BA swap — judge reads position, not content |
+| `judge_transitivity_check` | ⑲ | A>B>C>A preference cycles — judge has no consistent quality scale |
+| `ranking_stability_check` | ⑳ | "A beats B" flips under bootstrap resampling — ranking mirage |
 
 | Utility | Purpose |
 |---|---|
@@ -162,6 +164,7 @@ def test_my_model_is_real():
 | `witness` | Execute a command, capture output, seal tamper-evident run record |
 | `retract` | Append a chain-linked retraction entry; cascades to dependents via cascade_check |
 | `certificate` | Issue a sealed verification certificate: CERTIFIED / WITH-WARNINGS / UNVERIFIED / REJECTED |
+| `badge` | Render a certificate as an embeddable markdown / SVG badge (verdict-colored) |
 
 ### Chain hash ledger (① extended)
 
@@ -398,13 +401,24 @@ forward = [0, 1, 0, 1, 0]   # winners in (A, B) order
 swapped = [0, 1, 0, 1, 0]   # winners after AB→BA swap — identical = locked!
 f = mm.judge_swap_check(forward, swapped)
 # 🔴  Position-lock rate 100.0% > 65.0%. Judge is reading position, not content.
+
+# ⑲ transitivity — does the judge have a consistent quality scale?
+matches = [("gpt", "claude", 0), ("claude", "llama", 0), ("llama", "gpt", 0)]
+f = mm.judge_transitivity_check(matches)
+# 🔴  Preference cycle detected: gpt > claude > llama > gpt.
+#     Any leaderboard from these verdicts is order-dependent.
+
+# ⑳ ranking stability — does "A beats B" survive resampling?
+f = mm.ranking_stability_check(scores_model_a, scores_model_b)
+# 🔴  Ranking 'A > B' survives only 64.2% of 1000 bootstrap resamples (n=7).
+#     The ranking is noise — indistinguishable from a tie.
 ```
 
 ```bash
 # CLI: audit pre-collected judge scores from a JSON file
 mm judge --file judge_scores.json
 # keys: score_pairs / pairwise_results / ratings_matrix / scores /
-#       forward_results + swapped_results
+#       forward_results + swapped_results / matches / scores_a + scores_b
 ```
 
 ### Certificate 📜 — one sealed verdict per claim
@@ -441,6 +455,25 @@ mm certify my_model | gh gist create -        # publish externally
 
 The certificate embeds the ledger's `anchor_hash`, so it attests to **one specific
 ledger state** — and the certificate itself is sealed, so any field edit is detectable.
+
+**Badge 🏷 — embed the verdict in your README:**
+
+```bash
+mm certify my_model --badge markdown >> README.md   # shields.io badge
+mm certify my_model --badge svg > badge.svg          # offline self-contained SVG
+```
+
+```python
+cert = mm.certificate("mm_ledger.jsonl", "my_model")
+print(mm.badge(cert))                 # markdown (default)
+print(mm.badge(cert, fmt="svg"))      # SVG with cert seal in the tooltip
+# ![🪞 my_model: CERTIFIED](https://img.shields.io/badge/🪞_my__model-CERTIFIED-brightgreen)
+```
+
+Badge color follows the verdict: CERTIFIED = green · WITH-WARNINGS = yellow ·
+UNVERIFIED = grey · REJECTED = red. The SVG variant embeds the certificate seal
+and anchor-hash prefix in its tooltip, making the badge traceable back to the
+exact sealed certificate it renders.
 
 ### Anchor ⎈
 
@@ -535,14 +568,15 @@ pip install "measure-mirror[mcp]"
 
 **Other MCP clients** — run `mm-mcp` as the stdio server command.
 
-All 21 probes + 5 utilities are exposed as MCP tools:  
+All 23 probes + 6 utilities are exposed as MCP tools:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
 `mm_falsifiability_check` · `mm_cascade_check` · `mm_negative_audit` ·  
 `mm_judge_consistency_check` · `mm_judge_bias_check` · `mm_inter_rater_agreement` ·  
-`mm_judge_score_sanity` · `mm_judge_swap_check` ·  
-`mm_anchor` · `mm_calibrate` · `mm_witness` · `mm_retract` · `mm_certificate`
+`mm_judge_score_sanity` · `mm_judge_swap_check` · `mm_judge_transitivity_check` ·  
+`mm_ranking_stability_check` ·  
+`mm_anchor` · `mm_calibrate` · `mm_witness` · `mm_retract` · `mm_certificate` · `mm_badge`
 
 ---
 
@@ -579,8 +613,8 @@ python examples/demo_field.py    # Field candidate false positives
 ```
 measure-mirror/
 ├── measure_mirror/
-│   ├── mm.py              # 18 probes + CLI + DB lookup (zero deps)
-│   ├── mcp_server.py      # MCP server — 26 tools (pip install .[mcp])
+│   ├── mm.py              # 20 probes + CLI + DB lookup (zero deps)
+│   ├── mcp_server.py      # MCP server — 29 tools (pip install .[mcp])
 │   ├── judge.py           # LLM-as-a-Judge runner (pip install .[judge])
 │   └── pytest_plugin.py   # assert_clean() for CI gates
 ├── docs/
@@ -600,7 +634,7 @@ measure-mirror/
 │   ├── false_negative_guards.jsonl
 │   └── self_catches.jsonl     our own false positives
 └── tests/
-    ├── test_mm.py         # 121 tests for core probes, CI-enforced
+    ├── test_mm.py         # 137 tests for core probes, CI-enforced
     ├── test_judge.py      # 16 tests for judge.py module
     └── test_sync.py       # sync gate: probe ↔ MCP ↔ tests ↔ README ↔ exports ↔ version
 ```

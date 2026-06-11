@@ -5,6 +5,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.12.0] — 2026-06-11
+
+### Added
+- **⑲ `judge_transitivity_check(matches)`** — preference-cycle detection for
+  pairwise judge tournaments. Aggregates matches per pair by majority vote and
+  DFS-checks the preference graph; a cycle (A>B>C>A) means the judge has no
+  consistent quality scale and any leaderboard from its verdicts is an artifact
+  of match ordering. Tied pairs produce no edge (no false cycles).
+- **⑳ `ranking_stability_check(scores_a, scores_b, *, n_boot=1000, seed=0, min_stability=0.95)`**
+  — bootstrap guard against ranking mirages. Resamples paired per-item scores
+  and measures how often "A beats B" survives. Deterministic (seeded RNG).
+  FAIL below 80% stability, WARN below 95%, FAIL on exactly tied means.
+- **`badge(cert, *, fmt="markdown"|"svg")`** — render a certificate as an
+  embeddable badge. Markdown form uses shields.io (verdict-colored: green /
+  yellow / grey / red); SVG form is self-contained and offline, with the
+  certificate seal + anchor-hash prefix embedded in the tooltip for
+  traceability.
+- **CLI**: `mm certify --badge {markdown,svg}`; `mm judge --file` now also
+  accepts `matches` (⑲) and `scores_a`+`scores_b` (⑳) keys.
+- **3 new MCP tools**: `mm_judge_transitivity_check`,
+  `mm_ranking_stability_check`, `mm_badge` (29 tools total).
+- 16 new tests (total: 144 → 160, all passing).
+
+### Changed
+- Probe count: 18 → 20 / utilities 5 → 6. README "23 Probes + 6 Utilities".
+- `badge` added to sync-gate `_MCP_UTILITY_TOOLS`.
+- `__init__.py`: exports `judge_transitivity_check`, `ranking_stability_check`,
+  `badge`; `__version__` 0.12.0.
+- mm.py imports `random` (stdlib — still zero external dependencies).
+
+---
+
 ## [0.11.0] — 2026-06-11
 
 ### Added

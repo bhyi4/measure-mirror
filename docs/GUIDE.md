@@ -857,6 +857,93 @@ ledger entry (`parse_failures`).
 
 ---
 
+### Group 7 — Ranking integrity ⑲⑳
+
+The judge probes (Group 6) audit individual verdicts. These two probes audit the
+**rankings built from those verdicts** — the leaderboard layer where most
+publication claims actually live.
+
+---
+
+#### ⑲ `judge_transitivity_check`
+
+**Catches**: preference cycles (A>B>C>A) in pairwise tournaments — a judge with
+no consistent quality scale.
+
+When a judge ranks more than two models via pairwise comparisons, the aggregated
+preferences must form a transitive order. A cycle means any leaderboard built
+from these verdicts is an artifact of match ordering: run the bracket in a
+different order, get a different champion.
+
+```python
+# matches: [(model_a, model_b, winner), ...] — winner 0 = first, 1 = second
+# Repeated matches of the same pair aggregate by majority vote.
+
+matches = [("gpt", "claude", 0),     # gpt > claude
+           ("claude", "llama", 0),   # claude > llama
+           ("gpt", "llama", 0)]      # gpt > llama — transitive ✓
+f = mm.judge_transitivity_check(matches)
+# ✅ [⑲ judge-transitivity] Preference graph over 3 models is acyclic —
+#    a consistent ranking exists.
+
+matches = [("gpt", "claude", 0),     # gpt > claude
+           ("claude", "llama", 0),   # claude > llama
+           ("llama", "gpt", 0)]      # llama > gpt — cycle!
+f = mm.judge_transitivity_check(matches)
+# 🔴 [⑲ judge-transitivity] Preference cycle detected: gpt > claude > llama > gpt.
+#    Judge is not applying a consistent quality scale.
+```
+
+Exactly tied pairs (equal wins each way) produce no edge and cannot create a
+false cycle; the OK message reports how many ties were excluded.
+
+**Levels:**
+- `FAIL` — at least one cycle (an example path is shown)
+- `WARN` — fewer than 3 distinct models, or no matches
+- `OK` — preference graph is acyclic
+
+---
+
+#### ⑳ `ranking_stability_check`
+
+**Catches**: ranking mirages — "model A beats model B" claims that flip when the
+same-sized sample is redrawn.
+
+Bootstrap resampling: redraw item indices with replacement `n_boot` times and
+measure how often the observed winner stays the winner. Deterministic (seeded
+RNG) — the same inputs always produce the same Finding, preserving mirror
+reproducibility discipline.
+
+```python
+# Per-item scores for two models on the same items (paired by index)
+scores_a = [9, 8, 9, 9, 8, 9, 8, 9]   # consistently high
+scores_b = [3, 2, 3, 2, 3, 2, 3, 2]   # consistently low
+f = mm.ranking_stability_check(scores_a, scores_b)
+# ✅ [⑳ ranking-stability] Ranking 'A > B' survives 100.0% of 1000 bootstrap
+#    resamples (n=8). Stable.
+
+scores_a = [5, 9, 1, 8, 2, 7, 3]      # high variance,
+scores_b = [6, 1, 9, 2, 8, 3, 7]      # nearly tied sums
+f = mm.ranking_stability_check(scores_a, scores_b)
+# 🔴 [⑳ ranking-stability] Ranking 'B > A' survives only 52.4% of 1000
+#    bootstrap resamples (n=7). The ranking is noise.
+```
+
+**Parameters:**
+| Param | Default | Notes |
+|---|---|---|
+| `scores_a`, `scores_b` | required | paired per-item scores; equal length, ≥ 5 items |
+| `n_boot` | 1000 | bootstrap resamples |
+| `seed` | 0 | RNG seed (determinism) |
+| `min_stability` | 0.95 | required winner-preservation fraction |
+
+**Levels:**
+- `FAIL` — length mismatch · tied means · stability < 0.80
+- `WARN` — fewer than 5 items · 0.80 ≤ stability < min_stability
+- `OK` — stability ≥ min_stability
+
+---
+
 ## Utility reference
 
 ### `calibrate`
@@ -940,6 +1027,34 @@ Key properties:
   ledger state**; regenerate after any ledger change.
 - The certificate itself is sealed (SHA-256) — any field edit is detectable.
 - Not appended to the ledger; it is an output artifact like `anchor()`.
+
+---
+
+### `badge`
+
+Render a certificate as an embeddable badge — the verdict made visible.
+
+```python
+cert = mm.certificate("ledger.jsonl", "my_model")
+mm.badge(cert)                 # markdown — shields.io image for README
+mm.badge(cert, fmt="svg")      # self-contained SVG, works offline
+```
+
+```bash
+mm certify my_model --badge markdown >> README.md
+mm certify my_model --badge svg > badge.svg
+```
+
+| Verdict | Color |
+|---|---|
+| `CERTIFIED` | brightgreen |
+| `CERTIFIED-WITH-WARNINGS` | yellow |
+| `UNVERIFIED` | lightgrey |
+| `REJECTED` | red |
+
+The SVG variant embeds the certificate `seal` and anchor-hash prefix in its
+`<title>` tooltip — every badge is traceable back to the exact sealed
+certificate it renders. No external service needed for the SVG form.
 
 ---
 
@@ -1147,11 +1262,14 @@ Agent: [calls mm_register, then mm_audit]
 | ⑯ | `inter_rater_agreement` | Cohen's κ below threshold (poor agreement) | standalone |
 | ⑰ | `judge_score_sanity` | judge assigns identical/near-identical scores | standalone |
 | ⑱ | `judge_swap_check` | verdict follows the slot, not the content (AB→BA swap) | via `judge_run(swap_positions=True)` |
+| ⑲ | `judge_transitivity_check` | A>B>C>A preference cycles in tournaments | standalone / `mm judge` |
+| ⑳ | `ranking_stability_check` | ranking flips under bootstrap resampling | standalone / `mm judge` |
 | — | `anchor` | complete ledger replacement | manual (before publish) |
 | — | `calibrate` | mirror itself has regressions | manual (before witness) |
 | — | `witness` | execution record: what ran, when, output hash | manual |
 | — | `retract` | create retraction record (chain-linked) | manual |
 | — | `certificate` | sealed verdict artifact for one claim (anchor-pinned) | manual (before publish) |
+| — | `badge` | embeddable verdict badge (markdown / SVG) | manual (`mm certify --badge`) |
 
 **Severity policy** across the codebase:
 - `FAIL` — hard stop; result is invalid or self-contradicted

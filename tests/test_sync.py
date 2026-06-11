@@ -39,7 +39,7 @@ PROBES = _probe_functions()
 # MCP tools that intentionally don't map to a Finding-returning probe function.
 # "mm_register" wraps preregister() → dict.
 # "mm_witness" wraps witness() → dict (records a run, not an audit Finding).
-_MCP_UTILITY_TOOLS = {"register", "anchor", "witness", "retract", "certificate"}
+_MCP_UTILITY_TOOLS = {"register", "anchor", "witness", "retract", "certificate", "badge"}
 
 
 def test_probe_list_nonempty():

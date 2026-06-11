@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — MCP server
 
-Exposes 21 probes + 5 utilities (anchor, calibrate, witness, retract, certificate) as MCP tools via stdio transport so any
+Exposes 23 probes + 6 utilities (anchor, calibrate, witness, retract, certificate, badge) as MCP tools via stdio transport so any
 MCP-compatible AI (Claude Code, Cursor, Windsurf, …) can call them
 directly mid-conversation.
 
@@ -596,6 +596,71 @@ async def list_tools() -> list[types.Tool]:
                 "required": ["ledger_path", "claim_id"],
             },
         ),
+        types.Tool(
+            name="mm_judge_transitivity_check",
+            description=(
+                "⑲ Detect preference cycles (A>B>C>A) in a pairwise judge tournament. "
+                "Aggregates matches per pair by majority vote and checks the preference "
+                "graph for cycles. A cycle means the judge is not applying a consistent "
+                "quality scale — any leaderboard built from its verdicts is an artifact "
+                "of match ordering, not model quality."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "matches": {
+                        "type": "array",
+                        "items": {"type": "array"},
+                        "description": "[[model_a, model_b, winner], ...] — winner is "
+                                       "0 (model_a won) or 1 (model_b won)",
+                    },
+                },
+                "required": ["matches"],
+            },
+        ),
+        types.Tool(
+            name="mm_ranking_stability_check",
+            description=(
+                "⑳ Check that a ranking claim ('model A beats model B') survives "
+                "bootstrap resampling of the per-item scores. With few items or high "
+                "variance, redrawing the sample flips the winner — the ranking is a "
+                "mirage. Deterministic (seeded RNG). FAIL below 80% stability, WARN "
+                "below min_stability (default 95%)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "scores_a": {"type": "array", "items": {"type": "number"},
+                                 "description": "Per-item scores for model A"},
+                    "scores_b": {"type": "array", "items": {"type": "number"},
+                                 "description": "Per-item scores for model B (paired by index)"},
+                    "n_boot":   {"type": "integer", "default": 1000},
+                    "seed":     {"type": "integer", "default": 0},
+                    "min_stability": {"type": "number", "default": 0.95},
+                },
+                "required": ["scores_a", "scores_b"],
+            },
+        ),
+        types.Tool(
+            name="mm_badge",
+            description=(
+                "🏷 Render a claim's certificate as an embeddable badge. fmt='markdown' "
+                "returns shields.io image markdown for README embedding; fmt='svg' "
+                "returns a self-contained offline SVG with the certificate seal in its "
+                "tooltip. Badge color reflects the verdict: CERTIFIED=green, "
+                "WITH-WARNINGS=yellow, UNVERIFIED=grey, REJECTED=red."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ledger_path": {"type": "string", "description": "Ledger JSONL path"},
+                    "claim_id":    {"type": "string", "description": "Claim to badge"},
+                    "fmt":         {"type": "string", "enum": ["markdown", "svg"],
+                                    "default": "markdown"},
+                },
+                "required": ["ledger_path", "claim_id"],
+            },
+        ),
     ]
 
 
@@ -874,6 +939,27 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 findings=fnds,
             )
             result = json.dumps(c, indent=2, ensure_ascii=False)
+
+        elif name == "mm_judge_transitivity_check":
+            result = _single(mm.judge_transitivity_check(
+                [tuple(m) for m in arguments["matches"]],
+            ))
+
+        elif name == "mm_ranking_stability_check":
+            result = _single(mm.ranking_stability_check(
+                arguments["scores_a"],
+                arguments["scores_b"],
+                n_boot=arguments.get("n_boot", 1000),
+                seed=arguments.get("seed", 0),
+                min_stability=arguments.get("min_stability", 0.95),
+            ))
+
+        elif name == "mm_badge":
+            c = mm.certificate(
+                arguments["ledger_path"],
+                arguments["claim_id"],
+            )
+            result = mm.badge(c, fmt=arguments.get("fmt", "markdown"))
 
         else:
             result = f"Unknown tool: {name}"
