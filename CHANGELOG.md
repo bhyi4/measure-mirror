@@ -1,0 +1,82 @@
+# Changelog
+
+All notable changes to Measurement Mirror are documented here.  
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+---
+
+## [0.3.0] — 2026-06-11
+
+### Added
+- **① Chain hash ledger** — `preregister()` now embeds `prev_seal` in every
+  entry before computing the SHA-256 seal. The full ledger becomes a
+  tamper-evident chain. `verify_chain(ledger_path)` walks all entries and
+  checks both individual seals and chain links. Catches: entry deletion,
+  insertion, and content modification. Backward-compatible: legacy entries
+  without `prev_seal` skip the chain check gracefully.
+- **⑧ `power_check(n, baseline, *, min_detectable_effect, alpha, target_power)`**
+  — False-negative guard. Warns when `n` is too small to detect the minimum
+  detectable effect at the specified power level (default 80%). Closes the
+  gap between the "bidirectional" design principle and the actual
+  implementation. Available standalone and via `full_audit(min_detectable_effect=...)`.
+- **⑨ `multiple_comparisons_check(ledger_path, *, alpha)`** — Garden-of-forking-
+  paths detector. Counts distinct `claim_id` values in the ledger and warns
+  with the Bonferroni-corrected α when k>1. Re-registrations for the same
+  `claim_id` count as k=1 (consistent with first-write-wins). Available
+  standalone and via `full_audit(check_multiplicity=True)`.
+- `full_audit()` gains two new optional parameters: `min_detectable_effect`
+  (activates ⑧) and `check_multiplicity` (activates ⑨).
+- Tests expanded from 28 → 46 (all passing).
+
+### Changed
+- Probe count: 9 → 12 (README/README_KO updated).
+- Documented chain-hash limitation: complete ledger file replacement is not
+  caught — git commit anchoring is the recommended complement.
+
+---
+
+## [0.2.0] — 2026-06-11
+
+### Added
+- **③ `gaming_check(metric, reward_terms)`** — Detects eval metric appearing
+  directly in the training reward/loss (self-fulfilling artifact).
+- **⑤ `multiseed_check(seed_results, *, baseline, cv_threshold)`** — Alarms on
+  unstable cross-seed results or baseline falling within the seed range.
+- **⑦ `too_good_check(name, claimed, baseline, *, suspicious_margin)`** —
+  Flags suspiciously large improvements before they are believed.
+- **`continuous_audit()`** — Audits non-binary metrics (MSE, Pearson r, RMSE…)
+  using direction check + optional effect-size (z-score).
+- **`full_audit()`** — Single call that runs all probes; optional probes
+  activate when their args are provided.
+- **MCP server** (`measure_mirror/mcp_server.py`, entry point `mm-mcp`) —
+  All probes exposed as MCP tools for AI agent integration.
+- **pytest plugin** (`measure_mirror/pytest_plugin.py`) — `assert_clean()`
+  turns FAIL findings into CI failures.
+- `pyproject.toml` v0.2.0 with `[mcp]` and `[test]` optional dependencies.
+- `examples/quickstart.py` and `examples/mcp_example.py`.
+- English-primary README with `README_KO.md` for Korean users.
+
+### Fixed
+- `_load_prereg()` now returns the **first** matching entry (was returning
+  last). This is the correct behavior: first-write wins.
+- `_verify_seal()` added to `audit()` — tamper detection was missing.
+- `pass_threshold` check added to `audit()` — registered bar was not enforced.
+
+---
+
+## [0.1.0] — 2026-06-08 (initial public release)
+
+### Added
+- Core probe engine with zero dependencies (Python stdlib only).
+- **① Pre-registration** — append-only JSONL ledger, SHA-256 seal, first-write
+  wins, metric-swap detection, min_n enforcement.
+- **② `baseline_fairness()`** — crippled / tied / reversed baseline detection.
+- **④a `wilson_ci()`** — small-sample Wilson score confidence interval.
+- **④a `leakage_check()`** — train∩test hash intersection.
+- **④a direction** — anti-signal detection (worse than chance).
+- **⑥ `scope_check()`** — over-generalization detection.
+- **`audit()`** — binary/classification metric audit combining ①+④a.
+- `report()` printer, `lookup_baseline()` DB helper.
+- CLI entry point `mm` with `register` and `audit` subcommands.
+- `db/baselines.json` shared baseline database (git-based, no server).
+- Apache 2.0 license. Dog-fooded on ZERO and Field projects.

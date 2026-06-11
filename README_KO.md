@@ -122,11 +122,12 @@ def test_my_model_is_real():
 
 ---
 
-## 9종 Probe 전체 목록
+## 12종 Probe 전체 목록
 
 | Probe | 번호 | 잡아내는 것 |
 |---|---|---|
 | `preregister` / `audit` | ① | 사후 지표 교체 · 표본 미달 · 원장 위변조 |
+| `verify_chain` | ① | 엔트리 삭제/삽입 · 원장 재작성 후 재등록 |
 | `audit` — Wilson CI | ④a | 통계적으로 우연과 구별 불가 (소표본) |
 | `audit` — direction | ④a | 기준선보다 낮은 성능 (역신호) |
 | `baseline_fairness` | ② | 허약한 / 동점 / 역전된 기준선 |
@@ -135,6 +136,44 @@ def test_my_model_is_real():
 | `multiseed_check` | ⑤ | 불안정한 신호 / 운 좋은 시드 |
 | `scope_check` | ⑥ | 주장 범위 > 검증 범위 (과대 일반화) |
 | `too_good_check` | ⑦ | 기준선 대비 지나치게 큰 개선폭 |
+| `power_check` | ⑧ | n이 너무 작아 진짜 효과를 못 잡음 (거짓음성 가드) |
+| `multiple_comparisons_check` | ⑨ | 같은 레저에 k>1 실험 → Bonferroni 교정 경보 |
+
+### 체인 해시 원장 (① 확장)
+
+모든 `preregister()` 호출이 이전 엔트리의 seal을 포함하고 SHA-256을 계산합니다.
+원장 파일 전체가 위변조 방지 체인이 됩니다:
+
+```python
+# 언제든지 원장 체인 전체 검증
+findings = mm.verify_chain("mm_ledger.jsonl")
+mm.report("원장 무결성", findings)
+```
+
+적발 범위: 엔트리 삭제, 삽입, 내용 수정.  
+**명시된 한계**: 파일 통째 삭제 + 새 등록은 못 잡음 — git 커밋으로 보완.
+
+### 검정력 probe ⑧
+
+```python
+# n이 진짜 효과를 잡기에 충분한지 사전 경고
+f = mm.power_check(n=50, baseline=0.5, min_detectable_effect=0.05)
+# ⚠️  n=50은 Δ=+0.05 탐지에 부족 (필요 n≥388, 80% 검정력)
+
+# full_audit에서 활성화
+findings = mm.full_audit(LEDGER, "my_model", ..., min_detectable_effect=0.05)
+```
+
+### 다중비교 probe ⑨
+
+```python
+# 같은 레저에 k>1 실험이 있으면 Bonferroni 교정 경보
+f = mm.multiple_comparisons_check("mm_ledger.jsonl")
+# ⚠️  k=3 실험 → Bonferroni α=0.0167 (0.05가 아님)
+
+# full_audit에서 활성화
+findings = mm.full_audit(LEDGER, "my_model", ..., check_multiplicity=True)
+```
 
 ---
 

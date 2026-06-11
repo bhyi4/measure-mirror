@@ -126,11 +126,12 @@ def test_my_model_is_real():
 
 ---
 
-## All 9 Probes
+## All 12 Probes
 
 | Probe | Check # | Catches |
 |---|---|---|
 | `preregister` / `audit` | ① | Post-hoc metric swap · sample underrun · ledger tampering |
+| `verify_chain` | ① | Deleted/inserted entries · re-registration after wiping ledger |
 | `audit` — Wilson CI | ④a | Results indistinguishable from chance (small sample) |
 | `audit` — direction | ④a | Performance worse than baseline (anti-signal) |
 | `baseline_fairness` | ② | Crippled / tied / reversed baseline |
@@ -139,6 +140,45 @@ def test_my_model_is_real():
 | `multiseed_check` | ⑤ | Unstable signal / lucky seed |
 | `scope_check` | ⑥ | Claimed scope wider than tested scope |
 | `too_good_check` | ⑦ | Suspiciously large Δ over baseline |
+| `power_check` | ⑧ | n too small to detect minimum effect (false-negative guard) |
+| `multiple_comparisons_check` | ⑨ | k>1 experiments in ledger — Bonferroni correction alarm |
+
+### Chain hash ledger (① extended)
+
+Every `preregister()` call now embeds the previous entry's seal into the new one
+before computing the SHA-256. This makes the ledger tamper-evident end-to-end:
+
+```python
+# verify the entire ledger chain at any time
+findings = mm.verify_chain("mm_ledger.jsonl")
+mm.report("ledger integrity", findings)
+```
+
+Catches: entry deletion, entry insertion, content modification.  
+**Documented limitation**: complete file deletion + fresh re-registration is not caught —
+commit the ledger file to git for that guarantee.
+
+### Power check ⑧
+
+```python
+# warn when n is too small to detect a real effect
+f = mm.power_check(n=50, baseline=0.5, min_detectable_effect=0.05)
+# ⚠️  n=50 insufficient to detect Δ=+0.05 at 80% power (need n≥388)
+
+# or activate via full_audit
+findings = mm.full_audit(LEDGER, "my_model", ..., min_detectable_effect=0.05)
+```
+
+### Multiple comparisons ⑨
+
+```python
+# warn when k>1 experiments share a ledger (Bonferroni)
+f = mm.multiple_comparisons_check("mm_ledger.jsonl")
+# ⚠️  k=3 experiments → Bonferroni α=0.0167 (not 0.05)
+
+# or activate via full_audit
+findings = mm.full_audit(LEDGER, "my_model", ..., check_multiplicity=True)
+```
 
 ---
 
