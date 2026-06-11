@@ -1,11 +1,11 @@
-"""measure-mirror 자체 테스트 — CI에서 회귀 차단 (도그푸딩)."""
+"""measure-mirror test suite — regression gate (dog-fooded)."""
 import json
 import pytest
 from measure_mirror import mm
 from measure_mirror.pytest_plugin import assert_clean
 
 
-# ─── 기존 테스트 (회귀 방지) ───────────────────────────────────
+# ─── Core probes ──────────────────────────────────────────────
 
 def test_small_sample_caught():
     f = mm.audit("/dev/null", "x", reported_metric="acc", reported_acc=0.556, n=9)
@@ -52,10 +52,10 @@ def test_db_baseline_lookup():
     assert mm.lookup_baseline("nonexistent", db_dir="db") is None
 
 
-# ─── 버그 수정 검증 ────────────────────────────────────────────
+# ─── Bug-fix regression tests ─────────────────────────────────
 
 def test_first_registration_wins(tmp_path):
-    """재등록 시도 시 첫 번째 등록만 유효."""
+    """Second registration for same claim_id must be ignored."""
     ledger = str(tmp_path / "l.jsonl")
     mm.preregister(ledger, "exp1", metric="acc", min_n=200, baseline=0.5, pass_threshold=0.6)
     mm.preregister(ledger, "exp1", metric="f1",  min_n=10,  baseline=0.3, pass_threshold=0.5)
@@ -65,41 +65,40 @@ def test_first_registration_wins(tmp_path):
 
 
 def test_seal_tamper_detected(tmp_path):
-    """원장 파일 수정 시 봉인 위변조 탐지."""
+    """Direct ledger file modification must trigger seal-tamper FAIL."""
     ledger = str(tmp_path / "l.jsonl")
     mm.preregister(ledger, "exp2", metric="acc", min_n=200, baseline=0.5, pass_threshold=0.6)
-    # 원장 파일 직접 조작
     with open(ledger) as f:
         entry = json.loads(f.read())
-    entry["baseline"] = 0.1  # 위변조
+    entry["baseline"] = 0.1  # tamper
     with open(ledger, "w") as f:
         f.write(json.dumps(entry))
     findings = mm.audit(ledger, "exp2", reported_metric="acc", reported_acc=0.72, n=500)
-    assert any("위변조" in x.probe for x in findings)
+    assert any("seal-tamper" in x.probe for x in findings)
     assert any(x.level == "FAIL" for x in findings)
 
 
 def test_pass_threshold_fail(tmp_path):
-    """acc < pass_threshold 이면 FAIL."""
+    """acc < pass_threshold → FAIL."""
     ledger = str(tmp_path / "l.jsonl")
     mm.preregister(ledger, "exp3", metric="acc", min_n=10, baseline=0.5, pass_threshold=0.80)
     findings = mm.audit(ledger, "exp3", reported_metric="acc", reported_acc=0.75, n=500)
-    assert any("pass_threshold" in x.probe for x in findings)
+    assert any("pass-threshold" in x.probe for x in findings)
     assert any(x.level == "FAIL" for x in findings)
 
 
 def test_pass_threshold_pass(tmp_path):
-    """acc >= pass_threshold 이면 pass_threshold FAIL 없음."""
+    """acc >= pass_threshold → no pass-threshold FAIL."""
     ledger = str(tmp_path / "l.jsonl")
     mm.preregister(ledger, "exp4", metric="acc", min_n=10, baseline=0.5, pass_threshold=0.70)
     findings = mm.audit(ledger, "exp4", reported_metric="acc", reported_acc=0.75, n=500)
-    assert not any("pass_threshold" in x.probe and x.level == "FAIL" for x in findings)
+    assert not any("pass-threshold" in x.probe and x.level == "FAIL" for x in findings)
 
 
-# ─── 신규 probe 검증 ───────────────────────────────────────────
+# ─── New probes ───────────────────────────────────────────────
 
 def test_gaming_check_fail():
-    """③ reward에 평가 지표 직접 포함 → FAIL."""
+    """③ Eval metric directly in reward → FAIL."""
     assert mm.gaming_check("acc", ["acc_loss", "entropy"]).level == "FAIL"
 
 
@@ -108,12 +107,12 @@ def test_gaming_check_ok():
 
 
 def test_multiseed_unstable():
-    """⑤ baseline이 시드 범위에 걸치면 FAIL."""
+    """⑤ Baseline within seed range → FAIL."""
     assert mm.multiseed_check([0.48, 0.72, 0.65], baseline=0.5).level == "FAIL"
 
 
 def test_multiseed_high_cv():
-    """⑤ 분산 크면 WARN."""
+    """⑤ High variance → WARN."""
     assert mm.multiseed_check([0.60, 0.90, 0.75], baseline=0.5).level == "WARN"
 
 
@@ -122,7 +121,7 @@ def test_multiseed_stable():
 
 
 def test_multiseed_single():
-    """⑤ 시드 1개면 WARN (재현 불가)."""
+    """⑤ Single seed → WARN (cannot verify reproducibility)."""
     assert mm.multiseed_check([0.75], baseline=0.5).level == "WARN"
 
 
@@ -137,7 +136,7 @@ def test_too_good_ok():
     assert f.level == "OK"
 
 
-# ─── 연속 지표 감사 ────────────────────────────────────────────
+# ─── Continuous metric audit ──────────────────────────────────
 
 def test_continuous_audit_ok():
     """MSE: lower is better, 0.10 < baseline 0.15 → OK."""
@@ -156,28 +155,28 @@ def test_continuous_audit_direction_fail():
 
 
 def test_continuous_audit_effect_size_warn():
-    """std 제공, z < 1.0 → WARN."""
+    """std provided, z < 1.0 → WARN."""
     findings = mm.continuous_audit("/dev/null", "reg3",
                                    reported_metric="pearson_r", reported_value=0.55,
                                    baseline_value=0.50, n=100, std=0.20, higher_better=True)
-    assert any("효과크기" in x.probe and x.level == "WARN" for x in findings)
+    assert any("effect-size" in x.probe and x.level == "WARN" for x in findings)
 
 
 def test_continuous_audit_ledger(tmp_path):
-    """사전등록 + 지표변경 → FAIL."""
+    """Pre-registration + metric swap → FAIL."""
     ledger = str(tmp_path / "c.jsonl")
     mm.preregister(ledger, "reg4", metric="pearson_r", min_n=100, baseline=0.5, pass_threshold=0.6)
     findings = mm.continuous_audit(ledger, "reg4",
-                                   reported_metric="spearman_r",  # 지표 갈아타기
+                                   reported_metric="spearman_r",  # metric swap
                                    reported_value=0.70, baseline_value=0.50, n=200)
-    assert any("지표변경" in x.probe for x in findings)
+    assert any("metric-swap" in x.probe for x in findings)
     assert any(x.level == "FAIL" for x in findings)
 
 
-# ─── 통합 감사 ────────────────────────────────────────────────
+# ─── Full audit ───────────────────────────────────────────────
 
 def test_full_audit_basic(tmp_path):
-    """full_audit 기본 실행 — 결과 반환."""
+    """full_audit basic run — returns findings list."""
     ledger = str(tmp_path / "f.jsonl")
     findings = mm.full_audit(ledger, "fa1",
                              reported_metric="acc", reported_acc=0.72, n=500, baseline=0.5)
@@ -186,7 +185,7 @@ def test_full_audit_basic(tmp_path):
 
 
 def test_full_audit_all_probes(tmp_path):
-    """full_audit — 선택 probe 전부 활성화."""
+    """full_audit — all optional probes activated."""
     ledger = str(tmp_path / "f2.jsonl")
     mm.preregister(ledger, "fa2", metric="acc", min_n=50, baseline=0.5, pass_threshold=0.65)
     findings = mm.full_audit(
@@ -199,9 +198,9 @@ def test_full_audit_all_probes(tmp_path):
         claimed_scope=["task_a"], tested_scope=["task_a"],
     )
     probes = {f.probe for f in findings}
-    assert "② 공정 baseline" in probes
-    assert "③ 게이밍 분계선" in probes
-    assert "④a 데이터누설" in probes
-    assert "⑤ 다시드 재현" in probes
+    assert "② fair-baseline" in probes
+    assert "③ gaming" in probes
+    assert "④a data-leakage" in probes
+    assert "⑤ multi-seed" in probes
     assert "⑥ scope" in probes
-    assert "⑦ 자가적발(이상값)" in probes
+    assert "⑦ too-good" in probes

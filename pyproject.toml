@@ -4,13 +4,30 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "measure-mirror"
-version = "0.1.0"
-description = "🪞 AI 평가 주장이 진짜 신호인지 측정 착시(거짓양성/음성)인지 자동 적발 — 훈련0·결정론적·의존성0."
+version = "0.2.0"
+description = "Catch AI evaluation illusions — false positives and false negatives — automatically."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
-authors = [{ name = "Mother Seara" }]
-keywords = ["evaluation", "integrity", "false-positive", "pre-registration", "audit"]
+authors = [{ name = "Mother Seara", email = "ruinbl82@gmail.com" }]
+keywords = [
+  "evaluation", "integrity", "false-positive", "false-negative",
+  "pre-registration", "audit", "reproducibility", "ml-evaluation",
+  "ai-safety", "benchmarking", "measurement",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Software Development :: Testing",
+]
 dependencies = []
 
 [project.optional-dependencies]
@@ -20,6 +37,11 @@ mcp  = ["mcp>=1.0.0"]
 [project.scripts]
 mm     = "measure_mirror.mm:_cli"
 mm-mcp = "measure_mirror.mcp_server:main"
+
+[project.urls]
+Homepage   = "https://github.com/bhyi4/measure-mirror"
+Repository = "https://github.com/bhyi4/measure-mirror"
+Issues     = "https://github.com/bhyi4/measure-mirror/issues"
 
 [tool.setuptools]
 packages = ["measure_mirror"]
