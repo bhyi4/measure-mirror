@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — MCP server
 
-Exposes all 12 probes as MCP tools via stdio transport so any
+Exposes all 13 probes as MCP tools via stdio transport so any
 MCP-compatible AI (Claude Code, Cursor, Windsurf, …) can call them
 directly mid-conversation.
 
@@ -272,6 +272,29 @@ async def list_tools() -> list[types.Tool]:
                 "required": ["ledger_path"],
             },
         ),
+        types.Tool(
+            name="mm_grim_check",
+            description=(
+                "⑩ GRIM (Granularity-Related Inconsistency of Means) test. "
+                "Checks that reported_acc × n is consistent with a whole-number count. "
+                "If no integer k satisfies round(k/n, d) == reported_acc, the value "
+                "is arithmetically impossible and was likely fabricated or mis-reported. "
+                "Works for any proportion (accuracy, F1, recall, etc.) reported to d decimals."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "reported_acc": {"type": "number",
+                                    "description": "Reported proportion (0–1), e.g. 0.71"},
+                    "n":            {"type": "integer",
+                                    "description": "Sample size"},
+                    "n_decimals":   {"type": "integer",
+                                    "description": "Decimal places to check (auto-inferred if omitted)",
+                                    "default": None},
+                },
+                "required": ["reported_acc", "n"],
+            },
+        ),
     ]
 
 
@@ -421,6 +444,13 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             result = _single(mm.multiple_comparisons_check(
                 arguments["ledger_path"],
                 alpha=arguments.get("alpha", 0.05),
+            ))
+
+        elif name == "mm_grim_check":
+            result = _single(mm.grim_check(
+                arguments["reported_acc"],
+                arguments["n"],
+                n_decimals=arguments.get("n_decimals"),
             ))
 
         else:

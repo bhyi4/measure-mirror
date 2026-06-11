@@ -122,7 +122,7 @@ def test_my_model_is_real():
 
 ---
 
-## 12종 Probe 전체 목록
+## 13종 Probe 전체 목록
 
 | Probe | 번호 | 잡아내는 것 |
 |---|---|---|
@@ -138,6 +138,7 @@ def test_my_model_is_real():
 | `too_good_check` | ⑦ | 기준선 대비 지나치게 큰 개선폭 |
 | `power_check` | ⑧ | n이 너무 작아 진짜 효과를 못 잡음 (거짓음성 가드) |
 | `multiple_comparisons_check` | ⑨ | 같은 레저에 k>1 실험 → Bonferroni 교정 경보 |
+| `grim_check` | ⑩ | 보고된 acc × n이 정수 k와 일치 불가 (수치 조작 적발) |
 
 ### 체인 해시 원장 (① 확장)
 
@@ -175,6 +176,19 @@ f = mm.multiple_comparisons_check("mm_ledger.jsonl")
 findings = mm.full_audit(LEDGER, "my_model", ..., check_multiplicity=True)
 ```
 
+### GRIM probe ⑩
+
+```python
+# 산술적으로 불가능한 정확도 수치 적발
+f = mm.grim_check(reported_acc=0.33, n=10)
+# 🔴  acc=0.33은 n=10에서 산술적으로 불가능합니다.
+#     round(k/10, 2) = 0.33을 만족하는 정수 k가 없습니다.
+#     (후보: k=3 → 0.3, k=4 → 0.4). 수치 조작 또는 n 오기재.
+
+# audit() 내부에서 자동 실행 — FAIL일 때만 findings에 추가됨
+findings = mm.audit(LEDGER, "my_model", reported_metric="acc", reported_acc=0.33, n=10)
+```
+
 ---
 
 ## MCP 서버 — AI 에이전트 연동
@@ -203,10 +217,10 @@ pip install "measure-mirror[mcp]"
 
 **기타 MCP 클라이언트** — stdio 서버 명령으로 `mm-mcp`를 실행하세요.
 
-12종 probe 전부 MCP 도구로 노출됩니다:  
+13종 probe 전부 MCP 도구로 노출됩니다:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
-`mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check`
+`mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check`
 
 ---
 
@@ -243,7 +257,7 @@ python examples/demo_field.py    # Field 후보 거짓양성
 ```
 measure-mirror/
 ├── measure_mirror/
-│   ├── mm.py              # 9종 probe + CLI + DB 조회
+│   ├── mm.py              # 10종 probe + CLI + DB 조회
 │   ├── mcp_server.py      # MCP 서버 (pip install .[mcp])
 │   └── pytest_plugin.py   # assert_clean() — CI 게이트
 ├── examples/

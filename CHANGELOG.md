@@ -5,6 +5,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.4.0] — 2026-06-11
+
+### Added
+- **⑩ `grim_check(reported_acc, n, *, n_decimals)`** — GRIM
+  (Granularity-Related Inconsistency of Means) test. Checks that
+  `reported_acc × n` is consistent with a whole-number count `k`. If no
+  integer `k` satisfies `round(k/n, d) == reported_acc`, the value is
+  arithmetically impossible and was likely fabricated or mis-reported.
+  Decimal precision is auto-inferred from the Python float representation;
+  override with `n_decimals`. Example: `grim_check(0.33, 10)` → FAIL
+  (no integer k satisfies round(k/10, 2) == 0.33). Runs automatically
+  inside `audit()` — only appended to findings on FAIL to keep OK output clean.
+- `mm_grim_check` MCP tool exposing the GRIM probe to AI agents.
+- 9 new tests for GRIM (total: 46 → 55, all passing).
+
+### Changed
+- Probe count: 12 → 13 (README/README_KO updated).
+- `mm.py` docstring updated: "9 probes" → "10 probes".
+
+---
+
 ## [0.3.0] — 2026-06-11
 
 ### Added

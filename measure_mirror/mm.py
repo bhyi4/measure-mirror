@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — probe engine (no training, pure rule+stat).
 
-9 probes:
+10 probes:
   ① Pre-registration ledger — append-only chain-hash, first-write wins,
       metric-swap detection, tamper detection, re-registration detection
   ② Fair baseline — crippled / tied / reversed baseline
@@ -13,6 +13,7 @@
   ⑦ Too-good — suspiciously large improvement alarm
   ⑧ Power — false-negative guard (n vs. minimum detectable effect)
   ⑨ Multiple comparisons — Bonferroni alarm for k>1 experiments in ledger
+  ⑩ GRIM — arithmetic consistency (acc × n must be a whole-number count)
 
 Design:
   - Zero dependencies (Python stdlib only). Deterministic. No trained model.
@@ -183,6 +184,56 @@ def wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     center = (p + z * z / (2 * n)) / denom
     half = (z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))) / denom
     return (max(0.0, center - half), min(1.0, center + half))
+
+
+# ─────────────────────────────────────────────────────────────
+# ⑩ GRIM — arithmetic consistency check
+# ─────────────────────────────────────────────────────────────
+def _infer_decimals(x: float) -> int:
+    """Infer reported decimal places from Python's float repr (strips trailing zeros)."""
+    s = str(x)
+    if "." in s:
+        frac = s.split(".")[1].rstrip("0")
+        return len(frac) if frac else 0
+    return 0
+
+
+def grim_check(reported_acc: float, n: int, *,
+               n_decimals: int | None = None) -> Finding:
+    """⑩ GRIM test: verify that acc × n is arithmetically possible.
+
+    For a proportion reported as k/n (then rounded to d decimal places),
+    there must exist an integer k such that round(k/n, d) == reported_acc.
+    If no such k exists, the number was fabricated or n was mis-reported.
+
+    Current audit() silently does round(acc × n) and hides this signal —
+    this probe makes it explicit.
+
+    n_decimals: decimal places in the reported value. Auto-detected from the
+    float if not provided (works for typical reporting like 0.72, 0.715).
+    """
+    if n <= 0:
+        return Finding("⑩ GRIM", "WARN", f"n={n} ≤ 0 — cannot run GRIM check.")
+
+    d = n_decimals if n_decimals is not None else _infer_decimals(reported_acc)
+    d = max(d, 1)  # at minimum 1 decimal place
+
+    k_lo = math.floor(reported_acc * n)
+    k_hi = k_lo + 1
+    target = round(reported_acc, d)
+
+    for k in (k_lo, k_hi):
+        if 0 <= k <= n and round(k / n, d) == target:
+            return Finding("⑩ GRIM", "OK",
+                f"acc={reported_acc} consistent with n={n} "
+                f"(k={k}, {k}/{n}={k/n:.{d+2}f} → {round(k/n, d)}).")
+
+    return Finding("⑩ GRIM", "FAIL",
+        f"acc={reported_acc} is arithmetically impossible for n={n}. "
+        f"No integer k satisfies round(k/{n}, {d}) = {target}. "
+        f"(candidates: k={k_lo} → {round(k_lo/n, d)}, "
+        f"k={k_hi} → {round(k_hi/n, d)}). "
+        f"Fabricated value or mis-reported n.")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -395,6 +446,11 @@ def audit(ledger_path: str, claim_id: str, *,
     if n < 0:
         findings.append(Finding("④a n-range", "FAIL", f"n={n} must be ≥ 0."))
         return findings
+
+    # ⑩ GRIM — runs before CI; only appended when FAIL to keep OK output clean
+    grim = grim_check(reported_acc, n)
+    if grim.level != "OK":
+        findings.append(grim)
 
     k = round(reported_acc * n)
     lo, hi = wilson_ci(k, n)

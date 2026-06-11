@@ -126,7 +126,7 @@ def test_my_model_is_real():
 
 ---
 
-## All 12 Probes
+## All 13 Probes
 
 | Probe | Check # | Catches |
 |---|---|---|
@@ -142,6 +142,7 @@ def test_my_model_is_real():
 | `too_good_check` | ⑦ | Suspiciously large Δ over baseline |
 | `power_check` | ⑧ | n too small to detect minimum effect (false-negative guard) |
 | `multiple_comparisons_check` | ⑨ | k>1 experiments in ledger — Bonferroni correction alarm |
+| `grim_check` | ⑩ | Reported acc × n is arithmetically impossible (fabricated value) |
 
 ### Chain hash ledger (① extended)
 
@@ -180,6 +181,19 @@ f = mm.multiple_comparisons_check("mm_ledger.jsonl")
 findings = mm.full_audit(LEDGER, "my_model", ..., check_multiplicity=True)
 ```
 
+### GRIM ⑩
+
+```python
+# catch arithmetically impossible accuracy values
+f = mm.grim_check(reported_acc=0.33, n=10)
+# 🔴  acc=0.33 is arithmetically impossible for n=10.
+#     No integer k satisfies round(k/10, 2) = 0.33.
+#     (candidates: k=3 → 0.3, k=4 → 0.4). Fabricated value or mis-reported n.
+
+# GRIM runs automatically inside audit() — FAIL is appended to findings
+findings = mm.audit(LEDGER, "my_model", reported_metric="acc", reported_acc=0.33, n=10)
+```
+
 ---
 
 ## MCP Server — AI Agent Integration
@@ -208,10 +222,10 @@ pip install "measure-mirror[mcp]"
 
 **Other MCP clients** — run `mm-mcp` as the stdio server command.
 
-All 12 probes are exposed as MCP tools:  
+All 13 probes are exposed as MCP tools:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
-`mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check`
+`mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check`
 
 ---
 
@@ -248,7 +262,7 @@ python examples/demo_field.py    # Field candidate false positives
 ```
 measure-mirror/
 ├── measure_mirror/
-│   ├── mm.py              # 9 probes + CLI + DB lookup
+│   ├── mm.py              # 10 probes + CLI + DB lookup
 │   ├── mcp_server.py      # MCP server (pip install .[mcp])
 │   └── pytest_plugin.py   # assert_clean() for CI gates
 ├── examples/

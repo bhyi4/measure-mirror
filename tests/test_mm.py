@@ -377,3 +377,64 @@ def test_full_audit_multiplicity_probe(tmp_path):
                              check_multiplicity=True)
     probes = {f.probe for f in findings}
     assert "⑨ multiple-comparisons" in probes
+
+
+# ─── ⑩ GRIM tests ────────────────────────────────────────────
+
+def test_grim_ok_exact():
+    """acc=0.70, n=10 → k=7, round(7/10,2)=0.70 → OK."""
+    f = mm.grim_check(0.70, 10)
+    assert f.level == "OK"
+    assert f.probe == "⑩ GRIM"
+
+
+def test_grim_ok_large_n():
+    """acc=0.72, n=500 → k=360, round(360/500,2)=0.72 → OK."""
+    f = mm.grim_check(0.72, 500)
+    assert f.level == "OK"
+
+
+def test_grim_fail_impossible():
+    """acc=0.33, n=10 → round(3/10,2)=0.30, round(4/10,2)=0.40 → FAIL."""
+    f = mm.grim_check(0.33, 10)
+    assert f.level == "FAIL"
+    assert f.probe == "⑩ GRIM"
+    assert "Fabricated" in f.msg or "arithmetically impossible" in f.msg
+
+
+def test_grim_fail_three_decimals():
+    """acc=0.556, n=9 → round(5/9,3)=0.556 → OK (real catch from dog-food)."""
+    f = mm.grim_check(0.556, 9)
+    # 5/9 ≈ 0.5556 rounds to 0.556 at 3 dp — should be OK
+    assert f.level == "OK"
+
+
+def test_grim_invalid_n():
+    """n=0 → WARN."""
+    f = mm.grim_check(0.70, 0)
+    assert f.level == "WARN"
+
+
+def test_grim_explicit_decimals():
+    """n_decimals override respected: force 1 dp check."""
+    # 0.3, n=10 → k=3, round(3/10,1)=0.3 → OK
+    f = mm.grim_check(0.3, 10, n_decimals=1)
+    assert f.level == "OK"
+
+
+def test_grim_in_audit_fail_appended(tmp_path):
+    """GRIM FAIL is appended to audit findings (probe name in result set)."""
+    ledger = str(tmp_path / "l.jsonl")
+    # acc=0.33, n=10 is GRIM-impossible (no k gives round(k/10,2)=0.33)
+    findings = mm.audit(ledger, "grim_test",
+                        reported_metric="acc", reported_acc=0.33, n=10)
+    assert any(f.probe == "⑩ GRIM" and f.level == "FAIL" for f in findings)
+
+
+def test_grim_ok_not_appended_to_audit(tmp_path):
+    """GRIM OK is silently dropped from audit output to keep output clean."""
+    ledger = str(tmp_path / "l.jsonl")
+    # acc=0.70, n=10 → GRIM OK → should not appear in findings
+    findings = mm.audit(ledger, "clean_test",
+                        reported_metric="acc", reported_acc=0.70, n=10)
+    assert not any(f.probe == "⑩ GRIM" for f in findings)
