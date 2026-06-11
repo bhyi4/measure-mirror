@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — MCP server
 
-Exposes 16 probes + 4 utilities (anchor, calibrate, witness, retract) as MCP tools via stdio transport so any
+Exposes 20 probes + 4 utilities (anchor, calibrate, witness, retract) as MCP tools via stdio transport so any
 MCP-compatible AI (Claude Code, Cursor, Windsurf, …) can call them
 directly mid-conversation.
 
@@ -450,6 +450,95 @@ async def list_tools() -> list[types.Tool]:
                 "required": ["reported_acc", "n"],
             },
         ),
+        types.Tool(
+            name="mm_judge_consistency_check",
+            description=(
+                "⑭ Detect an unreliable LLM judge by measuring verdict flip-rate. "
+                "An LLM judge is run twice on the same items; a high fraction of items "
+                "receiving different scores on re-run indicates the judge is stochastic "
+                "and cannot be trusted to produce reproducible rankings. "
+                "score_pairs: list of [score_run1, score_run2] pairs per item."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "score_pairs":    {
+                        "type": "array",
+                        "items": {"type": "array", "items": {"type": "number"}},
+                        "description": "[[score_run1, score_run2], ...] — same item judged twice",
+                    },
+                    "flip_threshold": {"type": "number", "default": 0.20,
+                                       "description": "Maximum acceptable flip fraction"},
+                },
+                "required": ["score_pairs"],
+            },
+        ),
+        types.Tool(
+            name="mm_judge_bias_check",
+            description=(
+                "⑮ Detect position bias in a pairwise LLM judge. "
+                "A biased judge systematically favors whichever response appears first "
+                "(or second) regardless of content. "
+                "pairwise_results: list of 0 (A won) or 1 (B won) per comparison."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "pairwise_results": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "[0, 1, 0, ...] — 0=A won, 1=B won per comparison",
+                    },
+                    "bias_threshold": {"type": "number", "default": 0.60,
+                                       "description": "Win-rate above which position bias is flagged"},
+                },
+                "required": ["pairwise_results"],
+            },
+        ),
+        types.Tool(
+            name="mm_inter_rater_agreement",
+            description=(
+                "⑯ Compute Cohen's κ to check multi-judge reliability. "
+                "When two judges evaluate the same items, their ratings should agree "
+                "beyond chance. Low κ means judge results are effectively random relative "
+                "to each other. ratings_matrix: [[judge1_score, judge2_score], ...] per item."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ratings_matrix": {
+                        "type": "array",
+                        "items": {"type": "array", "items": {"type": "number"}},
+                        "description": "[[judge1_score, judge2_score], ...] — one row per item",
+                    },
+                    "min_kappa": {"type": "number", "default": 0.40,
+                                  "description": "Minimum acceptable Cohen's κ"},
+                },
+                "required": ["ratings_matrix"],
+            },
+        ),
+        types.Tool(
+            name="mm_judge_score_sanity",
+            description=(
+                "⑰ Detect a degenerate judge that assigns the same score to everything. "
+                "A judge that never varies its output provides no discrimination signal — "
+                "ranking derived from such scores is meaningless even if aggregate numbers "
+                "look reasonable. Checks unique-value ratio and dominant-value concentration."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "scores": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "description": "All scores from a single judge model run",
+                    },
+                    "min_unique_ratio": {"type": "number", "default": 0.10,
+                                         "description": "Minimum ratio of unique scores to total"},
+                },
+                "required": ["scores"],
+            },
+        ),
     ]
 
 
@@ -677,6 +766,30 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 arguments["reported_acc"],
                 arguments["n"],
                 n_decimals=arguments.get("n_decimals"),
+            ))
+
+        elif name == "mm_judge_consistency_check":
+            result = _single(mm.judge_consistency_check(
+                [tuple(p) for p in arguments["score_pairs"]],
+                flip_threshold=arguments.get("flip_threshold", 0.20),
+            ))
+
+        elif name == "mm_judge_bias_check":
+            result = _single(mm.judge_bias_check(
+                arguments["pairwise_results"],
+                bias_threshold=arguments.get("bias_threshold", 0.60),
+            ))
+
+        elif name == "mm_inter_rater_agreement":
+            result = _single(mm.inter_rater_agreement(
+                [tuple(r) for r in arguments["ratings_matrix"]],
+                min_kappa=arguments.get("min_kappa", 0.40),
+            ))
+
+        elif name == "mm_judge_score_sanity":
+            result = _single(mm.judge_score_sanity(
+                arguments["scores"],
+                min_unique_ratio=arguments.get("min_unique_ratio", 0.10),
             ))
 
         else:

@@ -886,3 +886,113 @@ def test_negative_audit_in_full_audit(tmp_path):
                              reported_metric="acc", reported_acc=0.72, n=200,
                              angles=["a1", "a2", "a3"])
     assert any(f.probe == "⑬ negative-audit" for f in findings)
+
+
+# ─── ⑭ judge_consistency_check tests ─────────────────────────
+
+def test_judge_consistency_ok():
+    """Flip rate at/below threshold → OK."""
+    pairs = [(1, 1), (0, 0), (1, 1), (0, 0), (1, 0)]  # 1 flip / 5 = 20%
+    f = mm.judge_consistency_check(pairs, flip_threshold=0.20)
+    assert f.level == "OK"
+    assert f.probe == "⑭ judge-consistency"
+
+
+def test_judge_consistency_fail():
+    """Flip rate above threshold → FAIL."""
+    pairs = [(1, 0), (0, 1), (1, 0), (0, 0), (1, 1)]  # 3 flips / 5 = 60%
+    f = mm.judge_consistency_check(pairs, flip_threshold=0.20)
+    assert f.level == "FAIL"
+    assert "60%" in f.msg or "0.6" in f.msg.lower() or "3/5" in f.msg
+
+
+def test_judge_consistency_warn_empty():
+    """Empty score_pairs → WARN (cannot assess)."""
+    f = mm.judge_consistency_check([])
+    assert f.level == "WARN"
+
+
+# ─── ⑮ judge_bias_check tests ────────────────────────────────
+
+def test_judge_bias_ok():
+    """Balanced A/B wins → OK."""
+    results = [0, 1, 0, 1, 0, 1, 0, 1, 0, 1]  # 50/50
+    f = mm.judge_bias_check(results)
+    assert f.level == "OK"
+    assert f.probe == "⑮ judge-bias"
+
+
+def test_judge_bias_fail_a_dominates():
+    """A wins 90% → FAIL position bias."""
+    results = [0] * 9 + [1]  # A wins 90%
+    f = mm.judge_bias_check(results, bias_threshold=0.60)
+    assert f.level == "FAIL"
+    assert "A" in f.msg
+
+
+def test_judge_bias_fail_b_dominates():
+    """B wins 90% → FAIL position bias."""
+    results = [1] * 9 + [0]  # B wins 90%
+    f = mm.judge_bias_check(results, bias_threshold=0.60)
+    assert f.level == "FAIL"
+    assert "B" in f.msg
+
+
+# ─── ⑯ inter_rater_agreement tests ───────────────────────────
+
+def test_inter_rater_ok():
+    """Perfect agreement → κ=1.0 → OK."""
+    matrix = [(1, 1), (0, 0), (1, 1), (0, 0), (1, 1)]
+    f = mm.inter_rater_agreement(matrix)
+    assert f.level == "OK"
+    assert f.probe == "⑯ inter-rater"
+    assert "1.000" in f.msg
+
+
+def test_inter_rater_warn():
+    """Moderate agreement (κ ≈ 0.33) → WARN."""
+    # Rater1: [0,0,0,1,1,1]  Rater2: [0,1,0,1,0,1]
+    # Agreement: items 0,2,3,5 → p_o = 4/6 ≈ 0.667
+    # p1_rate1=0.5, p1_rate2=0.5; p_e=0.5*0.5+0.5*0.5=0.5; κ=(0.667-0.5)/(0.5)=0.333
+    matrix = [(0, 0), (0, 1), (0, 0), (1, 1), (1, 0), (1, 1)]
+    f = mm.inter_rater_agreement(matrix, min_kappa=0.40)
+    assert f.level == "WARN"
+    assert "0.33" in f.msg
+
+
+def test_inter_rater_fail_too_few():
+    """Fewer than 3 items → FAIL."""
+    f = mm.inter_rater_agreement([(1, 0), (0, 1)])
+    assert f.level == "FAIL"
+    assert "3" in f.msg
+
+
+# ─── ⑰ judge_score_sanity tests ──────────────────────────────
+
+def test_judge_score_sanity_ok():
+    """Varied scores → OK."""
+    scores = [3, 7, 5, 8, 4, 6, 9, 2, 7, 5, 3, 8, 6, 4, 7]
+    f = mm.judge_score_sanity(scores)
+    assert f.level == "OK"
+    assert f.probe == "⑰ judge-score-sanity"
+
+
+def test_judge_score_sanity_fail_all_identical():
+    """All scores identical → FAIL."""
+    scores = [8] * 20
+    f = mm.judge_score_sanity(scores)
+    assert f.level == "FAIL"
+    assert "8" in f.msg
+
+
+def test_judge_score_sanity_warn_near_degenerate():
+    """One value covers >90% → WARN."""
+    scores = [8] * 19 + [7]  # 95% are 8
+    f = mm.judge_score_sanity(scores)
+    assert f.level == "WARN"
+
+
+def test_judge_score_sanity_warn_empty():
+    """Empty scores list → WARN."""
+    f = mm.judge_score_sanity([])
+    assert f.level == "WARN"

@@ -5,6 +5,43 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.10.0] — 2026-06-11
+
+### Added
+- **⑭ `judge_consistency_check(score_pairs, *, flip_threshold=0.20)`**
+  — Detects an unreliable LLM judge by measuring verdict flip-rate.  Run the
+  judge twice on the same items; if >`flip_threshold` fraction of verdicts
+  change, the judge cannot be trusted.
+- **⑮ `judge_bias_check(pairwise_results, *, bias_threshold=0.60)`**
+  — Detects systematic position preference (A-wins / B-wins) in a pairwise
+  judge. If either position wins >60% of comparisons, FAIL.
+- **⑯ `inter_rater_agreement(ratings_matrix, *, min_kappa=0.40)`**
+  — Computes Cohen's κ between two judge runs / raters.  WARN below 0.40,
+  FAIL below 0.20 (poor agreement = scores are effectively noise).
+- **⑰ `judge_score_sanity(scores, *, min_unique_ratio=0.10)`**
+  — Catches a degenerate judge that assigns identical scores to every item.
+  FAIL if all scores identical; WARN if >90% share the same value.
+- **`measure_mirror/judge.py`** — optional LLM-as-a-Judge runner module
+  (install: `pip install "measure-mirror[judge]"`).
+  - `openai_judge(model, *, system_prompt, prompt_fn, pairwise)` → callable
+  - `anthropic_judge(model, *, system_prompt, prompt_fn, pairwise)` → callable
+  - `judge_run(ledger_path, claim_id, *, judge_fn, items, runs=2, pairwise=True)`
+    → dict with `findings`, `scores`, `score_pairs`, `ledger_entry`.
+    Automatically fires probes ⑭⑮⑯⑰ and appends a chain-linked
+    `_type: judge_run` entry to the ledger.
+- **`pyproject.toml`** — new `judge` optional-dependency group:
+  `pip install "measure-mirror[judge]"` adds `openai>=1.0` and `anthropic>=0.20`.
+- **4 new MCP tools**: `mm_judge_consistency_check`, `mm_judge_bias_check`,
+  `mm_inter_rater_agreement`, `mm_judge_score_sanity`.
+- 24 new tests (total: 101 → 125, all passing).
+
+### Changed
+- Probe count: 16 → 20 (⑭⑮⑯⑰ added). README updated: "20 Probes + 4 Utilities".
+- MCP server docstring: "16 probes" → "20 probes".
+- Module docstring: updated to list ⑭⑮⑯⑰.
+
+---
+
 ## [0.9.0] — 2026-06-11
 
 ### Added

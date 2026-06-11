@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — probe engine (no training, pure rule+stat).
 
-12 probes:
+17 probes:
   ① Pre-registration ledger — append-only chain-hash, first-write wins,
       metric-swap detection, tamper detection, re-registration detection
   ② Fair baseline — crippled / tied / reversed baseline
@@ -17,6 +17,10 @@
   ⑪ Falsifiability — Popper gate (kill-condition registered? triggered?)
   ⑫ Retraction cascade — claim or transitive dependency retracted?
   ⑬ Negative-claim audit — angle-count gate + scope for Resolved-Negative closures
+  ⑭ Judge consistency — LLM judge flip-rate (unreliable judge detector)
+  ⑮ Judge position bias — systematic A-wins / B-wins preference
+  ⑯ Inter-rater agreement — Cohen's κ for multi-judge setups
+  ⑰ Judge score sanity — degenerate scoring distribution
 
 Utilities:
   calibrate() — self-test: run 5 synthetic known-good/known-bad cases
@@ -695,6 +699,207 @@ def negative_audit(ledger_path: str, *,
     return Finding("⑬ negative-audit", "OK",
                    f"{n}/{n} independent pre-registered angle(s) verified — "
                    "negative conclusion is supported.")
+
+
+# ─────────────────────────────────────────────────────────────
+# ⑭ Judge consistency — flip-rate on repeated scoring
+# ─────────────────────────────────────────────────────────────
+def judge_consistency_check(score_pairs: list,
+                            *, flip_threshold: float = 0.20) -> Finding:
+    """⑭ Detect an unreliable LLM judge by measuring verdict flip-rate.
+
+    An LLM judge is run twice on the same items; a high fraction of items
+    receiving different scores on re-run indicates the judge is stochastic
+    and cannot be trusted to produce reproducible rankings.
+
+    Args:
+        score_pairs: [(score_run1, score_run2), ...] — same item judged twice.
+                     Scores may be 0/1 (pairwise) or integer (rating scale).
+        flip_threshold: maximum acceptable flip fraction (default 0.20).
+
+    Levels:
+      FAIL — flip_rate > flip_threshold
+      WARN — no pairs provided (can't assess)
+      OK   — flip_rate ≤ flip_threshold
+    """
+    if not score_pairs:
+        return Finding("⑭ judge-consistency", "WARN", "No score pairs provided.")
+
+    n = len(score_pairs)
+    flips = sum(1 for a, b in score_pairs if a != b)
+    flip_rate = flips / n
+
+    if flip_rate > flip_threshold:
+        return Finding(
+            "⑭ judge-consistency", "FAIL",
+            f"Judge flip rate {flip_rate:.1%} > threshold {flip_threshold:.1%} "
+            f"({flips}/{n} items changed verdict on re-run). "
+            "Judge is unreliable — scores cannot be trusted.")
+    return Finding(
+        "⑭ judge-consistency", "OK",
+        f"Judge flip rate {flip_rate:.1%} ≤ {flip_threshold:.1%} "
+        f"({flips}/{n} flips). Consistent.")
+
+
+# ─────────────────────────────────────────────────────────────
+# ⑮ Judge position bias — systematic A/B preference
+# ─────────────────────────────────────────────────────────────
+def judge_bias_check(pairwise_results: list,
+                     *, bias_threshold: float = 0.60) -> Finding:
+    """⑮ Detect position bias in a pairwise LLM judge.
+
+    In pairwise evaluation, the judge compares Response A vs Response B.
+    A biased judge systematically favors whichever response appears first
+    (or second) regardless of content.
+
+    Args:
+        pairwise_results: [0, 1, 0, ...] — 0 = A won, 1 = B won per comparison.
+        bias_threshold: win-rate above which position bias is flagged (default 0.60).
+
+    Levels:
+      FAIL — A or B win-rate > bias_threshold
+      WARN — no results provided
+      OK   — both win-rates within threshold
+    """
+    if not pairwise_results:
+        return Finding("⑮ judge-bias", "WARN", "No pairwise results provided.")
+
+    n = len(pairwise_results)
+    a_wins = sum(1 for r in pairwise_results if r == 0)
+    a_rate = a_wins / n
+
+    if a_rate > bias_threshold:
+        return Finding(
+            "⑮ judge-bias", "FAIL",
+            f"Position A win rate {a_rate:.1%} > {bias_threshold:.1%}. "
+            f"Strong position bias detected ({a_wins}/{n} items favor A).")
+    if a_rate < (1.0 - bias_threshold):
+        b_wins = n - a_wins
+        return Finding(
+            "⑮ judge-bias", "FAIL",
+            f"Position B win rate {1.0-a_rate:.1%} > {bias_threshold:.1%}. "
+            f"Strong position bias detected ({b_wins}/{n} items favor B).")
+    return Finding(
+        "⑮ judge-bias", "OK",
+        f"Position A win rate {a_rate:.1%} — no significant position bias detected.")
+
+
+# ─────────────────────────────────────────────────────────────
+# ⑯ Inter-rater agreement — Cohen's κ
+# ─────────────────────────────────────────────────────────────
+def inter_rater_agreement(ratings_matrix: list,
+                          *, min_kappa: float = 0.40) -> Finding:
+    """⑯ Compute Cohen's κ to check multi-judge reliability.
+
+    When two (or more) judges evaluate the same items, their ratings should
+    agree beyond chance level. Low κ means judge results are effectively
+    random relative to each other and cannot be averaged or reported as
+    a single reliable signal.
+
+    Args:
+        ratings_matrix: [(judge1_score, judge2_score), ...] — one row per item.
+                        Scores should be categorical (integers). For more than
+                        2 raters, pass the first two columns only.
+        min_kappa: minimum acceptable Cohen's κ (default 0.40 = "moderate").
+
+    Levels:
+      FAIL — κ < 0.20 (poor) or fewer than 3 items provided
+      WARN — 0.20 ≤ κ < min_kappa (fair)
+      OK   — κ ≥ min_kappa
+    """
+    if not ratings_matrix:
+        return Finding("⑯ inter-rater", "WARN", "No ratings provided.")
+    if len(ratings_matrix) < 3:
+        return Finding("⑯ inter-rater", "FAIL",
+                       f"Only {len(ratings_matrix)} item(s) — need ≥ 3 to compute κ reliably.")
+
+    rater1 = [r[0] for r in ratings_matrix]
+    rater2 = [r[1] for r in ratings_matrix]
+    n = len(rater1)
+
+    p_o = sum(1 for a, b in zip(rater1, rater2) if a == b) / n
+
+    categories = sorted(set(rater1) | set(rater2))
+    p_e = sum(
+        (rater1.count(c) / n) * (rater2.count(c) / n)
+        for c in categories
+    )
+
+    if p_e >= 1.0:
+        kappa = 1.0
+    else:
+        kappa = (p_o - p_e) / (1.0 - p_e)
+
+    if kappa < 0.20:
+        return Finding(
+            "⑯ inter-rater", "FAIL",
+            f"Cohen's κ={kappa:.3f} < 0.20 — poor agreement. "
+            "Judge scores are essentially random relative to each other.")
+    if kappa < min_kappa:
+        return Finding(
+            "⑯ inter-rater", "WARN",
+            f"Cohen's κ={kappa:.3f} < {min_kappa:.2f} — fair agreement only. "
+            "Results may not reproduce with a different judge model.")
+    return Finding(
+        "⑯ inter-rater", "OK",
+        f"Cohen's κ={kappa:.3f} ≥ {min_kappa:.2f} — acceptable inter-rater agreement.")
+
+
+# ─────────────────────────────────────────────────────────────
+# ⑰ Judge score sanity — degenerate distribution
+# ─────────────────────────────────────────────────────────────
+def judge_score_sanity(scores: list,
+                       *, min_unique_ratio: float = 0.10) -> Finding:
+    """⑰ Detect a degenerate judge that assigns the same score to everything.
+
+    A judge that never varies its output provides no discrimination signal —
+    ranking derived from such scores is meaningless even if aggregate numbers
+    look reasonable.
+
+    Args:
+        scores: [8, 7, 8, 9, ...] — all scores from a single judge model.
+        min_unique_ratio: minimum ratio of unique scores to total (default 0.10).
+
+    Levels:
+      FAIL — all scores identical (ratio = 0)
+      WARN — unique ratio < min_unique_ratio or top score ≥ 90% of total
+      OK   — distribution looks healthy
+    """
+    if not scores:
+        return Finding("⑰ judge-score-sanity", "WARN", "No scores provided.")
+
+    n = len(scores)
+    unique_vals = set(scores)
+    unique_count = len(unique_vals)
+    unique_ratio = unique_count / n
+
+    if unique_count == 1:
+        return Finding(
+            "⑰ judge-score-sanity", "FAIL",
+            f"All {n} scores identical ({scores[0]}). "
+            "Judge is not discriminating — scores are meaningless.")
+
+    count: dict = {}
+    for s in scores:
+        count[s] = count.get(s, 0) + 1
+    top_count = max(count.values())
+    top_ratio = top_count / n
+
+    if top_ratio > 0.90:
+        top_val = max(count, key=lambda k: count[k])
+        return Finding(
+            "⑰ judge-score-sanity", "WARN",
+            f"{top_ratio:.0%} of scores are '{top_val}' — near-degenerate distribution. "
+            "Judge may not be discriminating.")
+    if unique_ratio < min_unique_ratio:
+        return Finding(
+            "⑰ judge-score-sanity", "WARN",
+            f"Only {unique_count}/{n} unique scores ({unique_ratio:.1%}). "
+            "Low discrimination — consider a finer scoring scale.")
+    return Finding(
+        "⑰ judge-score-sanity", "OK",
+        f"{unique_count} distinct values across {n} scores "
+        f"({unique_ratio:.1%} unique ratio). Distribution looks healthy.")
 
 
 # ─────────────────────────────────────────────────────────────

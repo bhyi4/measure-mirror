@@ -148,6 +148,10 @@ def test_my_model_is_real():
 | `falsifiability_check` | ⑪ | No kill-condition → unfalsifiable; kill_threshold triggered → claim is dead |
 | `cascade_check` | ⑫ | Claim or transitive dependency retracted → FAIL/WARN stale |
 | `negative_audit` | ⑬ | Negative conclusion has too few independent angles, unregistered angles, or scope overshoot |
+| `judge_consistency_check` | ⑭ | LLM judge flip-rate too high — unreliable judge detector |
+| `judge_bias_check` | ⑮ | Judge systematically favors position A or B — position bias detector |
+| `inter_rater_agreement` | ⑯ | Cohen's κ between two judges below threshold — poor agreement |
+| `judge_score_sanity` | ⑰ | Judge assigns identical/near-identical scores — degenerate distribution |
 
 | Utility | Purpose |
 |---|---|
@@ -395,11 +399,12 @@ pip install "measure-mirror[mcp]"
 
 **Other MCP clients** — run `mm-mcp` as the stdio server command.
 
-All 16 probes + 4 utilities are exposed as MCP tools:  
+All 20 probes + 4 utilities are exposed as MCP tools:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
 `mm_falsifiability_check` · `mm_cascade_check` · `mm_negative_audit` ·  
+`mm_judge_consistency_check` · `mm_judge_bias_check` · `mm_inter_rater_agreement` · `mm_judge_score_sanity` ·  
 `mm_anchor` · `mm_calibrate` · `mm_witness` · `mm_retract`
 
 ---

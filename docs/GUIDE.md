@@ -777,6 +777,10 @@ Agent: [calls mm_register, then mm_audit]
 | ⑪ | `falsifiability_check` | no kill-condition; triggered kill threshold | ✅ (when prereg valid) |
 | ⑫ | `cascade_check` | retracted claim or stale dependency | ✅ (WARN/FAIL only) |
 | ⑬ | `negative_audit` | premature negative closure; scope overshoot | via `full_audit(angles=...)` |
+| ⑭ | `judge_consistency_check` | LLM judge flip-rate too high (unreliable judge) | standalone |
+| ⑮ | `judge_bias_check` | judge favors position A or B systematically | standalone |
+| ⑯ | `inter_rater_agreement` | Cohen's κ below threshold (poor agreement) | standalone |
+| ⑰ | `judge_score_sanity` | judge assigns identical/near-identical scores | standalone |
 | — | `anchor` | complete ledger replacement | manual (before publish) |
 | — | `calibrate` | mirror itself has regressions | manual (before witness) |
 | — | `witness` | execution record: what ran, when, output hash | manual |
