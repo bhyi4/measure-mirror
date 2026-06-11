@@ -1,6 +1,7 @@
 """measure-mirror test suite — regression gate (dog-fooded)."""
 import json
 import hashlib
+import sys
 import pytest
 from measure_mirror import mm
 from measure_mirror.pytest_plugin import assert_clean
@@ -438,3 +439,80 @@ def test_grim_ok_not_appended_to_audit(tmp_path):
     findings = mm.audit(ledger, "clean_test",
                         reported_metric="acc", reported_acc=0.70, n=10)
     assert not any(f.probe == "⑩ GRIM" for f in findings)
+
+
+# ─── ⚙ calibrate tests ───────────────────────────────────────
+
+def test_calibrate_ok():
+    """calibrate() returns OK when the mirror is working correctly."""
+    findings = mm.calibrate()
+    assert len(findings) == 1
+    assert findings[0].level == "OK"
+    assert findings[0].probe == "⚙ calibrate"
+    assert "5/5" in findings[0].msg
+
+
+def test_calibrate_returns_finding_list():
+    """calibrate() always returns list[Finding]."""
+    findings = mm.calibrate()
+    assert isinstance(findings, list)
+    assert all(isinstance(f, mm.Finding) for f in findings)
+
+
+# ─── 🎬 witness tests ─────────────────────────────────────────
+
+def test_witness_basic(tmp_path):
+    """witness() runs a command and creates a sealed record."""
+    ledger = str(tmp_path / "l.jsonl")
+    e = mm.witness(ledger, "test_run", [sys.executable, "-c", "print('hello')"])
+    assert e["run_status"] == "ok"
+    assert e["returncode"] == 0
+    assert "seal" in e
+    assert "output_hash" in e
+    assert e["claim_id"] == "test_run"
+
+
+def test_witness_type_in_ledger(tmp_path):
+    """Witness record has _type='witness' in ledger file."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.witness(ledger, "x", [sys.executable, "-c", "pass"])
+    with open(ledger) as f:
+        entry = json.loads(f.readline())
+    assert entry["_type"] == "witness"
+
+
+def test_witness_output_hash_stable(tmp_path):
+    """Identical command output → identical output_hash (content-addressable)."""
+    l1 = str(tmp_path / "l1.jsonl")
+    l2 = str(tmp_path / "l2.jsonl")
+    e1 = mm.witness(l1, "x", [sys.executable, "-c", "print('stable')"])
+    e2 = mm.witness(l2, "x", [sys.executable, "-c", "print('stable')"])
+    assert e1["output_hash"] == e2["output_hash"]
+
+
+def test_witness_chain_linked_to_prereg(tmp_path):
+    """Witness entry's prev_seal links to the preregister entry's seal."""
+    ledger = str(tmp_path / "l.jsonl")
+    pre = mm.preregister(ledger, "exp1",
+                         metric="acc", min_n=50, baseline=0.5, pass_threshold=0.6)
+    w = mm.witness(ledger, "exp1", [sys.executable, "-c", "pass"])
+    assert w["prev_seal"] == pre["seal"]
+
+
+def test_witness_chain_verifies(tmp_path):
+    """Full ledger with preregister + witness passes verify_chain."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1",
+                   metric="acc", min_n=50, baseline=0.5, pass_threshold=0.6)
+    mm.witness(ledger, "exp1", [sys.executable, "-c", "pass"])
+    findings = mm.verify_chain(ledger)
+    assert all(f.level == "OK" for f in findings), findings
+
+
+def test_witness_nonzero_exit(tmp_path):
+    """Non-zero exit code is recorded; run_status is still 'ok' (the run ran)."""
+    ledger = str(tmp_path / "l.jsonl")
+    e = mm.witness(ledger, "x",
+                   [sys.executable, "-c", "import sys; sys.exit(42)"])
+    assert e["returncode"] == 42
+    assert e["run_status"] == "ok"

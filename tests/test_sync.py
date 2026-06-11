@@ -37,13 +37,14 @@ def _probe_functions() -> list[str]:
 PROBES = _probe_functions()
 
 # MCP tools that intentionally don't map to a Finding-returning probe function.
-# "mm_register" wraps preregister() which returns dict (not Finding) — by design.
-_MCP_UTILITY_TOOLS = {"register"}
+# "mm_register" wraps preregister() → dict.
+# "mm_witness" wraps witness() → dict (records a run, not an audit Finding).
+_MCP_UTILITY_TOOLS = {"register", "witness"}
 
 
 def test_probe_list_nonempty():
     """Sanity: probe list must not be empty."""
-    assert len(PROBES) >= 9, f"Expected ≥9 probes, found {len(PROBES)}: {PROBES}"
+    assert len(PROBES) >= 10, f"Expected ≥10 probes, found {len(PROBES)}: {PROBES}"
 
 
 # ─────────────────────────────────────────────────────────────

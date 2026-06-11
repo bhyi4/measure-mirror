@@ -15,6 +15,10 @@
   ⑨ Multiple comparisons — Bonferroni alarm for k>1 experiments in ledger
   ⑩ GRIM — arithmetic consistency (acc × n must be a whole-number count)
 
+Utilities:
+  calibrate() — self-test: run 5 synthetic known-good/known-bad cases
+  witness()   — execute a command and seal a tamper-evident run record
+
 Design:
   - Zero dependencies (Python stdlib only). Deterministic. No trained model.
   - Each probe is an independent function. Add without touching existing ones.
@@ -617,6 +621,110 @@ def report(title: str, findings: list[Finding]) -> None:
 
 
 # ─────────────────────────────────────────────────────────────
+# ⚙ Calibration + Witness run
+# ─────────────────────────────────────────────────────────────
+def calibrate() -> list[Finding]:
+    """Self-test: run synthetic known-good/known-bad cases through key probes.
+
+    Returns [OK] when all 5 cases produce expected outcomes — confirms the
+    mirror itself has no regressions.  Returns [FAIL] if any case breaks.
+    Run before witness() or in CI to confirm the tool is working correctly.
+    """
+    errors: list[str] = []
+
+    # Case 1: tiny sample must trigger small-sample FAIL
+    f = audit("/dev/null", "_calibrate",
+              reported_metric="acc", reported_acc=0.556, n=9)
+    if not any(x.level == "FAIL" for x in f):
+        errors.append("n=9 small-sample probe should FAIL")
+
+    # Case 2: honest large sample must not FAIL
+    f = audit("/dev/null", "_calibrate",
+              reported_metric="acc", reported_acc=0.78, n=1000)
+    if any(x.level == "FAIL" for x in f):
+        errors.append("n=1000 honest result should not produce FAIL")
+
+    # Case 3: GRIM-impossible value must FAIL
+    g = grim_check(0.33, 10)
+    if g.level != "FAIL":
+        errors.append("GRIM(0.33, n=10) should be FAIL")
+
+    # Case 4: GRIM-possible value must be OK
+    g = grim_check(0.70, 10)
+    if g.level != "OK":
+        errors.append("GRIM(0.70, n=10) should be OK")
+
+    # Case 5: baseline inversion must FAIL
+    b = baseline_fairness("competitor", 0.60, 0.80)
+    if b.level != "FAIL":
+        errors.append("Inverted baseline (our=0.60 < competitor=0.80) should FAIL")
+
+    if errors:
+        return [Finding("⚙ calibrate", "FAIL",
+                        "Mirror is miscalibrated: " + "; ".join(errors))]
+    return [Finding("⚙ calibrate", "OK",
+                    "5/5 synthetic cases correct — mirror is calibrated.")]
+
+
+def witness(ledger_path: str, claim_id: str, command: list[str], *,
+            timeout: int | None = None) -> dict:
+    """Execute command and seal a tamper-evident witness record in the ledger.
+
+    Runs the command as a subprocess, captures stdout/stderr/returncode, hashes
+    the output, and appends a chain-linked entry (with _type='witness') to the
+    ledger file.  The sealed record proves: which command ran, when, and what
+    it produced — output_hash changes if anything in stdout/stderr/returncode
+    changes.
+
+    Returns the witness entry dict (keys: seal, output_hash, returncode, …).
+    Does NOT silently ignore re-runs — every call appends a new entry.
+    """
+    import subprocess
+
+    ts_start = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        proc = subprocess.run(command, capture_output=True, text=True,
+                              timeout=timeout)
+        stdout, stderr = proc.stdout, proc.stderr
+        returncode = proc.returncode
+        run_status = "ok"
+    except subprocess.TimeoutExpired as exc:
+        stdout = (exc.stdout or b"").decode("utf-8", errors="replace") \
+                 if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        stderr = (exc.stderr or b"").decode("utf-8", errors="replace") \
+                 if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        returncode, run_status = -1, "timeout"
+    except Exception as exc:
+        stdout, stderr = "", str(exc)
+        returncode, run_status = -1, "error"
+
+    ts_end = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    output_hash = hashlib.sha256(
+        f"{returncode}\n{stdout}\n{stderr}".encode()
+    ).hexdigest()[:16]
+
+    entry: dict = {
+        "_type":       "witness",
+        "ts_start":    ts_start,
+        "ts_end":      ts_end,
+        "claim_id":    claim_id,
+        "command":     command,
+        "returncode":  returncode,
+        "run_status":  run_status,
+        "output_hash": output_hash,
+    }
+    prev_seal = _get_last_seal(ledger_path)
+    entry["prev_seal"] = prev_seal
+    entry["seal"] = hashlib.sha256(
+        json.dumps(entry, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()[:16]
+
+    with open(ledger_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    return entry
+
+
+# ─────────────────────────────────────────────────────────────
 # CLI
 # ─────────────────────────────────────────────────────────────
 def _auto(name: str, ledger: str = "mm_ledger.jsonl") -> None:
@@ -641,7 +749,8 @@ def _auto(name: str, ledger: str = "mm_ledger.jsonl") -> None:
 
 def _cli() -> None:
     import argparse, sys
-    if len(sys.argv) == 2 and sys.argv[1] not in {"register", "audit"} \
+    _SUBCMDS = {"register", "audit", "calibrate", "run"}
+    if len(sys.argv) == 2 and sys.argv[1] not in _SUBCMDS \
             and not sys.argv[1].startswith("-"):
         _auto(sys.argv[1]); return
     p = argparse.ArgumentParser(
@@ -667,6 +776,19 @@ def _cli() -> None:
     a.add_argument("--baseline", type=float, default=0.5)
     a.add_argument("--file", help="Result JSON: {claim_id, metric, acc, n, baseline}")
 
+    sub.add_parser("calibrate",
+                   help="Self-test: verify the mirror's probes return expected outcomes")
+
+    rn = sub.add_parser("run",
+                        help="Calibrate + witness-execute a command, sealing the run record")
+    rn.add_argument("claim_id", help="Experiment / claim identifier")
+    rn.add_argument("command", nargs=argparse.REMAINDER,
+                    help="Command to execute (prefix with -- to separate mm flags)")
+    rn.add_argument("--timeout", type=int, default=None,
+                    help="Subprocess timeout in seconds (default: none)")
+    rn.add_argument("--no-calibrate", dest="no_calibrate", action="store_true",
+                    help="Skip self-calibration before running the command")
+
     args = p.parse_args()
     if args.cmd == "register":
         e = preregister(args.ledger, args.claim_id, metric=args.metric,
@@ -687,6 +809,27 @@ def _cli() -> None:
             p.error("audit requires --acc and --n (or --file)")
         report(cid, audit(args.ledger, cid, reported_metric=metric,
                           reported_acc=acc, n=n, baseline=baseline))
+    elif args.cmd == "calibrate":
+        report("Mirror Calibration", calibrate())
+    elif args.cmd == "run":
+        cmd = [c for c in (args.command or []) if c != "--"]
+        if not cmd:
+            p.error("run requires a command: mm run <claim_id> [--] <command...>")
+        if not args.no_calibrate:
+            cal = calibrate()
+            report("Self-calibration", cal)
+            if any(f.level == "FAIL" for f in cal):
+                print("⚠️  Calibration failed — "
+                      "witness run continues but verify your installation.")
+        w = witness(args.ledger, args.claim_id, cmd, timeout=args.timeout)
+        print(f"\n🎬 Witnessed: {args.claim_id}")
+        print(f"   Command:     {' '.join(w['command'])}")
+        print(f"   Started:     {w['ts_start']}")
+        print(f"   Ended:       {w['ts_end']}")
+        print(f"   Exit code:   {w['returncode']}  ({w['run_status']})")
+        print(f"   Output hash: {w['output_hash']}")
+        print(f"   Prev seal:   {w['prev_seal']}")
+        print(f"   Seal:        {w['seal']}")
 
 
 if __name__ == "__main__":

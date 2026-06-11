@@ -126,7 +126,7 @@ def test_my_model_is_real():
 
 ---
 
-## All 13 Probes
+## All 13 Probes + 2 Utilities
 
 | Probe | Check # | Catches |
 |---|---|---|
@@ -143,6 +143,11 @@ def test_my_model_is_real():
 | `power_check` | ⑧ | n too small to detect minimum effect (false-negative guard) |
 | `multiple_comparisons_check` | ⑨ | k>1 experiments in ledger — Bonferroni correction alarm |
 | `grim_check` | ⑩ | Reported acc × n is arithmetically impossible (fabricated value) |
+
+| Utility | Purpose |
+|---|---|
+| `calibrate` | Self-test: 5 synthetic known-good/bad cases; confirms tool health |
+| `witness` | Execute a command, capture output, seal tamper-evident run record |
 
 ### Chain hash ledger (① extended)
 
@@ -179,6 +184,37 @@ f = mm.multiple_comparisons_check("mm_ledger.jsonl")
 
 # or activate via full_audit
 findings = mm.full_audit(LEDGER, "my_model", ..., check_multiplicity=True)
+```
+
+### Calibrate + Witness run
+
+```bash
+# Verify the mirror itself is working correctly
+mm calibrate
+# ✅ [⚙ calibrate] 5/5 synthetic cases correct — mirror is calibrated.
+
+# Witness-execute a command: calibrate first, then run and seal the record
+mm run my_model -- python evaluate.py --model my_model
+# ✅ [⚙ calibrate] 5/5 synthetic cases correct — mirror is calibrated.
+#
+# 🎬 Witnessed: my_model
+#    Command:     python evaluate.py --model my_model
+#    Started:     2026-06-11T12:00:00Z
+#    Ended:       2026-06-11T12:00:03Z
+#    Exit code:   0  (ok)
+#    Output hash: a3b9f2c1e8d74f6a
+#    Prev seal:   6c802655ab095e8b
+#    Seal:        9d1e83a4b72f0c5e
+```
+
+```python
+# Python API
+findings = mm.calibrate()
+mm.report("Mirror calibration", findings)
+
+entry = mm.witness("mm_ledger.jsonl", "my_model",
+                   ["python", "evaluate.py", "--model", "my_model"])
+# entry["output_hash"] changes if the script output ever changes
 ```
 
 ### GRIM ⑩
@@ -222,10 +258,11 @@ pip install "measure-mirror[mcp]"
 
 **Other MCP clients** — run `mm-mcp` as the stdio server command.
 
-All 13 probes are exposed as MCP tools:  
+All 13 probes + 2 utilities are exposed as MCP tools:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
-`mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check`
+`mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
+`mm_calibrate` · `mm_witness`
 
 ---
 

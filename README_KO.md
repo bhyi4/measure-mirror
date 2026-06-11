@@ -122,7 +122,7 @@ def test_my_model_is_real():
 
 ---
 
-## 13종 Probe 전체 목록
+## 13종 Probe + 2 유틸리티 전체 목록
 
 | Probe | 번호 | 잡아내는 것 |
 |---|---|---|
@@ -139,6 +139,11 @@ def test_my_model_is_real():
 | `power_check` | ⑧ | n이 너무 작아 진짜 효과를 못 잡음 (거짓음성 가드) |
 | `multiple_comparisons_check` | ⑨ | 같은 레저에 k>1 실험 → Bonferroni 교정 경보 |
 | `grim_check` | ⑩ | 보고된 acc × n이 정수 k와 일치 불가 (수치 조작 적발) |
+
+| 유틸리티 | 역할 |
+|---|---|
+| `calibrate` | 자가 테스트: 5종 합성 케이스로 도구 정상 작동 확인 |
+| `witness` | 커맨드 실행·출력 캡처·변조 방지 실행 봉인 원장에 기록 |
 
 ### 체인 해시 원장 (① 확장)
 
@@ -174,6 +179,27 @@ f = mm.multiple_comparisons_check("mm_ledger.jsonl")
 
 # full_audit에서 활성화
 findings = mm.full_audit(LEDGER, "my_model", ..., check_multiplicity=True)
+```
+
+### 보정(Calibrate) + 증인실행(Witness run)
+
+```bash
+# 거울 자체가 정상 작동하는지 확인
+mm calibrate
+# ✅ [⚙ calibrate] 5/5 케이스 정상 — 거울이 보정되었습니다.
+
+# 증인 실행: 먼저 보정하고, 커맨드 실행 후 봉인 기록
+mm run my_model -- python evaluate.py --model my_model
+```
+
+```python
+# Python API
+findings = mm.calibrate()
+mm.report("거울 보정", findings)
+
+entry = mm.witness("mm_ledger.jsonl", "my_model",
+                   ["python", "evaluate.py", "--model", "my_model"])
+# entry["output_hash"]은 스크립트 출력이 바뀌면 달라짐
 ```
 
 ### GRIM probe ⑩
@@ -217,10 +243,11 @@ pip install "measure-mirror[mcp]"
 
 **기타 MCP 클라이언트** — stdio 서버 명령으로 `mm-mcp`를 실행하세요.
 
-13종 probe 전부 MCP 도구로 노출됩니다:  
+13종 probe + 2 유틸리티 전부 MCP 도구로 노출됩니다:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
-`mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check`
+`mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
+`mm_calibrate` · `mm_witness`
 
 ---
 

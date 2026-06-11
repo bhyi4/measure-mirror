@@ -5,6 +5,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.5.0] — 2026-06-11
+
+### Added
+- **`calibrate()`** — self-test utility. Runs 5 synthetic known-good/bad cases
+  through the key probes (small-sample FAIL, honest large-sample OK, GRIM FAIL,
+  GRIM OK, baseline inversion FAIL) and verifies expected outcomes. Returns
+  `[OK]` when the mirror is healthy; `[FAIL]` with details when any case breaks.
+  Available as `mm calibrate` CLI command and `mm_calibrate` MCP tool.
+- **`witness(ledger_path, claim_id, command, *, timeout)`** — witness-run utility.
+  Executes a command via subprocess, captures stdout/stderr/returncode, hashes
+  the output (`output_hash`), and appends a chain-linked `_type="witness"` entry
+  to the ledger. Proves which command ran, when, and exactly what it produced.
+  Available as `mm run <claim_id> [--] <command...>` CLI command (also runs
+  calibration first unless `--no-calibrate`) and `mm_witness` MCP tool.
+- 8 new tests (total: 59 → 67, all passing).
+- Sync gate updated: `witness` added to `_MCP_UTILITY_TOOLS` exclusion list.
+
+### Changed
+- `mm run` subcommand added to CLI alongside existing `register` / `audit`.
+- Probe + utility count in README/README_KO updated: "13 Probes + 2 Utilities".
+- MCP server docstring updated: 13 probes + 2 utilities (15 tools total).
+
+---
+
 ## [0.4.0] — 2026-06-11
 
 ### Added

@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — MCP server
 
-Exposes all 13 probes as MCP tools via stdio transport so any
+Exposes 13 probes + 2 utilities (calibrate, witness) as MCP tools via stdio transport so any
 MCP-compatible AI (Claude Code, Cursor, Windsurf, …) can call them
 directly mid-conversation.
 
@@ -273,6 +273,37 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="mm_calibrate",
+            description=(
+                "⚙ Self-test: run 5 synthetic known-good/known-bad cases through the "
+                "mirror's key probes and verify they produce expected outcomes. "
+                "Returns OK when the tool is working correctly, FAIL if any probe is "
+                "broken. Run before witness() or in CI to confirm tool health."
+            ),
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        types.Tool(
+            name="mm_witness",
+            description=(
+                "🎬 Execute a command and seal a tamper-evident witness record in the "
+                "ledger. Captures stdout/stderr/returncode, hashes the output, and "
+                "appends a chain-linked entry. Proves: which command ran, when, and "
+                "exactly what it produced."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ledger_path": {"type": "string", "description": "Ledger JSONL path"},
+                    "claim_id":    {"type": "string", "description": "Experiment identifier"},
+                    "command":     {"type": "array", "items": {"type": "string"},
+                                   "description": "Command + args as a list, e.g. [\"python\", \"eval.py\"]"},
+                    "timeout":     {"type": "integer", "description": "Subprocess timeout in seconds",
+                                   "default": None},
+                },
+                "required": ["ledger_path", "claim_id", "command"],
+            },
+        ),
+        types.Tool(
             name="mm_grim_check",
             description=(
                 "⑩ GRIM (Granularity-Related Inconsistency of Means) test. "
@@ -445,6 +476,27 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 arguments["ledger_path"],
                 alpha=arguments.get("alpha", 0.05),
             ))
+
+        elif name == "mm_calibrate":
+            result = _findings_to_text(mm.calibrate())
+
+        elif name == "mm_witness":
+            w = mm.witness(
+                arguments["ledger_path"],
+                arguments["claim_id"],
+                arguments["command"],
+                timeout=arguments.get("timeout"),
+            )
+            result = (
+                f"🎬 Witnessed: {w['claim_id']}\n"
+                f"   Command:     {' '.join(w['command'])}\n"
+                f"   Started:     {w['ts_start']}\n"
+                f"   Ended:       {w['ts_end']}\n"
+                f"   Exit code:   {w['returncode']}  ({w['run_status']})\n"
+                f"   Output hash: {w['output_hash']}\n"
+                f"   Prev seal:   {w['prev_seal']}\n"
+                f"   Seal:        {w['seal']}"
+            )
 
         elif name == "mm_grim_check":
             result = _single(mm.grim_check(
