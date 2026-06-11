@@ -101,3 +101,33 @@ def test_mcp_tools_have_matching_probes():
         "Orphan MCP tools (no matching probe in mm.py):\n"
         + "\n".join(f"  ✗ mm_{t}" for t in orphans)
     )
+
+
+# ─────────────────────────────────────────────────────────────
+# Gate 5: every probe is exported from the package top level
+# ─────────────────────────────────────────────────────────────
+def test_all_probes_exported_from_package():
+    """Every probe must be importable as `from measure_mirror import <probe>`."""
+    import measure_mirror
+    missing = [p for p in PROBES if not hasattr(measure_mirror, p)]
+    assert not missing, (
+        "__init__.py export gaps:\n"
+        + "\n".join(f"  ✗ {p} → not exported from measure_mirror/__init__.py"
+                    for p in missing)
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# Gate 6: __version__ matches pyproject.toml
+# ─────────────────────────────────────────────────────────────
+def test_version_matches_pyproject():
+    """measure_mirror.__version__ must equal the version in pyproject.toml."""
+    import re
+    import measure_mirror
+    toml = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    m = re.search(r'^version\s*=\s*"([^"]+)"', toml, re.MULTILINE)
+    assert m, "version not found in pyproject.toml"
+    assert measure_mirror.__version__ == m.group(1), (
+        f"Version drift: __init__.py has {measure_mirror.__version__!r}, "
+        f"pyproject.toml has {m.group(1)!r}"
+    )

@@ -534,9 +534,9 @@ measure-mirror/
 │   ├── false_negative_guards.jsonl
 │   └── self_catches.jsonl     our own false positives
 └── tests/
-    ├── test_mm.py         # 117 tests for core probes, CI-enforced
+    ├── test_mm.py         # 109 tests for core probes, CI-enforced
     ├── test_judge.py      # 11 tests for judge.py module
-    └── test_sync.py       # sync gate: probe ↔ MCP ↔ tests ↔ README
+    └── test_sync.py       # sync gate: probe ↔ MCP ↔ tests ↔ README ↔ exports ↔ version
 ```
 
 ---

@@ -492,9 +492,9 @@ measure-mirror/
 │   ├── false_negative_guards.jsonl
 │   └── self_catches.jsonl     자체 적발 거짓양성
 └── tests/
-    ├── test_mm.py         # 117개 코어 프로브 테스트, CI 강제
+    ├── test_mm.py         # 109개 코어 프로브 테스트, CI 강제
     ├── test_judge.py      # 11개 judge.py 모듈 테스트
-    └── test_sync.py       # sync gate: probe ↔ MCP ↔ 테스트 ↔ README
+    └── test_sync.py       # sync gate: probe ↔ MCP ↔ 테스트 ↔ README ↔ 노출 ↔ 버전
 ```
 
 ---
