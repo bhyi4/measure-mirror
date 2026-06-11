@@ -127,12 +127,12 @@ def test_my_model_is_real():
 | Probe | 번호 | 잡아내는 것 |
 |---|---|---|
 | `preregister` / `audit` | ① | 사후 지표 교체 · 표본 미달 · 원장 위변조 |
-| `verify_chain` | ① | 엔트리 삭제/삽입 · 원장 재작성 후 재등록 |
+| `verify_chain` | ① | 엔트리 삭제/삽입 · 원장 위변조 |
+| `baseline_fairness` | ② | 허약한 / 동점 / 역전된 기준선 |
+| `gaming_check` | ③ | 보상/손실에 평가 지표 직접 포함 (자기충족) |
 | `audit` — Wilson CI | ④a | 통계적으로 우연과 구별 불가 (소표본) |
 | `audit` — direction | ④a | 기준선보다 낮은 성능 (역신호) |
-| `baseline_fairness` | ② | 허약한 / 동점 / 역전된 기준선 |
 | `leakage_check` | ④a | 훈련∩테스트 데이터 오염 |
-| `gaming_check` | ③ | 보상/손실에 평가 지표 직접 포함 (자기충족) |
 | `multiseed_check` | ⑤ | 불안정한 신호 / 운 좋은 시드 |
 | `scope_check` | ⑥ | 주장 범위 > 검증 범위 (과대 일반화) |
 | `too_good_check` | ⑦ | 기준선 대비 지나치게 큰 개선폭 |

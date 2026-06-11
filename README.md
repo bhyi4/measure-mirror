@@ -131,12 +131,12 @@ def test_my_model_is_real():
 | Probe | Check # | Catches |
 |---|---|---|
 | `preregister` / `audit` | ① | Post-hoc metric swap · sample underrun · ledger tampering |
-| `verify_chain` | ① | Deleted/inserted entries · re-registration after wiping ledger |
+| `verify_chain` | ① | Deleted/inserted entries · ledger tampering |
+| `baseline_fairness` | ② | Crippled / tied / reversed baseline |
+| `gaming_check` | ③ | Metric directly in reward/loss (self-fulfilling) |
 | `audit` — Wilson CI | ④a | Results indistinguishable from chance (small sample) |
 | `audit` — direction | ④a | Performance worse than baseline (anti-signal) |
-| `baseline_fairness` | ② | Crippled / tied / reversed baseline |
 | `leakage_check` | ④a | Train∩test data contamination |
-| `gaming_check` | ③ | Metric directly in reward/loss (self-fulfilling) |
 | `multiseed_check` | ⑤ | Unstable signal / lucky seed |
 | `scope_check` | ⑥ | Claimed scope wider than tested scope |
 | `too_good_check` | ⑦ | Suspiciously large Δ over baseline |
