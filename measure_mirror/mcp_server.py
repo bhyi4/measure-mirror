@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — MCP server
 
-Exposes 13 probes + 3 utilities (anchor, calibrate, witness) as MCP tools via stdio transport so any
+Exposes 14 probes + 3 utilities (anchor, calibrate, witness) as MCP tools via stdio transport so any
 MCP-compatible AI (Claude Code, Cursor, Windsurf, …) can call them
 directly mid-conversation.
 
@@ -42,7 +42,9 @@ async def list_tools() -> list[types.Tool]:
             description=(
                 "Seal evaluation criteria BEFORE running the experiment (pre-registration). "
                 "Each entry is chain-hashed to the previous one — deletions and insertions "
-                "are detected by mm_verify_chain. Must be called before the experiment runs."
+                "are detected by mm_verify_chain. Must be called before the experiment runs. "
+                "kill_condition / kill_threshold register what would falsify the claim — "
+                "claims without either are flagged 'unfalsifiable' at audit time (⑪)."
             ),
             inputSchema={
                 "type": "object",
@@ -53,8 +55,37 @@ async def list_tools() -> list[types.Tool]:
                     "min_n":          {"type": "integer", "description": "Minimum required sample size", "default": 200},
                     "baseline":       {"type": "number",  "description": "Fair comparison baseline performance", "default": 0.5},
                     "pass_threshold": {"type": "number",  "description": "Registered passing bar", "default": 0.60},
+                    "kill_condition": {"type": "string",  "description":
+                                       "Human-readable falsification criterion, e.g. 'acc < 0.55 on held-out test'",
+                                       "default": None},
+                    "kill_threshold": {"type": "object",  "description":
+                                       "Structured auto-evaluable form: "
+                                       "{\"metric\": \"acc\", \"threshold\": 0.55, \"direction\": \"below\"}",
+                                       "default": None},
                 },
                 "required": ["ledger_path", "claim_id", "metric"],
+            },
+        ),
+        types.Tool(
+            name="mm_falsifiability_check",
+            description=(
+                "⑪ Popper gate: verify that a kill-condition was registered and "
+                "auto-evaluate it against the reported result. "
+                "FAIL when kill_threshold is triggered (claim falsified by its own criterion). "
+                "WARN when no kill-condition exists (unfalsifiable claim). "
+                "OK when threshold is not triggered or text-only condition is registered. "
+                "Runs automatically inside mm_audit — call standalone to check without full audit."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ledger_path":  {"type": "string",  "description": "Path to the JSONL ledger file"},
+                    "claim_id":     {"type": "string",  "description": "Experiment / claim identifier"},
+                    "reported_acc": {"type": "number",  "description":
+                                     "Reported accuracy/proportion (optional; required to evaluate kill_threshold)",
+                                     "default": None},
+                },
+                "required": ["ledger_path", "claim_id"],
             },
         ),
         types.Tool(
@@ -376,17 +407,34 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 min_n=arguments.get("min_n", 200),
                 baseline=arguments.get("baseline", 0.5),
                 pass_threshold=arguments.get("pass_threshold", 0.60),
+                kill_condition=arguments.get("kill_condition"),
+                kill_threshold=arguments.get("kill_threshold"),
             )
+            kill_line = ""
+            if entry.get("kill_threshold"):
+                kt = entry["kill_threshold"]
+                kill_line = (f"\nkill_threshold: {kt.get('metric','?')} "
+                             f"{kt.get('direction','below')} {kt['threshold']}")
+            elif entry.get("kill_condition"):
+                kill_line = f"\nkill_condition: {entry['kill_condition']}"
             result = (
                 f"🔒 Sealed\n"
                 f"claim_id: {entry['claim_id']}\n"
                 f"metric: {entry['metric']}\n"
                 f"min_n: {entry['min_n']}\n"
                 f"baseline: {entry['baseline']}\n"
-                f"pass_threshold: {entry['pass_threshold']}\n"
+                f"pass_threshold: {entry['pass_threshold']}"
+                f"{kill_line}\n"
                 f"prev_seal: {entry['prev_seal']}\n"
                 f"seal: {entry['seal']}"
             )
+
+        elif name == "mm_falsifiability_check":
+            result = _single(mm.falsifiability_check(
+                arguments["ledger_path"],
+                arguments["claim_id"],
+                reported_acc=arguments.get("reported_acc"),
+            ))
 
         elif name == "mm_verify_chain":
             findings = mm.verify_chain(arguments["ledger_path"])

@@ -122,7 +122,7 @@ def test_my_model_is_real():
 
 ---
 
-## 13종 Probe + 2 유틸리티 전체 목록
+## 14종 Probe + 3 유틸리티 전체 목록
 
 | Probe | 번호 | 잡아내는 것 |
 |---|---|---|
@@ -139,6 +139,7 @@ def test_my_model_is_real():
 | `power_check` | ⑧ | n이 너무 작아 진짜 효과를 못 잡음 (거짓음성 가드) |
 | `multiple_comparisons_check` | ⑨ | 같은 레저에 k>1 실험 → Bonferroni 교정 경보 |
 | `grim_check` | ⑩ | 보고된 acc × n이 정수 k와 일치 불가 (수치 조작 적발) |
+| `falsifiability_check` | ⑪ | kill-condition 없음→반증불가; kill_threshold 발화→주장 사망 |
 
 | 유틸리티 | 역할 |
 |---|---|
@@ -181,6 +182,30 @@ f = mm.multiple_comparisons_check("mm_ledger.jsonl")
 # full_audit에서 활성화
 findings = mm.full_audit(LEDGER, "my_model", ..., check_multiplicity=True)
 ```
+
+### 반증가능성 ⑪ — 포퍼 게이트
+
+```python
+# 실험 전 — 주장을 죽이는 조건까지 봉인
+mm.preregister("mm_ledger.jsonl", "my_model",
+               metric="acc", min_n=200, baseline=0.5, pass_threshold=0.60,
+               kill_condition="held-out 테스트에서 정확도 0.55 미만",
+               kill_threshold={"metric": "acc", "threshold": 0.55, "direction": "below"})
+
+# 실험 후 — audit()이 ⑪을 자동 실행
+findings = mm.audit("mm_ledger.jsonl", "my_model",
+                    reported_metric="acc", reported_acc=0.50, n=500)
+# 🔴 [⑪ falsifiability] Kill condition triggered: acc=0.5 < 0.55.
+#    Claim 'my_model' is falsified by its own pre-registered criterion.
+```
+
+```bash
+mm register my_model --metric acc --min-n 200 --baseline 0.5 --pass 0.60 \
+  --kill "0.55 미만이면 사망" --kill-threshold 0.55 --kill-direction below
+```
+
+kill-condition 없이 등록된 주장은 audit 시점에 `WARN: Unfalsifiable`을 받습니다.
+OSF 사전등록도 가설만 받지 죽음조건은 받지 않습니다 — 이 도구가 최초입니다.
 
 ### 앵커(Anchor) ⎈
 
@@ -264,11 +289,11 @@ pip install "measure-mirror[mcp]"
 
 **기타 MCP 클라이언트** — stdio 서버 명령으로 `mm-mcp`를 실행하세요.
 
-13종 probe + 3 유틸리티 전부 MCP 도구로 노출됩니다:  
+14종 probe + 3 유틸리티 전부 MCP 도구로 노출됩니다:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
-`mm_anchor` · `mm_calibrate` · `mm_witness`
+`mm_falsifiability_check` · `mm_anchor` · `mm_calibrate` · `mm_witness`
 
 ---
 

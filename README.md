@@ -126,7 +126,7 @@ def test_my_model_is_real():
 
 ---
 
-## All 13 Probes + 2 Utilities
+## All 14 Probes + 3 Utilities
 
 | Probe | Check # | Catches |
 |---|---|---|
@@ -143,6 +143,7 @@ def test_my_model_is_real():
 | `power_check` | ⑧ | n too small to detect minimum effect (false-negative guard) |
 | `multiple_comparisons_check` | ⑨ | k>1 experiments in ledger — Bonferroni correction alarm |
 | `grim_check` | ⑩ | Reported acc × n is arithmetically impossible (fabricated value) |
+| `falsifiability_check` | ⑪ | No kill-condition → unfalsifiable; kill_threshold triggered → claim is dead |
 
 | Utility | Purpose |
 |---|---|
@@ -186,6 +187,39 @@ f = mm.multiple_comparisons_check("mm_ledger.jsonl")
 # or activate via full_audit
 findings = mm.full_audit(LEDGER, "my_model", ..., check_multiplicity=True)
 ```
+
+### Falsifiability ⑪ — the Popper gate
+
+```python
+# Register BEFORE the experiment — seal what would kill the claim
+mm.preregister("mm_ledger.jsonl", "my_model",
+               metric="acc", min_n=200, baseline=0.5, pass_threshold=0.60,
+               # human-readable (optional)
+               kill_condition="accuracy on held-out test drops below 0.55",
+               # structured: auto-evaluated at audit time
+               kill_threshold={"metric": "acc", "threshold": 0.55, "direction": "below"})
+
+# After the experiment — audit checks ⑪ automatically
+findings = mm.audit("mm_ledger.jsonl", "my_model",
+                    reported_metric="acc", reported_acc=0.50, n=500)
+# 🔴 [⑪ falsifiability] Kill condition triggered: acc=0.5 < 0.55.
+#    Claim 'my_model' is falsified by its own pre-registered criterion.
+
+# Or check standalone
+f = mm.falsifiability_check("mm_ledger.jsonl", "my_model", reported_acc=0.50)
+```
+
+```bash
+# CLI
+mm register my_model --metric acc --min-n 200 --baseline 0.5 --pass 0.60 \
+  --kill "accuracy < 0.55 on held-out" \
+  --kill-threshold 0.55 --kill-direction below
+```
+
+Claims registered without any `kill_condition` or `kill_threshold` receive a
+`WARN: Unfalsifiable` at audit time — operationalizing Popper's criterion as a
+code contract. OSF pre-registration accepts hypotheses; this is the first tool
+that also seals the kill condition.
 
 ### Anchor ⎈
 
@@ -280,11 +314,11 @@ pip install "measure-mirror[mcp]"
 
 **Other MCP clients** — run `mm-mcp` as the stdio server command.
 
-All 13 probes + 3 utilities are exposed as MCP tools:  
+All 14 probes + 3 utilities are exposed as MCP tools:  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
-`mm_anchor` · `mm_calibrate` · `mm_witness`
+`mm_falsifiability_check` · `mm_anchor` · `mm_calibrate` · `mm_witness`
 
 ---
 

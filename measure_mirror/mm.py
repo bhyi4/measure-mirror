@@ -14,6 +14,7 @@
   ⑧ Power — false-negative guard (n vs. minimum detectable effect)
   ⑨ Multiple comparisons — Bonferroni alarm for k>1 experiments in ledger
   ⑩ GRIM — arithmetic consistency (acc × n must be a whole-number count)
+  ⑪ Falsifiability — Popper gate (kill-condition registered? triggered?)
 
 Utilities:
   calibrate() — self-test: run 5 synthetic known-good/known-bad cases
@@ -63,19 +64,30 @@ def _get_last_seal(ledger_path: str) -> str:
 
 
 def preregister(ledger_path: str, claim_id: str, *, metric: str,
-                min_n: int, baseline: float, pass_threshold: float) -> dict:
+                min_n: int, baseline: float, pass_threshold: float,
+                kill_condition: str | None = None,
+                kill_threshold: dict | None = None) -> dict:
     """Seal evaluation criteria BEFORE seeing results.
 
     Each entry is cryptographically linked to the previous one (chain hash).
     Re-registration for the same claim_id is silently ignored — only the
     first registration counts in audit().
 
+    kill_condition: human-readable description of what would falsify the claim,
+        e.g. "accuracy drops below 0.55 on held-out test".
+    kill_threshold: structured auto-evaluable form:
+        {"metric": "acc", "threshold": 0.55, "direction": "below"}
+        direction "below": FAIL when reported_acc < threshold.
+        direction "above": FAIL when reported_acc > threshold (error metrics).
+        Both can be provided together. Claims with neither are flagged
+        "unfalsifiable" by falsifiability_check() at audit time.
+
     Chain link: deleting or inserting entries breaks the chain and is
     detected by verify_chain(). Complete ledger replacement is NOT caught
     here — use git commit anchoring for that guarantee.
     """
     prev_seal = _get_last_seal(ledger_path)
-    entry = {
+    entry: dict = {
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "claim_id": claim_id,
         "metric": metric,
@@ -84,6 +96,10 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
         "pass_threshold": pass_threshold,
         "prev_seal": prev_seal,
     }
+    if kill_condition is not None:
+        entry["kill_condition"] = kill_condition
+    if kill_threshold is not None:
+        entry["kill_threshold"] = kill_threshold
     entry["seal"] = hashlib.sha256(
         json.dumps(entry, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()[:16]
@@ -93,7 +109,7 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
 
 
 def _load_prereg(ledger_path: str, claim_id: str) -> dict | None:
-    """Return the FIRST registration only. Later entries are ignored."""
+    """Return the FIRST preregister entry for claim_id (skips witness/anchor entries)."""
     if not os.path.exists(ledger_path):
         return None
     with open(ledger_path, encoding="utf-8") as f:
@@ -105,9 +121,51 @@ def _load_prereg(ledger_path: str, claim_id: str) -> dict | None:
                 e = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if e.get("claim_id") == claim_id:
+            # Only preregister entries — witness/anchor have explicit _type
+            if e.get("claim_id") == claim_id and "_type" not in e:
                 return e
     return None
+
+
+def _falsifiability_eval(pre: dict, reported_acc: float | None) -> Finding:
+    """Internal: evaluate kill-condition from an already-loaded pre-registration entry."""
+    kill_cond  = pre.get("kill_condition")
+    kill_thresh = pre.get("kill_threshold")
+
+    if kill_cond is None and kill_thresh is None:
+        return Finding("⑪ falsifiability", "WARN",
+                       f"Unfalsifiable: '{pre['claim_id']}' has no kill-condition. "
+                       "Add kill_condition= or kill_threshold= to preregister().")
+
+    if kill_thresh is not None:
+        if reported_acc is None:
+            return Finding("⑪ falsifiability", "WARN",
+                           "Kill threshold registered but result not yet provided "
+                           "— cannot evaluate kill condition.")
+        metric    = kill_thresh.get("metric", pre.get("metric", "?"))
+        thr       = float(kill_thresh["threshold"])
+        direction = kill_thresh.get("direction", "below")
+        triggered = (
+            (direction == "below" and reported_acc < thr) or
+            (direction == "above" and reported_acc > thr)
+        )
+        text = f" [{kill_cond}]" if kill_cond else ""
+        if triggered:
+            op = "<" if direction == "below" else ">"
+            return Finding("⑪ falsifiability", "FAIL",
+                           f"Kill condition triggered{text}: "
+                           f"{metric}={reported_acc} {op} {thr}. "
+                           f"Claim '{pre['claim_id']}' is falsified by its own "
+                           "pre-registered criterion.")
+        op = "≥" if direction == "below" else "≤"
+        return Finding("⑪ falsifiability", "OK",
+                       f"Kill condition not triggered{text}: "
+                       f"{metric}={reported_acc} {op} {thr}.")
+
+    # kill_condition text-only (no structured threshold)
+    return Finding("⑪ falsifiability", "OK",
+                   f"Falsifiable (text-only): '{kill_cond}'. "
+                   "Add kill_threshold= for automatic evaluation.")
 
 
 def _verify_seal(entry: dict) -> bool:
@@ -430,6 +488,32 @@ def multiple_comparisons_check(ledger_path: str, *, alpha: float = 0.05) -> Find
 
 
 # ─────────────────────────────────────────────────────────────
+# ⑪ Falsifiability — Popper gate
+# ─────────────────────────────────────────────────────────────
+def falsifiability_check(ledger_path: str, claim_id: str, *,
+                          reported_acc: float | None = None) -> Finding:
+    """⑪ Popper gate: verify a kill-condition was registered; auto-evaluate it.
+
+    Checks the pre-registration for kill_condition / kill_threshold.
+
+    Levels:
+      FAIL — kill_threshold is registered AND reported_acc triggers it
+             (the claim falsified itself by its own pre-registered criterion)
+      WARN — no kill-condition at all (unfalsifiable), or kill_threshold
+             registered but reported_acc not yet provided
+      OK   — kill threshold not triggered, or text-only condition registered
+
+    Call standalone before publishing, or it runs automatically inside audit().
+    """
+    pre = _load_prereg(ledger_path, claim_id)
+    if pre is None:
+        return Finding("⑪ falsifiability", "WARN",
+                       f"No pre-registration for '{claim_id}' — "
+                       "kill-condition unknown.")
+    return _falsifiability_eval(pre, reported_acc)
+
+
+# ─────────────────────────────────────────────────────────────
 # Binary / classification metric audit
 # ─────────────────────────────────────────────────────────────
 def audit(ledger_path: str, claim_id: str, *,
@@ -494,6 +578,8 @@ def audit(ledger_path: str, claim_id: str, *,
                 findings.append(Finding("① pre-registration(pass-threshold)", "FAIL",
                     f"acc={reported_acc:.3f} < registered pass_threshold="
                     f"{pre['pass_threshold']:.3f}. (seal={pre['seal']})"))
+            # ⑪ falsifiability — only when seal is valid (no double-load)
+            findings.append(_falsifiability_eval(pre, reported_acc))
 
     return findings
 
@@ -824,6 +910,12 @@ def _cli() -> None:
     r.add_argument("--min-n", type=int, default=200)
     r.add_argument("--baseline", type=float, default=0.5)
     r.add_argument("--pass", dest="pass_threshold", type=float, default=0.60)
+    r.add_argument("--kill", dest="kill_condition", default=None,
+                   help='Human-readable kill condition, e.g. "acc < 0.55 on held-out"')
+    r.add_argument("--kill-threshold", type=float, default=None,
+                   help="Numeric kill threshold for automatic evaluation")
+    r.add_argument("--kill-direction", choices=["below", "above"], default="below",
+                   help="Fail when reported value is below/above threshold (default: below)")
 
     a = sub.add_parser("audit", help="Audit evaluation results")
     a.add_argument("claim_id", nargs="?")
@@ -853,11 +945,26 @@ def _cli() -> None:
 
     args = p.parse_args()
     if args.cmd == "register":
+        kill_thresh = None
+        if args.kill_threshold is not None:
+            kill_thresh = {
+                "metric": args.metric,
+                "threshold": args.kill_threshold,
+                "direction": args.kill_direction,
+            }
         e = preregister(args.ledger, args.claim_id, metric=args.metric,
                         min_n=args.min_n, baseline=args.baseline,
-                        pass_threshold=args.pass_threshold)
+                        pass_threshold=args.pass_threshold,
+                        kill_condition=args.kill_condition,
+                        kill_threshold=kill_thresh)
+        kill_note = ""
+        if kill_thresh:
+            op = "<" if args.kill_direction == "below" else ">"
+            kill_note = (f"  kill={args.metric} {op} {args.kill_threshold}")
+        elif args.kill_condition:
+            kill_note = f"  kill(text)={args.kill_condition!r}"
         print(f"🔒 Sealed: {args.claim_id}  metric={args.metric} "
-              f"min_n={args.min_n} baseline={args.baseline}  seal={e['seal']}")
+              f"min_n={args.min_n} baseline={args.baseline}{kill_note}  seal={e['seal']}")
     elif args.cmd == "audit":
         if args.file:
             d = json.load(open(args.file, encoding="utf-8"))

@@ -577,3 +577,119 @@ def test_anchor_chain_ok_false_on_tamper(tmp_path):
         f.write(json.dumps(entry) + "\n")
     a = mm.anchor(ledger)
     assert a["chain_ok"] is False
+
+
+# ─── ⑪ falsifiability_check tests ────────────────────────────
+
+def test_falsifiability_no_prereg(tmp_path):
+    """No pre-registration → WARN (kill-condition unknown)."""
+    f = mm.falsifiability_check(str(tmp_path / "none.jsonl"), "x")
+    assert f.level == "WARN"
+    assert f.probe == "⑪ falsifiability"
+
+
+def test_falsifiability_no_kill_condition_warns(tmp_path):
+    """Pre-registration without any kill-condition → WARN unfalsifiable."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1",
+                   metric="acc", min_n=100, baseline=0.5, pass_threshold=0.6)
+    f = mm.falsifiability_check(ledger, "exp1")
+    assert f.level == "WARN"
+    assert "unfalsifiable" in f.msg.lower() or "no kill-condition" in f.msg.lower()
+
+
+def test_falsifiability_text_only_ok(tmp_path):
+    """kill_condition text-only (no threshold) → OK with text note."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1",
+                   metric="acc", min_n=100, baseline=0.5, pass_threshold=0.6,
+                   kill_condition="accuracy drops below 0.55 on held-out test")
+    f = mm.falsifiability_check(ledger, "exp1")
+    assert f.level == "OK"
+    assert "text-only" in f.msg
+
+
+def test_falsifiability_threshold_not_triggered(tmp_path):
+    """kill_threshold registered; acc ≥ threshold → OK."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1",
+                   metric="acc", min_n=100, baseline=0.5, pass_threshold=0.6,
+                   kill_threshold={"metric": "acc", "threshold": 0.55, "direction": "below"})
+    f = mm.falsifiability_check(ledger, "exp1", reported_acc=0.72)
+    assert f.level == "OK"
+    assert f.probe == "⑪ falsifiability"
+
+
+def test_falsifiability_threshold_triggered_fail(tmp_path):
+    """kill_threshold registered; acc < threshold → FAIL (claim falsified)."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1",
+                   metric="acc", min_n=100, baseline=0.5, pass_threshold=0.6,
+                   kill_condition="model is not better than chance",
+                   kill_threshold={"metric": "acc", "threshold": 0.55, "direction": "below"})
+    f = mm.falsifiability_check(ledger, "exp1", reported_acc=0.50)
+    assert f.level == "FAIL"
+    assert "falsified" in f.msg
+
+
+def test_falsifiability_threshold_above_direction(tmp_path):
+    """direction=above; reported > threshold → FAIL (e.g. MSE error metric)."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1",
+                   metric="mse", min_n=50, baseline=0.5, pass_threshold=0.0,
+                   kill_threshold={"metric": "mse", "threshold": 0.30, "direction": "above"})
+    # reported MSE=0.35 > kill threshold 0.30 → FAIL
+    f = mm.falsifiability_check(ledger, "exp1", reported_acc=0.35)
+    assert f.level == "FAIL"
+
+
+def test_falsifiability_threshold_no_result_warns(tmp_path):
+    """kill_threshold registered but no reported_acc → WARN (unevaluated)."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1",
+                   metric="acc", min_n=100, baseline=0.5, pass_threshold=0.6,
+                   kill_threshold={"metric": "acc", "threshold": 0.55, "direction": "below"})
+    f = mm.falsifiability_check(ledger, "exp1")  # no reported_acc
+    assert f.level == "WARN"
+
+
+def test_falsifiability_stored_in_ledger(tmp_path):
+    """kill_condition and kill_threshold are sealed into the ledger entry."""
+    ledger = str(tmp_path / "l.jsonl")
+    e = mm.preregister(ledger, "exp1",
+                       metric="acc", min_n=100, baseline=0.5, pass_threshold=0.6,
+                       kill_condition="model is not useful",
+                       kill_threshold={"metric": "acc", "threshold": 0.55, "direction": "below"})
+    assert e["kill_condition"] == "model is not useful"
+    assert e["kill_threshold"]["threshold"] == 0.55
+
+
+def test_falsifiability_in_audit_unfalsifiable_warns(tmp_path):
+    """audit() appends ⑪ WARN when no kill-condition is registered."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1",
+                   metric="acc", min_n=50, baseline=0.5, pass_threshold=0.6)
+    findings = mm.audit(ledger, "exp1",
+                        reported_metric="acc", reported_acc=0.72, n=200)
+    assert any(f.probe == "⑪ falsifiability" and f.level == "WARN" for f in findings)
+
+
+def test_falsifiability_in_audit_triggered_fails(tmp_path):
+    """audit() appends ⑪ FAIL when kill_threshold is triggered."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "exp1",
+                   metric="acc", min_n=50, baseline=0.5, pass_threshold=0.4,
+                   kill_threshold={"metric": "acc", "threshold": 0.60, "direction": "below"})
+    findings = mm.audit(ledger, "exp1",
+                        reported_metric="acc", reported_acc=0.55, n=200)
+    assert any(f.probe == "⑪ falsifiability" and f.level == "FAIL" for f in findings)
+
+
+def test_falsifiability_kill_threshold_seal_valid(tmp_path):
+    """Adding kill fields doesn't break the chain seal."""
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "e1",
+                   metric="acc", min_n=50, baseline=0.5, pass_threshold=0.6,
+                   kill_threshold={"metric": "acc", "threshold": 0.55, "direction": "below"})
+    findings = mm.verify_chain(ledger)
+    assert all(f.level == "OK" for f in findings), findings

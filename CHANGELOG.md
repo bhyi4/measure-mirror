@@ -5,6 +5,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.7.0] — 2026-06-11
+
+### Added
+- **⑪ `falsifiability_check(ledger_path, claim_id, *, reported_acc)`** — Popper gate.
+  Verifies that a kill-condition was registered with the claim and auto-evaluates
+  the structured `kill_threshold` against the reported result.
+  - `FAIL` when `kill_threshold` is triggered — claim falsified by its own
+    pre-registered criterion.
+  - `WARN` when no kill-condition exists ("unfalsifiable") or threshold is
+    registered but result not yet provided.
+  - `OK` when threshold is not triggered or a text-only condition is registered.
+  - Runs automatically inside `audit()` (zero extra code required).
+- **`preregister()` gains two optional fields**:
+  - `kill_condition: str` — human-readable falsification description.
+  - `kill_threshold: dict` — structured auto-evaluable form:
+    `{"metric": "acc", "threshold": 0.55, "direction": "below"}`.
+    `direction` can be `"below"` (error ≥ threshold) or `"above"` (higher-is-bad
+    metrics like MSE). Both fields are sealed into the chain hash.
+- **CLI `mm register`** gains three new flags:
+  `--kill <text>`, `--kill-threshold <float>`, `--kill-direction below|above`.
+- **`mm_falsifiability_check`** MCP tool.
+- **`mm_register`** MCP schema updated with `kill_condition` / `kill_threshold`.
+- **`_load_prereg()` robustness fix**: now skips witness/anchor entries
+  (`_type` present) so they are never confused with preregister entries.
+- 11 new tests (total: 72 → 83, all passing).
+
+### Changed
+- Probe count: 13 → 14. README / README_KO updated: "14 Probes + 3 Utilities".
+
+---
+
 ## [0.6.0] — 2026-06-11
 
 ### Added
