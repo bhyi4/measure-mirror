@@ -19,6 +19,7 @@ Measurement Mirror는 양방향을 모두 잡습니다:
 |---|---|---|
 | 거짓양성 | n=9, acc=55.6%를 획기적 성과로 보고 | ④a Wilson CI가 우연 수준임을 적발 |
 | **거짓음성** | 실험 1회 실패 → "이 접근법은 죽었다" | ⑬ negative_audit가 독립 각도 ≥3개 요구 |
+| **판정자 착시** | LLM 판정자가 항상 첫 번째 응답을 선택 | ⑮ judge_bias_check가 위치 편향 적발 |
 
 성급한 음성 종결은 조작된 양성만큼 나쁩니다. 둘 다 연구 자원을 낭비하고
 분야 전체를 잘못된 방향으로 이끄는 허상입니다.
@@ -43,11 +44,14 @@ audit / full_audit           ← 결과가 나온 후 전체 프로브 실행
         │
         ├── 양성 결론 → publish + anchor (외부 해시 보관)
         │
-        └── 음성 결론 → negative_audit (⑬) 로 종결 게이트
-                          독립 각도 ≥ min_angles 필요
-                          │
-                          ▼
-                       나중에 무효화 시: retract() → cascade_check()
+        ├── 음성 결론 → negative_audit (⑬) 로 종결 게이트
+        │                 독립 각도 ≥ min_angles 필요
+        │                 │
+        │                 ▼
+        │              나중에 무효화 시: retract() → cascade_check()
+        │
+        └── LLM judge 평가 → judge_run()이 ⑭⑮⑯⑰ 자동 발화
+                              체인 연결 엔트리를 원장에 봉인
 ```
 
 ---
@@ -520,6 +524,246 @@ findings = mm.full_audit("ledger.jsonl", "main_claim", ...,
                           angles=["exp1", "exp2", "exp3"])
 # ⑬ 결과가 자동으로 추가됨
 ```
+
+---
+
+### 그룹 6 — LLM-as-a-Judge 프로브 ⑭⑮⑯⑰
+
+이 4개 프로브는 평가받는 모델이 아니라 **판정자 자체**를 감사합니다.
+LLM 판정자는 숫자 지표로는 잡을 수 없는 고유한 실패 패턴을 가집니다:
+확률적 뒤집기, 위치 편향, 런 간 불일치, 퇴화 점수 분포.
+
+4개 프로브는 모두 `mm.py`에 있어 의존성이 없으며 점수 리스트를 직접 받습니다.
+선택 모듈 `judge.py`는 LLM 호출과 4개 프로브 연결을 자동 처리합니다.
+
+**설치:**
+```bash
+pip install "measure-mirror[judge]"   # openai · anthropic 패키지 추가
+```
+
+---
+
+#### ⑭ `judge_consistency_check`
+
+**잡아내는 것**: 재실행 시 동일 아이템에 다른 판정을 내리는 확률적 판정자.
+
+동일 아이템에 판정자를 두 번 실행했을 때 뒤집기 비율이 높으면 판정자 출력은 노이즈입니다.
+노이즈 점수로 만든 순위는 집계 수치가 안정적으로 보여도 의미가 없습니다.
+
+```python
+# score_pairs: [(런1 점수, 런2 점수), ...] — 동일 아이템 2회 판정
+# pairwise: 0 = A 승, 1 = B 승
+# rating: 정수 점수
+
+score_pairs = [(1, 1), (0, 0), (1, 1), (0, 0), (1, 0)]  # 1회 뒤집기 / 5
+f = mm.judge_consistency_check(score_pairs, flip_threshold=0.20)
+# ✅ [⑭ judge-consistency] Judge flip rate 20.0% ≤ 20.0% (1/5 flips). Consistent.
+
+score_pairs_bad = [(1, 0), (0, 1), (1, 0), (0, 1), (1, 0)]  # 전부 뒤집힘
+f = mm.judge_consistency_check(score_pairs_bad, flip_threshold=0.20)
+# 🔴 [⑭ judge-consistency] Judge flip rate 100.0% > 20.0%.
+#    Judge is unreliable — scores cannot be trusted.
+```
+
+**파라미터:**
+| 파라미터 | 기본값 | 설명 |
+|---|---|---|
+| `score_pairs` | 필수 | `[(런1, 런2), ...]` — 아이템당 1쌍 |
+| `flip_threshold` | 0.20 | 허용 최대 뒤집기 비율 |
+
+**레벨:**
+- `FAIL` — flip_rate > flip_threshold
+- `WARN` — 빈 score_pairs (판단 불가)
+- `OK` — flip_rate ≤ flip_threshold
+
+---
+
+#### ⑮ `judge_bias_check`
+
+**잡아내는 것**: 내용에 관계없이 A 또는 B 위치를 체계적으로 선호하는 판정자.
+
+pairwise 평가에서 판정자는 고정된 순서(A, B)로 응답을 받습니다.
+편향된 판정자는 "첫 번째 답이 더 좋다"라는 지름길을 씁니다.
+이는 선호되는 위치를 차지하는 후보를 부당하게 유리하게 만듭니다.
+
+```python
+# pairwise_results: [0, 1, 0, ...] — 0 = A 승, 1 = B 승
+
+results = [0, 1, 0, 1, 0, 1, 0, 1, 0, 1]  # 50/50 — 편향 없음
+f = mm.judge_bias_check(results)
+# ✅ [⑮ judge-bias] Position A win rate 50.0% — no significant position bias.
+
+results = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]  # A가 90% 승
+f = mm.judge_bias_check(results, bias_threshold=0.60)
+# 🔴 [⑮ judge-bias] Position A win rate 90.0% > 60.0%.
+#    Strong position bias detected (9/10 items favor A).
+```
+
+**완화 방법**: 각 쌍을 양방향(AB, BA)으로 실행하고 평균냅니다.
+편향 없는 판정자라면 순서 변경 시 판정 빈도가 반전돼야 합니다.
+
+**파라미터:**
+| 파라미터 | 기본값 | 설명 |
+|---|---|---|
+| `pairwise_results` | 필수 | `[0, 1, ...]` — 비교당 1결과 |
+| `bias_threshold` | 0.60 | 위치 편향 플래그 임계값 |
+
+**레벨:**
+- `FAIL` — A 또는 B 승률 > bias_threshold
+- `WARN` — 빈 results
+- `OK` — 양방향 승률 모두 임계값 이하
+
+---
+
+#### ⑯ `inter_rater_agreement`
+
+**잡아내는 것**: 두 판정자(또는 동일 판정자의 두 런)가 우연 수준을 넘어 불일치.
+
+Cohen's κ는 무작위 우연으로 기대되는 일치 이상의 일치를 측정합니다.
+κ ≈ 0이면 두 평가자는 사실상 독립적인 난수 변수입니다 — 점수를 평균내거나
+단일 신호로 보고하는 것이 의미를 잃습니다.
+
+| κ | 해석 |
+|---|---|
+| < 0.20 | 불량 — 사실상 무작위 |
+| 0.20 – 0.40 | 보통 |
+| 0.40 – 0.60 | 중간 (기본 임계값) |
+| 0.60 – 0.80 | 양호 |
+| > 0.80 | 거의 완벽 |
+
+```python
+# ratings_matrix: [(판정자1_점수, 판정자2_점수), ...] — 아이템당 1행
+
+# 완전 일치
+matrix = [(1, 1), (0, 0), (1, 1), (0, 0), (1, 1)]
+f = mm.inter_rater_agreement(matrix)
+# ✅ [⑯ inter-rater] Cohen's κ=1.000 ≥ 0.40 — acceptable inter-rater agreement.
+
+# 보통 일치 (κ ≈ 0.33 < 0.40)
+matrix = [(0, 0), (0, 1), (0, 0), (1, 1), (1, 0), (1, 1)]
+f = mm.inter_rater_agreement(matrix, min_kappa=0.40)
+# ⚠️ [⑯ inter-rater] Cohen's κ=0.333 < 0.40 — fair agreement only.
+
+# 불량 일치 → FAIL
+matrix = [(0, 1), (1, 0), (0, 1), (1, 0), (0, 1)]
+f = mm.inter_rater_agreement(matrix)
+# 🔴 [⑯ inter-rater] Cohen's κ=-1.000 < 0.20 — poor agreement.
+```
+
+**파라미터:**
+| 파라미터 | 기본값 | 설명 |
+|---|---|---|
+| `ratings_matrix` | 필수 | `[(r1, r2), ...]` — ≥ 3 아이템 필요 |
+| `min_kappa` | 0.40 | 허용 최소 κ |
+
+**레벨:**
+- `FAIL` — κ < 0.20 또는 아이템 < 3
+- `WARN` — 0.20 ≤ κ < min_kappa
+- `OK` — κ ≥ min_kappa
+
+---
+
+#### ⑰ `judge_score_sanity`
+
+**잡아내는 것**: 거의 모든 것에 동일한 점수를 부여하는 퇴화 판정자.
+
+판별력이 사실상 없는 판정자는 신호를 제공하지 않습니다.
+그 점수로 만든 순위는 무작위 순위와 동등합니다.
+
+```python
+# scores: [8, 7, 8, 9, ...] — 한 판정자의 모든 점수
+
+# 건강한 분포
+scores = [3, 7, 5, 8, 4, 6, 9, 2, 7, 5, 3, 8, 6, 4, 7]
+f = mm.judge_score_sanity(scores)
+# ✅ [⑰ judge-score-sanity] 8 distinct values across 15 scores (53.3% unique).
+
+# 퇴화: 전원 동점
+scores = [8] * 20
+f = mm.judge_score_sanity(scores)
+# 🔴 [⑰ judge-score-sanity] All 20 scores identical (8).
+#    Judge is not discriminating — scores are meaningless.
+
+# 근사 퇴화: 95%가 8
+scores = [8] * 19 + [7]
+f = mm.judge_score_sanity(scores)
+# ⚠️ [⑰ judge-score-sanity] 95% of scores are '8' — near-degenerate distribution.
+```
+
+**파라미터:**
+| 파라미터 | 기본값 | 설명 |
+|---|---|---|
+| `scores` | 필수 | 한 판정자 런의 모든 점수 목록 |
+| `min_unique_ratio` | 0.10 | 총 점수 대비 고유값 비율 최솟값 |
+
+**레벨:**
+- `FAIL` — 전원 동점
+- `WARN` — 최다 값 집중 > 90% 또는 고유 비율 < min_unique_ratio
+- `OK` — 분포 양호
+
+---
+
+#### `judge_run` — 자동 오케스트레이션 (`judge.py`)
+
+`judge_run`은 점수 수집의 번거로움을 없애줍니다. judge 함수를 호출하고,
+4개 프로브를 자동으로 발화한 뒤, 체인 연결된 `_type: judge_run` 엔트리를
+원장에 봉인합니다.
+
+```python
+from measure_mirror.judge import anthropic_judge, openai_judge, judge_run
+
+# 1단계: judge callable 생성
+judge_fn = anthropic_judge(
+    model="claude-opus-4-8",
+    system_prompt="당신은 엄격하고 공정한 평가자입니다.",
+    pairwise=True,   # True = A/B 비교; False = 1-10 점수
+)
+
+# 2단계: 아이템 준비
+pairs = [
+    {"prompt": "경사하강법을 설명하세요",
+     "a": "모델 A의 응답", "b": "모델 B의 응답"},
+    ...
+]
+
+# 3단계: 실행 + 자동 프로브
+result = judge_run(
+    "mm_ledger.jsonl",   # 원장 경로 — 엔트리가 체인 연결·봉인됨
+    "my_llm_eval_v1",    # claim_id — 사전등록 엔트리와 연결
+    judge_fn=judge_fn,
+    items=pairs,
+    runs=2,              # 아이템당 2회 호출 → ⑭ + ⑯ 활성화
+    pairwise=True,       # ⑮ 편향 검사 활성화
+)
+
+for f in result["findings"]:
+    print(f"  {f.level}  [{f.probe}]  {f.msg}")
+
+print(result["scores"])        # 런-1 점수 (아이템당 1개)
+print(result["score_pairs"])   # (런1, 런2) 쌍 — runs=1이면 None
+print(result["ledger_entry"])  # 봉인된 원장 엔트리
+```
+
+**반환값 키:**
+
+| 키 | 타입 | 내용 |
+|---|---|---|
+| `findings` | `list[Finding]` | ⑭⑮⑯⑰ 프로브 결과 |
+| `scores` | `list[int]` | 런-1 점수 (아이템당 1개) |
+| `score_pairs` | `list[tuple]` or `None` | `(런1, 런2)` 쌍; `runs=1`이면 `None` |
+| `n_items` | `int` | 평가된 아이템 수 |
+| `runs` | `int` | 반복 횟수 |
+| `pairwise` | `bool` | pairwise 모드 여부 |
+| `ledger_entry` | `dict` | 원장에 추가된 체인 연결 엔트리 |
+
+**조건별 활성 프로브:**
+
+| 프로브 | 조건 |
+|---|---|
+| ⑭ `judge_consistency_check` | `runs ≥ 2`일 때 항상 |
+| ⑮ `judge_bias_check` | `pairwise=True`일 때 항상 |
+| ⑯ `inter_rater_agreement` | `runs ≥ 2`일 때 항상 |
+| ⑰ `judge_score_sanity` | 항상 |
 
 ---
 

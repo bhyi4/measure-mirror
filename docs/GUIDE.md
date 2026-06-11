@@ -19,6 +19,7 @@ look better than they are. Measurement Mirror catches both:
 |---|---|---|
 | False positive | n=9, acc=55.6% reported as breakthrough | ④a Wilson CI flags it as chance |
 | **False negative** | 1 negative experiment → "approach is dead" | ⑬ negative_audit requires ≥ 3 independent angles |
+| **Judge illusion** | LLM judge always picks the first response | ⑮ judge_bias_check catches position preference |
 
 A premature negative closure is as bad as a fabricated positive. Both are
 illusions that waste research resources and mislead the field.
@@ -43,11 +44,14 @@ audit / full_audit           ← run all probes after results are in
         │
         ├── positive conclusion  → publish + anchor (external hash)
         │
-        └── negative conclusion  → negative_audit (⑬) gates the closure
-                                    ≥ min_angles independent angles required
-                                    │
-                                    ▼
-                                 if later invalidated: retract() → cascade_check()
+        ├── negative conclusion  → negative_audit (⑬) gates the closure
+        │                           ≥ min_angles independent angles required
+        │                           │
+        │                           ▼
+        │                        if later invalidated: retract() → cascade_check()
+        │
+        └── LLM judge evaluation → judge_run() fires ⑭⑮⑯⑰ automatically
+                                    seals chain-linked entry in ledger
 ```
 
 ---
@@ -525,6 +529,262 @@ findings = mm.full_audit("ledger.jsonl", "main_claim", ...,
                           angles=["exp1", "exp2", "exp3"])
 # ⑬ finding is appended automatically
 ```
+
+---
+
+### Group 6 — LLM-as-a-Judge probes ⑭⑮⑯⑰
+
+These four probes audit the **judge itself** rather than the model under evaluation.
+LLM judges introduce failure modes that numeric metrics cannot see: stochastic flips,
+positional bias, inter-run disagreement, and degenerate scoring distributions.
+
+All four probes live in `mm.py` (zero dependencies) and accept raw score lists, so
+they work with any judge system. The optional `judge.py` module handles calling the
+LLM and wires all four probes together automatically.
+
+**Install:**
+```bash
+pip install "measure-mirror[judge]"   # adds openai and anthropic packages
+```
+
+---
+
+#### ⑭ `judge_consistency_check`
+
+**Catches**: a stochastic judge that gives different verdicts on the same item on re-run.
+
+If you call the same judge twice on the same items and a high fraction of verdicts
+flip, the judge's output is noise. Rankings derived from noisy judge scores are
+meaningless even if aggregate numbers look stable.
+
+```python
+# score_pairs: list of (score_run1, score_run2) — same item judged twice
+# For pairwise:  0 = A won, 1 = B won
+# For rating:    integer score
+
+score_pairs = [(1, 1), (0, 0), (1, 1), (0, 0), (1, 0)]  # 1 flip out of 5
+f = mm.judge_consistency_check(score_pairs, flip_threshold=0.20)
+# ✅ [⑭ judge-consistency] Judge flip rate 20.0% ≤ 20.0% (1/5 flips). Consistent.
+
+score_pairs_bad = [(1, 0), (0, 1), (1, 0), (0, 1), (1, 0)]  # 5 flips — all wrong
+f = mm.judge_consistency_check(score_pairs_bad, flip_threshold=0.20)
+# 🔴 [⑭ judge-consistency] Judge flip rate 100.0% > 20.0% (5/5 items changed
+#    verdict on re-run). Judge is unreliable — scores cannot be trusted.
+```
+
+**Parameters:**
+| Param | Default | Notes |
+|---|---|---|
+| `score_pairs` | required | `[(run1, run2), ...]` — one pair per item |
+| `flip_threshold` | 0.20 | max acceptable fraction of changed verdicts |
+
+**Levels:**
+- `FAIL` — flip_rate > flip_threshold
+- `WARN` — empty score_pairs (can't assess)
+- `OK` — flip_rate ≤ flip_threshold
+
+---
+
+#### ⑮ `judge_bias_check`
+
+**Catches**: systematic position preference — the judge picks A (or B) regardless of content.
+
+In pairwise evaluation, the judge is shown Response A and Response B in a fixed order.
+A biased judge exploits position: "first answer is better" or "second answer is better"
+as a shortcut. This inflates whatever candidate happens to occupy the favored position.
+
+```python
+# pairwise_results: [0, 1, 0, ...] — 0 = A won, 1 = B won
+
+# Balanced: no bias
+results = [0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
+f = mm.judge_bias_check(results)
+# ✅ [⑮ judge-bias] Position A win rate 50.0% — no significant position bias.
+
+# A-favoring judge
+results = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1]  # A wins 90%
+f = mm.judge_bias_check(results, bias_threshold=0.60)
+# 🔴 [⑮ judge-bias] Position A win rate 90.0% > 60.0%. Strong position bias
+#    detected (9/10 items favor A).
+```
+
+**Mitigation**: run each pair in both orders (AB and BA) and average.
+If the judge is unbiased, switching positions should invert the verdict frequency.
+
+**Parameters:**
+| Param | Default | Notes |
+|---|---|---|
+| `pairwise_results` | required | `[0, 1, ...]` — one result per comparison |
+| `bias_threshold` | 0.60 | win-rate above which position bias is flagged |
+
+**Levels:**
+- `FAIL` — A or B win-rate > bias_threshold
+- `WARN` — empty results
+- `OK` — both win-rates within threshold
+
+---
+
+#### ⑯ `inter_rater_agreement`
+
+**Catches**: two judges (or two runs of the same judge) that disagree beyond chance level.
+
+Cohen's κ measures agreement *above* what you would expect by random chance.
+A κ near 0 means the two raters are effectively independent random variables — their
+scores cannot be averaged or reported as a single signal.
+
+| κ | Interpretation |
+|---|---|
+| < 0.20 | Poor — essentially random |
+| 0.20 – 0.40 | Fair |
+| 0.40 – 0.60 | Moderate (default threshold) |
+| 0.60 – 0.80 | Substantial |
+| > 0.80 | Near-perfect |
+
+```python
+# ratings_matrix: [(judge1_score, judge2_score), ...] — one row per item
+# Use any categorical scores: 0/1 (pairwise winner) or 1–10 (rating scale)
+
+# Perfect agreement
+matrix = [(1, 1), (0, 0), (1, 1), (0, 0), (1, 1)]
+f = mm.inter_rater_agreement(matrix)
+# ✅ [⑯ inter-rater] Cohen's κ=1.000 ≥ 0.40 — acceptable inter-rater agreement.
+
+# Fair agreement (κ ≈ 0.33 < 0.40)
+matrix = [(0, 0), (0, 1), (0, 0), (1, 1), (1, 0), (1, 1)]
+f = mm.inter_rater_agreement(matrix, min_kappa=0.40)
+# ⚠️ [⑯ inter-rater] Cohen's κ=0.333 < 0.40 — fair agreement only.
+#    Results may not reproduce with a different judge model.
+
+# Poor agreement triggers FAIL
+matrix = [(0, 1), (1, 0), (0, 1), (1, 0), (0, 1)]
+f = mm.inter_rater_agreement(matrix)
+# 🔴 [⑯ inter-rater] Cohen's κ=-1.000 < 0.20 — poor agreement.
+#    Judge scores are essentially random relative to each other.
+```
+
+**Parameters:**
+| Param | Default | Notes |
+|---|---|---|
+| `ratings_matrix` | required | `[(r1, r2), ...]` — one row per item; must be ≥ 3 items |
+| `min_kappa` | 0.40 | minimum acceptable κ |
+
+**Levels:**
+- `FAIL` — κ < 0.20 (poor) or fewer than 3 items
+- `WARN` — 0.20 ≤ κ < min_kappa (fair only)
+- `OK` — κ ≥ min_kappa
+
+---
+
+#### ⑰ `judge_score_sanity`
+
+**Catches**: a degenerate judge that assigns the same score to almost everything.
+
+A judge with near-zero discrimination provides no signal. Rankings based on its scores
+are equivalent to random ranking — no matter how many items you evaluate, the judge is
+not learning anything from the content.
+
+```python
+# scores: [8, 7, 8, 9, ...] — all scores from one judge run
+# Works with both integer and float scores
+
+# Healthy distribution
+scores = [3, 7, 5, 8, 4, 6, 9, 2, 7, 5, 3, 8, 6, 4, 7]
+f = mm.judge_score_sanity(scores)
+# ✅ [⑰ judge-score-sanity] 8 distinct values across 15 scores (53.3% unique ratio).
+#    Distribution looks healthy.
+
+# Degenerate: all scores identical
+scores = [8] * 20
+f = mm.judge_score_sanity(scores)
+# 🔴 [⑰ judge-score-sanity] All 20 scores identical (8).
+#    Judge is not discriminating — scores are meaningless.
+
+# Near-degenerate: one dominant value
+scores = [8] * 19 + [7]  # 95% are 8
+f = mm.judge_score_sanity(scores)
+# ⚠️ [⑰ judge-score-sanity] 95% of scores are '8' — near-degenerate distribution.
+#    Judge may not be discriminating.
+```
+
+**Parameters:**
+| Param | Default | Notes |
+|---|---|---|
+| `scores` | required | list of all scores from one judge run |
+| `min_unique_ratio` | 0.10 | minimum ratio of unique values to total scores |
+
+**Levels:**
+- `FAIL` — all scores identical (ratio = 0)
+- `WARN` — top-value concentration > 90% or unique_ratio < min_unique_ratio
+- `OK` — distribution looks healthy
+
+---
+
+#### `judge_run` — automatic orchestration (`judge.py`)
+
+`judge_run` eliminates the friction of collecting scores yourself. It calls the
+judge function, fires all four probes automatically, and seals a chain-linked
+`_type: judge_run` entry into the ledger.
+
+```python
+from measure_mirror.judge import anthropic_judge, openai_judge, judge_run
+
+# Step 1: build a judge callable
+judge_fn = anthropic_judge(
+    model="claude-opus-4-8",
+    # Optional: override system prompt
+    system_prompt="You are a strict, impartial evaluator.",
+    # Optional: override prompt formatter
+    prompt_fn=lambda item: f"Which is better? A: {item['a']}  B: {item['b']}",
+    pairwise=True,   # True = A/B comparison; False = 1-10 rating
+)
+
+# Step 2: prepare items
+pairs = [
+    {"prompt": "Explain gradient descent",
+     "a": "Response from model A", "b": "Response from model B"},
+    ...  # as many as you need
+]
+
+# Step 3: run + auto-probe
+result = judge_run(
+    "mm_ledger.jsonl",  # ledger path — entry is chain-linked and sealed
+    "my_llm_eval_v1",   # claim_id — links to a preregister entry if you have one
+    judge_fn=judge_fn,
+    items=pairs,
+    runs=2,             # 2 = call each item twice; enables ⑭ + ⑯
+    pairwise=True,      # True = enable ⑮ bias check
+)
+
+# Findings from ⑭⑮⑯⑰
+for f in result["findings"]:
+    print(f"  {f.level}  [{f.probe}]  {f.msg}")
+
+# Raw data
+print(result["scores"])        # run-1 score per item
+print(result["score_pairs"])   # (run1, run2) per item — None if runs=1
+print(result["ledger_entry"])  # the sealed ledger entry
+```
+
+**Return value keys:**
+
+| Key | Type | Contents |
+|---|---|---|
+| `findings` | `list[Finding]` | ⑭⑮⑯⑰ probe results |
+| `scores` | `list[int]` | run-1 scores (one per item) |
+| `score_pairs` | `list[tuple]` or `None` | `(run1, run2)` pairs; `None` if `runs=1` |
+| `n_items` | `int` | number of items evaluated |
+| `runs` | `int` | number of repetitions performed |
+| `pairwise` | `bool` | whether pairwise mode was used |
+| `ledger_entry` | `dict` | chain-linked entry appended to ledger |
+
+**Which probes run under which conditions:**
+
+| Probe | Condition |
+|---|---|
+| ⑭ `judge_consistency_check` | always when `runs ≥ 2` |
+| ⑮ `judge_bias_check` | always when `pairwise=True` |
+| ⑯ `inter_rater_agreement` | always when `runs ≥ 2` |
+| ⑰ `judge_score_sanity` | always |
 
 ---
 

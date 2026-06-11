@@ -15,7 +15,7 @@ Zero training · Deterministic · Zero dependencies (Python 3.10+ stdlib only).
 > Built while honestly killing our own project.  
 > The makers ran it on themselves first. → [🦋 Origin Story](docs/CHRONICLE.md)
 
-**[📖 Full Probe Guide →](docs/GUIDE.md)** — detailed explanations, worked examples, and workflows for all 16 probes
+**[📖 Full Probe Guide →](docs/GUIDE.md)** — detailed explanations, worked examples, and workflows for all 20 probes
 
 ---
 
@@ -38,10 +38,11 @@ Measurement Mirror catches these **structurally**, not by opinion.
 ## Install
 
 ```bash
-pip install -e .                   # core (zero deps)
-pip install -e ".[mcp]"            # + MCP server for AI agents
-pip install -e ".[test]"           # + pytest plugin
-pip install -e ".[mcp,test]"       # everything
+pip install -e .                        # core (zero deps)
+pip install -e ".[mcp]"                 # + MCP server for AI agents
+pip install -e ".[judge]"               # + LLM-as-a-Judge runner (openai / anthropic)
+pip install -e ".[test]"                # + pytest plugin
+pip install -e ".[mcp,judge,test]"      # everything
 ```
 
 CLI entry point: `mm`  
@@ -128,7 +129,7 @@ def test_my_model_is_real():
 
 ---
 
-## All 16 Probes + 4 Utilities
+## All 20 Probes + 4 Utilities
 
 | Probe | Check # | Catches |
 |---|---|---|
@@ -306,6 +307,77 @@ findings = mm.full_audit(LEDGER, "main_claim", ..., angles=["a1", "a2", "a3"])
 | A registered angle is retracted | WARN — weakened case |
 | All checks pass | OK |
 
+### LLM-as-a-Judge probes ⑭⑮⑯⑰
+
+LLM judges introduce their own failure modes that numeric metrics don't catch.
+The four judge probes audit the **judge itself**, not just the model being evaluated.
+
+```bash
+pip install "measure-mirror[judge]"   # adds openai and anthropic
+```
+
+```python
+from measure_mirror.judge import anthropic_judge, openai_judge, judge_run
+
+# Build a judge callable (pairwise A-vs-B mode)
+judge_fn = anthropic_judge(model="claude-opus-4-8")
+# or: judge_fn = openai_judge(model="gpt-4o")
+
+# Each item: {"prompt": str, "a": str, "b": str}  (pairwise)
+#            {"prompt": str, "response": str}       (rating, pairwise=False)
+pairs = [
+    {"prompt": "Summarize quantum entanglement",
+     "a": "candidate_A output", "b": "candidate_B output"},
+    ...
+]
+
+# judge_run calls judge_fn runs×len(items) times,
+# fires ⑭⑮⑯⑰ automatically, and seals a chain-linked entry.
+result = judge_run("mm_ledger.jsonl", "my_llm_eval",
+                   judge_fn=judge_fn,
+                   items=pairs,
+                   runs=2,        # run each item twice → ⑭ consistency
+                   pairwise=True) # A-vs-B → ⑮ bias check
+
+for f in result["findings"]:
+    print(f"  {f.level}  [{f.probe}]  {f.msg}")
+```
+
+**The four checks triggered by `judge_run`:**
+
+| Probe | Catches |
+|---|---|
+| `judge_consistency_check` ⑭ | Judge gives different verdict on re-run (stochastic / unreliable) |
+| `judge_bias_check` ⑮ | Judge systematically favors position A or B regardless of content |
+| `inter_rater_agreement` ⑯ | Two runs disagree beyond chance (Cohen's κ below threshold) |
+| `judge_score_sanity` ⑰ | Judge assigns identical / near-identical scores to everything |
+
+**Standalone usage (bring-your-own scores):**
+
+```python
+from measure_mirror import mm
+
+# ⑭ consistency — did the judge flip its verdict?
+score_pairs = [(1, 1), (0, 0), (1, 0), (0, 0), (1, 1)]  # (run1, run2) per item
+f = mm.judge_consistency_check(score_pairs, flip_threshold=0.20)
+# ✅  flip rate 20.0% ≤ 20.0% (1/5 flips). Consistent.
+
+# ⑮ position bias — does A always win?
+results = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0]  # 0=A won, 1=B won
+f = mm.judge_bias_check(results, bias_threshold=0.60)
+# 🔴  Position A win rate 90.0% > 60.0%. Strong position bias detected.
+
+# ⑯ inter-rater — Cohen's κ between two raters / runs
+matrix = [(1, 1), (0, 0), (1, 1), (0, 1), (1, 0), (0, 0)]
+f = mm.inter_rater_agreement(matrix, min_kappa=0.40)
+# ⚠️  Cohen's κ=0.333 < 0.40 — fair agreement only.
+
+# ⑰ score sanity — degenerate distribution?
+scores = [8, 8, 8, 8, 8, 8, 8, 7, 8, 8]  # 90% are 8
+f = mm.judge_score_sanity(scores)
+# ⚠️  90% of scores are '8' — near-degenerate distribution.
+```
+
 ### Anchor ⎈
 
 ```bash
@@ -442,9 +514,13 @@ python examples/demo_field.py    # Field candidate false positives
 ```
 measure-mirror/
 ├── measure_mirror/
-│   ├── mm.py              # 10 probes + CLI + DB lookup
-│   ├── mcp_server.py      # MCP server (pip install .[mcp])
+│   ├── mm.py              # 17 probes + CLI + DB lookup (zero deps)
+│   ├── mcp_server.py      # MCP server — 20 tools (pip install .[mcp])
+│   ├── judge.py           # LLM-as-a-Judge runner (pip install .[judge])
 │   └── pytest_plugin.py   # assert_clean() for CI gates
+├── docs/
+│   ├── GUIDE.md           # full per-probe reference (English)
+│   └── GUIDE_KO.md        # full per-probe reference (Korean)
 ├── examples/
 │   ├── quickstart.py      # happy path demo
 │   ├── demo_zero.py       # ZERO false-positive (dog-food)
@@ -457,7 +533,10 @@ measure-mirror/
 │   ├── contamination.jsonl    data leakage fingerprints
 │   ├── false_negative_guards.jsonl
 │   └── self_catches.jsonl     our own false positives
-└── tests/test_mm.py       # 28 tests, CI-enforced
+└── tests/
+    ├── test_mm.py         # 117 tests for core probes, CI-enforced
+    ├── test_judge.py      # 11 tests for judge.py module
+    └── test_sync.py       # sync gate: probe ↔ MCP ↔ tests ↔ README
 ```
 
 ---
