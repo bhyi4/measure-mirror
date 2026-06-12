@@ -646,7 +646,7 @@ measure-mirror/
 │   ├── demo_field.py      # Field 거짓양성 (도그푸딩)
 │   ├── demo_judge.py      # LLM 판정자 실패 유형 (API 키 불필요)
 │   └── mcp_example.py     # MCP 도구 사용 참고
-├── db/                    # 공유 무결성 데이터베이스 (서버 불요, git 기반)
+├── db/                    # 로컬 기억 (baselines + reproductions가 audit에 연결)
 │   ├── baselines.json         작업별 공정 기준선
 │   ├── gaming_patterns.json   알려진 게이밍 패턴
 │   ├── reproductions.jsonl    실패한 재현 사례
@@ -661,12 +661,57 @@ measure-mirror/
 
 ---
 
-## 공유 무결성 DB (`db/`)
+## 로컬 기억 (`db/`)
 
-서버 불요, git 기반. PR로 기여하고, git pull로 받아가세요.  
-모델: CVE / 바이러스 백신 시그니처 — 하나의 적발이 미래 사용자 전체를 보호합니다.
+`db/`는 **내 과거 감사의 로컬 기억**입니다 — 공유/크라우드 DB가 아닙니다.
+"CVE / 공유 시그니처" 프레이밍을 시도했지만 성립 안 합니다: 기여하려면 *내 연구가
+틀렸던 것*(`self_catches`)이나 *동료의 재현 실패*(`reproductions`)를 공개해야
+하는데, 이건 신뢰 ⊥ 평판 딜레마에 정면충돌합니다. 아무도 자기 망신을 크라우드
+공유 안 해요.
 
-자동 조회: `audit()`에 `task="musr"`를 전달하면 등록된 기준선이 자동으로 불러와집니다.
+*실제로* 성립하는 가치는 공유가 전혀 필요 없습니다: **과거의 내가 이미 데였던
+패턴을 미래의 나에게 경고.** 데이터가 아무리 민감해도 작동합니다 — 내 머신을 절대
+안 떠나니까요.
+
+두 파일은 audit 루프에 연결돼 **로컬에서 자동으로** 작동합니다:
+
+| 파일 | 사용 방식 | 상태 |
+|---|---|---|
+| `baselines.json` | `audit(task="musr")`가 공정 기준선 자동 조회 | ✅ `lookup_baseline`이 읽음 |
+| `reproductions.jsonl` | `audit(task=...)`가 그 과제의 과거 재현실패를 경고; `record_reproduction(...)`이 새 결과를 추가(verdict 자동판정) | ✅ 읽기 + 쓰기 |
+
+```python
+# 기억이 자란다: 주장을 재현하고 결과를 기록
+mm.record_reproduction("musr", claim="ZERO 55.6%", acc_claimed=0.556,
+                       n_claimed=9, acc=0.385, n=1050, note="대표본서 붕괴")
+# → verdict 자동판정 FAIL, db/reproductions.jsonl에 추가
+
+# 나중에: 같은 과제의 어떤 audit이든 자동으로 경고를 띄움
+mm.audit("ledger.jsonl", "new_claim", reported_metric="acc",
+         reported_acc=0.62, n=120, task="musr")
+# ⚠️ [⚙ prior-reproduction] task 'musr' has a prior reproduction failure:
+#    'ZERO 55.6%' claimed 0.556 (n=9) → reproduced 0.385 (n=1050). 대표본서 붕괴
+```
+
+나머지 네 파일은 **적발 이력(catch log)** 입니다 — 내가 이미 적발한 것의 구조화된
+기록이라, 매번 다시 도출하지 않고 과거 적발을 검색할 수 있습니다:
+
+| 파일 | 무엇의 적발 이력 | 스키마 |
+|---|---|---|
+| `self_catches` | 내 작업에 대한 거짓*양성* 적발 | `{case, catch, outcome, source}` |
+| `false_negative_guards` | 믿기 전 재검증한 거짓*음성* | `{case, guard, resolution, source}` |
+| `gaming_patterns` | 목격한 게이밍/신기루 시그니처 | `{id, name, signature, seen_in[]}` |
+| `contamination` | 발견한 데이터 누설 | `{type, where, detail, fix}` |
+
+이것들은 `audit()`에 자동 연결 안 됩니다 — 새 주장과의 매칭이 `reproductions`의
+깔끔한 `task` 키와 달리 모호한 텍스트라, 자동경고하면 거짓양성이 됩니다. **구조화된
+검색 가능 로컬 자산**이지 죽은 노트가 아닙니다. `catch_history()`로 조회하세요.
+
+```python
+mm.catch_history(db_dir="db")                  # 전체 적발 이력
+mm.catch_history(kind="gaming", db_dir="db")   # 게이밍 수법 카탈로그만
+mm.catch_history(source="fm_cde_pixel_feasibility")  # 특정 아크 관련 적발
+```
 
 ---
 
@@ -685,7 +730,7 @@ measure-mirror/
 새 probe, 거짓양성/음성 사례, 기준선 기여를 환영합니다.
 
 1. Fork → 브랜치 → PR
-2. **`db/` 기여**: `source`, `description`, `evidence`를 포함한 JSONL 라인 추가
+2. **`db/baselines.json`**: 공유 가능한 과제 기준선 (내 비공개 실패가 아니라)
 3. **새 probe**: `mm.py`에 함수 추가 + `tests/test_mm.py`에 테스트 추가
 4. CI 녹색 유지: `pytest tests/`
 

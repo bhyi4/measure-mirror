@@ -54,6 +54,147 @@ def test_db_baseline_lookup():
     assert mm.lookup_baseline("nonexistent", db_dir="db") is None
 
 
+# ─── local memory: prior-reproduction lookup ─────────────────
+
+def _repro_db(tmp_path):
+    db = tmp_path / "db"
+    db.mkdir()
+    (db / "reproductions.jsonl").write_text(
+        '{"_doc":"header comment, not a record"}\n'
+        '{"task":"musr","claim":"X 55%","acc_claimed":0.55,"n_claimed":9,'
+        '"reproduction":{"n":1000,"acc":0.38},"verdict":"FAIL","note":"chance 미만"}\n'
+        '{"task":"musr","claim":"Y passed","verdict":"PASS"}\n'
+        '{"task":"gsm8k","claim":"Z","verdict":"FAIL"}\n',
+        encoding="utf-8")
+    return str(db)
+
+
+def test_lookup_reproduction_finds_fail(tmp_path):
+    recs = mm.lookup_reproduction("musr", _repro_db(tmp_path))
+    assert len(recs) == 1                     # _doc skipped, PASS excluded
+    assert recs[0]["claim"] == "X 55%"
+
+
+def test_lookup_reproduction_no_task():
+    assert mm.lookup_reproduction(None) == []
+
+
+def test_lookup_reproduction_unknown_task(tmp_path):
+    assert mm.lookup_reproduction("unseen", _repro_db(tmp_path)) == []
+
+
+def test_lookup_reproduction_missing_file(tmp_path):
+    assert mm.lookup_reproduction("musr", str(tmp_path)) == []
+
+
+def test_audit_surfaces_prior_reproduction(tmp_path):
+    """audit(task=...) warns when that task has a prior reproduction failure."""
+    db = _repro_db(tmp_path)
+    fs = mm.audit("/dev/null", "new_claim",
+                  reported_metric="acc", reported_acc=0.62, n=120,
+                  task="musr", db_dir=db)
+    warns = [f for f in fs if f.probe == "⚙ prior-reproduction"]
+    assert len(warns) == 1
+    assert warns[0].level == "WARN"
+    assert "X 55%" in warns[0].msg
+
+
+def test_audit_no_reproduction_warning_for_clean_task(tmp_path):
+    db = _repro_db(tmp_path)
+    fs = mm.audit("/dev/null", "c",
+                  reported_metric="acc", reported_acc=0.62, n=120,
+                  task="unseen", db_dir=db)
+    assert not any(f.probe == "⚙ prior-reproduction" for f in fs)
+
+
+# ─── local memory: WRITE companion — memory grows ────────────
+
+def test_record_reproduction_fail_verdict(tmp_path):
+    """Reproduction that doesn't clear baseline → auto verdict FAIL."""
+    db = str(tmp_path / "db")
+    e = mm.record_reproduction("arc", claim="80% claim", acc_claimed=0.80,
+                               n_claimed=20, acc=0.41, n=800, db_dir=db)
+    assert e["verdict"] == "FAIL"
+    assert e["task"] == "arc"
+    assert e["reproduction"] == {"n": 800, "acc": 0.41}
+
+
+def test_record_reproduction_pass_verdict(tmp_path):
+    """Reproduction that clears baseline → auto verdict PASS."""
+    db = str(tmp_path / "db")
+    e = mm.record_reproduction("arc", claim="real", acc_claimed=0.80,
+                               n_claimed=20, acc=0.78, n=800, db_dir=db)
+    assert e["verdict"] == "PASS"
+
+
+def test_record_then_lookup_roundtrip(tmp_path):
+    """Memory grows: a recorded FAIL is then found by lookup + audit."""
+    db = str(tmp_path / "db")
+    mm.record_reproduction("musr", claim="55%", acc_claimed=0.55, n_claimed=9,
+                           acc=0.38, n=1000, note="collapsed", db_dir=db)
+    found = mm.lookup_reproduction("musr", db)
+    assert len(found) == 1 and found[0]["claim"] == "55%"
+    fs = mm.audit("/dev/null", "x", reported_metric="acc", reported_acc=0.6,
+                  n=100, task="musr", db_dir=db)
+    assert any(f.probe == "⚙ prior-reproduction" for f in fs)
+
+
+def test_record_reproduction_pass_not_warned(tmp_path):
+    """A PASS reproduction is recorded but does NOT trigger an audit warning."""
+    db = str(tmp_path / "db")
+    mm.record_reproduction("arc", claim="genuine", acc_claimed=0.78,
+                           n_claimed=20, acc=0.77, n=800, db_dir=db)
+    fs = mm.audit("/dev/null", "y", reported_metric="acc", reported_acc=0.7,
+                  n=100, task="arc", db_dir=db)
+    assert not any(f.probe == "⚙ prior-reproduction" for f in fs)
+
+
+# ─── catch log: structured detection history ─────────────────
+
+def _catch_db(tmp_path):
+    db = tmp_path / "db"
+    db.mkdir()
+    (db / "self_catches.jsonl").write_text(
+        '{"_doc":"header"}\n'
+        '{"case":"FP1","catch":"too-good self-suspect","outcome":"fixed","source":"arc_x"}\n',
+        encoding="utf-8")
+    (db / "false_negative_guards.jsonl").write_text(
+        '{"case":"FN1","guard":"stand-in","resolution":"re-ran","source":"arc_x"}\n',
+        encoding="utf-8")
+    (db / "contamination.jsonl").write_text(
+        '{"type":"target_leak","where":"pretrain","detail":"future info","fix":"diff"}\n',
+        encoding="utf-8")
+    (db / "gaming_patterns.json").write_text(
+        '{"_doc":"sigs","patterns":[{"id":"best_of_n","name":"cherry","signature":"max of N"}]}',
+        encoding="utf-8")
+    return str(db)
+
+
+def test_catch_history_all_kinds(tmp_path):
+    db = _catch_db(tmp_path)
+    rows = mm.catch_history(db_dir=db)
+    kinds = {r["kind"] for r in rows}
+    assert kinds == {"self_catch", "false_negative", "gaming", "contamination"}
+    assert len(rows) == 4   # _doc header skipped
+
+
+def test_catch_history_kind_filter(tmp_path):
+    db = _catch_db(tmp_path)
+    rows = mm.catch_history(kind="gaming", db_dir=db)
+    assert len(rows) == 1 and rows[0]["id"] == "best_of_n"
+
+
+def test_catch_history_source_filter(tmp_path):
+    db = _catch_db(tmp_path)
+    rows = mm.catch_history(source="arc_x", db_dir=db)
+    # both self_catch and false_negative share source arc_x; gaming has no source
+    assert {r["kind"] for r in rows} == {"self_catch", "false_negative"}
+
+
+def test_catch_history_empty_db(tmp_path):
+    assert mm.catch_history(db_dir=str(tmp_path)) == []
+
+
 # ─── Bug-fix regression tests ─────────────────────────────────
 
 def test_first_registration_wins(tmp_path):

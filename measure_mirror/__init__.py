@@ -17,7 +17,8 @@ from .mm import (
     judge_score_sanity, judge_swap_check, judge_transitivity_check,
     ranking_stability_check,
     # helpers
-    wilson_ci, lookup_baseline, report, Finding,
+    wilson_ci, lookup_baseline, lookup_reproduction, record_reproduction,
+    catch_history, report, Finding,
 )
 
 __all__ = [
@@ -30,6 +31,7 @@ __all__ = [
     "judge_consistency_check", "judge_bias_check", "inter_rater_agreement",
     "judge_score_sanity", "judge_swap_check", "judge_transitivity_check",
     "ranking_stability_check",
-    "wilson_ci", "lookup_baseline", "report", "Finding",
+    "wilson_ci", "lookup_baseline", "lookup_reproduction", "record_reproduction",
+    "catch_history", "report", "Finding",
 ]
-__version__ = "0.13.0"
+__version__ = "0.14.0"

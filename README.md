@@ -689,7 +689,7 @@ measure-mirror/
 │   ├── demo_field.py      # Field false-positive (dog-food)
 │   ├── demo_judge.py      # LLM-judge failure modes (no API key needed)
 │   └── mcp_example.py     # MCP tool usage reference
-├── db/                    # shared integrity database (git-based, no server)
+├── db/                    # local memory (baselines + reproductions wired to audit)
 │   ├── baselines.json         task-level fair baselines
 │   ├── gaming_patterns.json   known gaming signatures
 │   ├── reproductions.jsonl    failed replications
@@ -704,12 +704,58 @@ measure-mirror/
 
 ---
 
-## Shared Integrity Database (`db/`)
+## Local Memory (`db/`)
 
-Git-based, no server required. Contribute via PR; pull via git.  
-Model: CVE / antivirus signature — each catch makes future users safer.
+`db/` is your **local memory of past audits** — not a shared/crowd database.
+We tried the "CVE / shared signature" framing and it doesn't hold: contributing
+means publishing *your own research that was wrong* (`self_catches`) or *a peer's
+failed reproduction* (`reproductions`), which runs straight into the
+trust ⊥ reputation dilemma. Nobody crowd-shares their own embarrassments.
 
-Auto-lookup: pass `task="musr"` to `audit()` and the registered baseline is fetched automatically, no extra code needed.
+The value that *does* hold needs no sharing at all: **warn future-you about a
+pattern past-you already got burned by.** It works regardless of how private the
+data is — it never leaves your machine.
+
+Two files are wired into the audit loop and work **locally, automatically**:
+
+| File | How it's used | Status |
+|---|---|---|
+| `baselines.json` | `audit(task="musr")` auto-fetches the fair baseline | ✅ read by `lookup_baseline` |
+| `reproductions.jsonl` | `audit(task=...)` warns if that task has a prior reproduction failure; `record_reproduction(...)` appends new ones (verdict auto-judged) | ✅ read + write |
+
+```python
+# memory grows: you reproduce a claim and record the result
+mm.record_reproduction("musr", claim="ZERO 55.6%", acc_claimed=0.556,
+                       n_claimed=9, acc=0.385, n=1050, note="collapsed at scale")
+# → verdict auto-judged FAIL, appended to db/reproductions.jsonl
+
+# later: any audit on the same task surfaces it automatically
+mm.audit("ledger.jsonl", "new_claim", reported_metric="acc",
+         reported_acc=0.62, n=120, task="musr")
+# ⚠️ [⚙ prior-reproduction] task 'musr' has a prior reproduction failure:
+#    'ZERO 55.6%' claimed 0.556 (n=9) → reproduced 0.385 (n=1050). collapsed at scale
+```
+
+The other four files are your **catch log** — structured records of what you've
+already caught, so you can search past catches instead of re-deriving them:
+
+| File | Catch history of | Schema |
+|---|---|---|
+| `self_catches` | false *positives* you flagged on yourself | `{case, catch, outcome, source}` |
+| `false_negative_guards` | false *negatives* you re-checked before believing | `{case, guard, resolution, source}` |
+| `gaming_patterns` | gaming / mirage signatures you've seen | `{id, name, signature, seen_in[]}` |
+| `contamination` | data leakage you found | `{type, where, detail, fix}` |
+
+These aren't auto-wired into `audit()` — matching them to a new claim is fuzzy
+text, not a clean `task` key like `reproductions` has, so auto-warning would mean
+false positives. They are **structured, searchable local assets**, not dead
+notes:
+
+```python
+mm.catch_history(db_dir="db")                 # all past catches
+mm.catch_history(kind="gaming", db_dir="db")  # the gaming-signature catalog
+mm.catch_history(source="fm_cde_pixel_feasibility")  # catches from one arc
+```
 
 ---
 
@@ -725,10 +771,10 @@ Auto-lookup: pass `task="musr"` to `audit()` and the registered baseline is fetc
 
 ## Contributing
 
-New probes, false-positive/negative cases, and baseline contributions are welcome.
+New probes and baseline contributions are welcome.
 
 1. Fork → branch → PR
-2. **`db/` contributions**: add a JSONL line with `source`, `description`, and `evidence`
+2. **`db/baselines.json`**: shareable task baselines (not your private failures)
 3. **New probes**: add the function to `mm.py` + tests in `tests/test_mm.py`
 4. CI must stay green: `pytest tests/`
 

@@ -5,6 +5,48 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.14.0] — 2026-06-12
+
+**Local memory release** — `db/` reframed from a (dead) shared database into
+working local memory, and `reproductions.jsonl` wired into the audit loop.
+
+### Added
+- **`lookup_reproduction(task, db_dir)`** — read prior FAILED reproductions for
+  a task from `db/reproductions.jsonl` (skips `_doc` header rows, returns
+  FAIL-verdict records only).
+- **`record_reproduction(task, *, claim, acc_claimed, n_claimed, acc, n, ...)`**
+  — the write companion: append a reproduction result; verdict (FAIL/PASS) is
+  auto-judged from the reproduction's own Wilson CI vs the task baseline. Memory
+  now *grows* — a recorded failure warns every future audit on that task.
+- **`audit(task=...)` now surfaces prior reproduction failures** as a
+  `⚙ prior-reproduction` WARN. The real ZERO `musr` 55.6%/64.5% records that had
+  been sitting dead in `db/` since the 2026-06-08 seed are now live.
+- **`catch_history(*, kind, source, db_dir)`** — query the local **catch log**
+  across `self_catches` / `false_negative_guards` / `gaming_patterns` /
+  `contamination`, each record tagged with its `kind`. These four files are
+  reframed from "dead narrative notes" to **structured detection history**:
+  what you already caught (false positives on yourself, re-checked false
+  negatives, gaming signatures, contamination), searchable so you don't
+  re-derive it. Read-only — not auto-wired into `audit` (fuzzy text matching
+  would mean false positives), honestly so.
+
+### Changed
+- **README / README_KO: `db/` honestly reframed** from "Shared Integrity
+  Database (CVE model)" → "Local Memory". The shared-DB framing failed the
+  trust ⊥ reputation dilemma (nobody crowd-shares their own failures); the value
+  that holds — *warn future-me about patterns past-me got burned by* — needs no
+  sharing and works regardless of data privacy.
+- Honest labeling: only `baselines.json` (read) and `reproductions.jsonl`
+  (read+write) are wired into code. `self_catches` / `false_negative_guards` /
+  `gaming_patterns` / `contamination` are now labeled narrative notes, not
+  promised as automatic features (the tool applies its own "no dead-legacy
+  halo" discipline to its own db).
+- 10 new tests (total: 169 → 179, all passing).
+- `__init__.py` exports `lookup_reproduction`, `record_reproduction`;
+  `__version__` 0.14.0.
+
+---
+
 ## [0.13.0] — 2026-06-11
 
 **Simplification release** — three verification tiers, no new probes.

@@ -363,7 +363,12 @@ def baseline_fairness(name: str, claimed: float, baseline: float, *,
 
 
 # ─────────────────────────────────────────────────────────────
-# Shared baseline DB lookup
+# Local memory DB lookups (baselines + prior reproductions)
+#
+# These read the LOCAL db/ directory — your own record of past audits.
+# Not a shared/crowd database: the value is "warn future-me about patterns
+# past-me already got burned by", which works regardless of how private the
+# data is (it never leaves your machine).
 # ─────────────────────────────────────────────────────────────
 def lookup_baseline(task: str | None, db_dir: str | None = None) -> float | None:
     if not task:
@@ -377,6 +382,144 @@ def lookup_baseline(task: str | None, db_dir: str | None = None) -> float | None
         return None
     e = db.get(task)
     return e.get("baseline") if isinstance(e, dict) else None
+
+
+def lookup_reproduction(task: str | None, db_dir: str | None = None) -> list[dict]:
+    """Return prior FAILED reproductions recorded for this task in db/.
+
+    Reads db/reproductions.jsonl — your local memory of claims that did not
+    survive a larger-sample reproduction. When you later audit a new claim on
+    the same task, audit() surfaces these so you don't re-fall for a pattern
+    you already disproved (e.g. "MuSR 55.6% at n=9" → 0.385 at n=1050).
+
+    Returns the matching records (verdict == "FAIL"); empty list if none.
+    """
+    if not task:
+        return []
+    p = os.path.join(db_dir or "db", "reproductions.jsonl")
+    if not os.path.exists(p):
+        return []
+    out: list[dict] = []
+    try:
+        with open(p, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if "_doc" in e:                       # skip header/comment rows
+                    continue
+                if e.get("task") == task and e.get("verdict") == "FAIL":
+                    out.append(e)
+    except Exception:
+        return []
+    return out
+
+
+def record_reproduction(task: str, *, claim: str,
+                        acc_claimed: float, n_claimed: int,
+                        acc: float, n: int,
+                        baseline: float | None = None,
+                        note: str = "", source: str = "",
+                        db_dir: str | None = None) -> dict:
+    """Append a reproduction result to db/reproductions.jsonl — local memory grows.
+
+    This is the WRITE companion to lookup_reproduction(). The verdict is judged
+    automatically from the reproduction's own Wilson CI vs the task baseline:
+    if the lower bound does not clear the baseline, the reproduction FAILED
+    (the original claim did not survive a larger sample) and future audits on
+    this task will warn about it.
+
+    Recording is explicit by design — audit() does NOT auto-record, because an
+    audit FAIL ("this single claim is statistically weak") is not the same as a
+    reproduction failure ("I re-ran it at larger n and it collapsed"). You call
+    this when you actually reproduced something.
+
+    Returns the appended record (matching the db/reproductions.jsonl schema).
+    """
+    if baseline is None:
+        b = lookup_baseline(task, db_dir)
+        baseline = b if b is not None else 0.5
+    lo, _ = wilson_ci(round(acc * n), n)
+    verdict = "FAIL" if lo <= baseline else "PASS"
+    entry = {
+        "claim":        claim,
+        "task":         task,
+        "n_claimed":    n_claimed,
+        "acc_claimed":  acc_claimed,
+        "reproduction": {"n": n, "acc": acc},
+        "verdict":      verdict,
+        "note":         note,
+        "source":       source,
+    }
+    p = os.path.join(db_dir or "db", "reproductions.jsonl")
+    os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
+    with open(p, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    return entry
+
+
+# Catch log: structured history of what you've already caught.
+# Not auto-wired into audit() — matching a new claim is fuzzy text (no clean
+# task key), so auto-warning would mean false positives. Searchable, not dead.
+_CATCH_FILES = {
+    "self_catch":     ("self_catches.jsonl",          "jsonl"),
+    "false_negative": ("false_negative_guards.jsonl", "jsonl"),
+    "gaming":         ("gaming_patterns.json",         "patterns"),
+    "contamination":  ("contamination.jsonl",          "jsonl"),
+}
+
+
+def catch_history(*, kind: str | None = None, source: str | None = None,
+                  db_dir: str | None = None) -> list[dict]:
+    """Query the local catch log — past detections across the db/ catch files.
+
+    Each returned record is tagged with its `kind`:
+      self_catch     — a false positive you flagged on your own work
+      false_negative — a false negative you re-checked before believing
+      gaming         — a gaming / mirage signature you've seen
+      contamination  — data leakage you found
+
+    Filters (optional): `kind` restricts to one catch type; `source` matches
+    the originating arc/source string (jsonl files only). Returns [] if nothing
+    matches or the files are absent. Read-only — this is memory, not an audit.
+    """
+    base = db_dir or "db"
+    out: list[dict] = []
+    for k, (fname, fmt) in _CATCH_FILES.items():
+        if kind is not None and k != kind:
+            continue
+        p = os.path.join(base, fname)
+        if not os.path.exists(p):
+            continue
+        try:
+            if fmt == "jsonl":
+                with open(p, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            e = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if "_doc" in e:
+                            continue
+                        if source is not None and e.get("source") != source:
+                            continue
+                        out.append({"kind": k, **e})
+            else:  # patterns: a single JSON with a "patterns" list
+                d = json.load(open(p, encoding="utf-8"))
+                if source is not None:
+                    continue   # pattern records carry no source field
+                for pat in d.get("patterns", []):
+                    out.append({"kind": k, **pat})
+        except Exception:
+            continue
+    return out
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1174,6 +1317,16 @@ def audit(ledger_path: str, claim_id: str, *,
             baseline, db_note = b, f"  ← DB lookup (task={task})"
         else:
             baseline = 0.5
+
+    # Local memory: prior FAILED reproductions for this task (db/reproductions.jsonl)
+    for r in lookup_reproduction(task, db_dir):
+        rep = r.get("reproduction", {})
+        findings.append(Finding("⚙ prior-reproduction", "WARN",
+            f"task '{task}' has a prior reproduction failure on record: "
+            f"'{r.get('claim','?')}' claimed acc={r.get('acc_claimed','?')} "
+            f"(n={r.get('n_claimed','?')}) → reproduced acc={rep.get('acc','?')} "
+            f"(n={rep.get('n','?')}). {r.get('note','')}".rstrip()))
+
     if not (0.0 <= reported_acc <= 1.0):
         findings.append(Finding("④a acc-range", "FAIL",
             f"reported_acc={reported_acc:.3f} out of [0, 1]."))
