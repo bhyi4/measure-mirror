@@ -5,3 +5,4 @@
 {"case":"측정거울 MVP 0.385를 'OK'로 판정","catch":"baseline 배제만 보고 방향 누락 자가적발","outcome":"방향 패치 → anti-signal로 정정","source":"measurement_mirror_product_pivot"}
 {"case": "측정거울 자기측정 — ⑥ scope 과대주장", "catch": "\"zero dependencies\"+\"audits all AI eval claims\"를 mm_scope_check가 과대일반화 FAIL (judge.py는 openai/anthropic 옵션의존, 커버는 분류/회귀/판정/순위 한정)", "outcome": "README \"Zero-dep core; judge optional\"로 정직화", "source": "measure_mirror_self_audit_20260612"}
 {"case": "측정거울 자기측정 — ⑬ 음성결론 과대선언", "catch": "\"공유 db never works\" 결론을 mm_negative_audit이 FAIL: 각도 미등록 + 결론범위(never)가 검증범위(우리 사례·이론·코드) 초과", "outcome": "README \"우리 맥락 인센티브 불일치\"로 약화", "source": "measure_mirror_self_audit_20260612"}
+{"case": "측정거울 GRIM ⑩ — k≤n 비율가정 버그", "catch": "GRIM 원논문(Brown&Heathers 2017) 사례 mean=5.18,n=28을 외부검증하다 측정거울이 가능한 평균을 FAIL로 오판; k≤n 상한이 비율(0~1) 암묵가정이라 평균(k=mean·n>n) 거부", "outcome": "k≤n → k≥0 수정, GRIM 평균 사례 5건+비율 회귀 통과", "source": "external_grim_dogfood_20260612"}

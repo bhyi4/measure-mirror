@@ -295,9 +295,10 @@ def grim_check(reported_acc: float, n: int, *,
                n_decimals: int | None = None) -> Finding:
     """⑩ GRIM test: verify that acc × n is arithmetically possible.
 
-    For a proportion reported as k/n (then rounded to d decimal places),
-    there must exist an integer k such that round(k/n, d) == reported_acc.
-    If no such k exists, the number was fabricated or n was mis-reported.
+    Works for both a proportion (k/n) and a MEAN of n integers (sum/n, e.g. a
+    Likert 1–7 average). There must exist an integer k such that
+    round(k/n, d) == reported_acc; if none does, the number was fabricated or
+    n was mis-reported. (k may exceed n for a mean — see the k≥0 note below.)
 
     Current audit() silently does round(acc × n) and hides this signal —
     this probe makes it explicit.
@@ -315,8 +316,12 @@ def grim_check(reported_acc: float, n: int, *,
     k_hi = k_lo + 1
     target = round(reported_acc, d)
 
+    # k >= 0 only: a proportion has k ≤ n, but a MEAN of integers (e.g. a
+    # Likert 1–7 average like 5.18) has k = mean·n > n. Capping at n silently
+    # assumed proportions and wrongly failed valid means — caught dog-fooding
+    # the GRIM paper's own example (mean 5.18, n=28). See db/curated/self_catches.
     for k in (k_lo, k_hi):
-        if 0 <= k <= n and round(k / n, d) == target:
+        if k >= 0 and round(k / n, d) == target:
             return Finding("⑩ GRIM", "OK",
                 f"acc={reported_acc} consistent with n={n} "
                 f"(k={k}, {k}/{n}={k/n:.{d+2}f} → {round(k/n, d)}).")

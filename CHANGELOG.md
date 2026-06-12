@@ -5,6 +5,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.14.2] — 2026-06-12
+
+### Fixed
+- **⑩ GRIM now works on means, not just proportions.** Dog-fooding the tool
+  against the GRIM paper's own canonical example (Brown & Heathers 2017:
+  "28 integers cannot mean 5.19") surfaced a real bug: `grim_check` capped the
+  candidate count at `k ≤ n`, which silently assumed a proportion (`k = acc·n ≤
+  n`). A **mean** of integers has `k = mean·n > n` (e.g. Likert avg 5.18 at
+  n=28 → k=145), so valid means like 5.18 were wrongly reported FAIL while the
+  error message itself listed `k=145 → 5.18` as a candidate (self-contradiction).
+  Fix: `0 ≤ k ≤ n` → `k ≥ 0`. Verified against 5 GRIM-paper cases and 3
+  proportion regressions; recorded in `db/curated/self_catches.jsonl`.
+- 3 new regression tests (183 → 186, all passing). `__version__` 0.14.2.
+
+---
+
 ## [0.14.1] — 2026-06-12
 
 **db split by producer** — `db/` is now physically divided so "what the tool

@@ -565,6 +565,31 @@ def test_grim_explicit_decimals():
     assert f.level == "OK"
 
 
+# ─── GRIM on MEANS (acc > 1), not just proportions ───────────
+# Regression for the k<=n bug found dog-fooding Brown & Heathers (2017):
+# a Likert mean has k = mean·n > n, which the old proportion-only cap
+# wrongly failed.
+
+def test_grim_mean_paper_example_impossible():
+    """Brown & Heathers' canonical case: 28 integers cannot mean 5.19."""
+    f = mm.grim_check(5.19, 28)
+    assert f.level == "FAIL"
+
+
+def test_grim_mean_valid_not_failed():
+    """5.18 from n=28 IS possible (k=145) — must be OK, not FAIL (the bug)."""
+    f = mm.grim_check(5.18, 28)
+    assert f.level == "OK"
+    f2 = mm.grim_check(5.21, 28)   # k=146
+    assert f2.level == "OK"
+
+
+def test_grim_mean_div20_second_decimal():
+    """Dividing integers by 20 → second decimal is 0 or 5 only."""
+    assert mm.grim_check(3.18, 20).level == "FAIL"   # impossible
+    assert mm.grim_check(3.15, 20).level == "OK"      # k=63
+
+
 def test_grim_in_audit_fail_appended(tmp_path):
     """GRIM FAIL is appended to audit findings (probe name in result set)."""
     ledger = str(tmp_path / "l.jsonl")
