@@ -1,0 +1,3 @@
+{"_doc":"측정거울이 verdict를 자동판정해 쌓는 정량 재현 이력. record_reproduction()이 Wilson CI(재현 acc/n vs baseline)로 FAIL/PASS 판정. 측정거울 로직과 1:1 일치."}
+{"claim": "ZERO Phase R MuSR 55.6%", "task": "musr", "n_claimed": 9, "acc_claimed": 0.556, "reproduction": {"n": 1050, "acc": 0.385}, "verdict": "FAIL", "note": "대표본서 chance(0.5) 미만", "source": "zero_coprocessor_track_closed"}
+{"claim": "ZERO Phase P 추론 64.5%", "task": "musr", "n_claimed": 31, "acc_claimed": 0.645, "reproduction": {"n": 200, "acc": 0.52}, "verdict": "FAIL", "note": "균형 홀드아웃서 chance와 구별 불가; effdim 1.8/576 붕괴", "source": "aphasia_576d_attractor_collapse"}

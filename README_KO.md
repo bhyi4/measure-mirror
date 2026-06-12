@@ -646,13 +646,17 @@ measure-mirror/
 │   ├── demo_field.py      # Field 거짓양성 (도그푸딩)
 │   ├── demo_judge.py      # LLM 판정자 실패 유형 (API 키 불필요)
 │   └── mcp_example.py     # MCP 도구 사용 참고
-├── db/                    # 로컬 기억 (baselines + reproductions가 audit에 연결)
-│   ├── baselines.json         작업별 공정 기준선
-│   ├── gaming_patterns.json   알려진 게이밍 패턴
-│   ├── reproductions.jsonl    실패한 재현 사례
-│   ├── contamination.jsonl    데이터 누설 지문
-│   ├── false_negative_guards.jsonl
-│   └── self_catches.jsonl     자체 적발 거짓양성
+├── db/                    # 로컬 기억, 생산 주체별로 분리
+│   ├── README.md              measured/ vs curated/ 구분 설명
+│   ├── measured/             ← 측정거울 자체 출력 (정량)
+│   │   ├── baselines.json         작업별 공정 기준선
+│   │   └── reproductions.jsonl    재현 이력 (verdict 자동판정)
+│   └── curated/              ← 사람 큐레이션 (정성)
+│       ├── self_catches.jsonl          자체 적발 거짓양성
+│       ├── false_negative_guards.jsonl 재검증한 거짓음성
+│       ├── gaming_patterns.json        게이밍 시그니처
+│       ├── contamination.jsonl         데이터 누설
+│       └── research_closures.jsonl     정성 음성 결론
 └── tests/
     ├── test_mm.py         # 145개 코어 프로브 테스트, CI 강제
     ├── test_judge.py      # 17개 judge.py 모듈 테스트
@@ -674,18 +678,24 @@ measure-mirror/
 패턴을 미래의 나에게 경고.** 데이터가 아무리 민감해도 작동합니다 — 내 머신을 절대
 안 떠나니까요.
 
-두 파일은 audit 루프에 연결돼 **로컬에서 자동으로** 작동합니다:
+`db/`는 **레코드를 누가 생산했나**로 분리됩니다. 두 종류가 절대 헷갈리지 않도록
+물리적으로 나눴습니다 (전체 구조는 [`db/README.md`](db/README.md)):
 
-| 파일 | 사용 방식 | 상태 |
-|---|---|---|
-| `baselines.json` | `audit(task="musr")`가 공정 기준선 자동 조회 | ✅ `lookup_baseline`이 읽음 |
-| `reproductions.jsonl` | `audit(task=...)`가 그 과제의 과거 재현실패를 경고; `record_reproduction(...)`이 새 결과를 추가(verdict 자동판정) | ✅ 읽기 + 쓰기 |
+### `db/measured/` — 측정거울이 쌓는 것 (정량)
+
+verdict를 측정거울이 직접 계산; 같은 수치로 재실행하면 같은 verdict가 정확히
+나옵니다. audit 루프에 연결돼 있고, `record_reproduction()`으로만 자랍니다.
+
+| 파일 | 사용 방식 |
+|---|---|
+| `measured/baselines.json` | `audit(task="musr")`가 공정 기준선 자동 조회 |
+| `measured/reproductions.jsonl` | `audit(task=...)`가 과거 재현실패 경고; `record_reproduction(...)`이 추가(Wilson CI로 verdict 자동판정) |
 
 ```python
 # 기억이 자란다: 주장을 재현하고 결과를 기록
 mm.record_reproduction("musr", claim="ZERO 55.6%", acc_claimed=0.556,
                        n_claimed=9, acc=0.385, n=1050, note="대표본서 붕괴")
-# → verdict 자동판정 FAIL, db/reproductions.jsonl에 추가
+# → verdict 자동판정 FAIL, db/measured/reproductions.jsonl에 추가
 
 # 나중에: 같은 과제의 어떤 audit이든 자동으로 경고를 띄움
 mm.audit("ledger.jsonl", "new_claim", reported_metric="acc",
@@ -694,25 +704,29 @@ mm.audit("ledger.jsonl", "new_claim", reported_metric="acc",
 #    'ZERO 55.6%' claimed 0.556 (n=9) → reproduced 0.385 (n=1050). 대표본서 붕괴
 ```
 
-나머지 네 파일은 **적발 이력(catch log)** 입니다 — 내가 이미 적발한 것의 구조화된
-기록이라, 매번 다시 도출하지 않고 과거 적발을 검색할 수 있습니다:
+### `db/curated/` — 우리가 손으로 만든 것 (정성)
 
-| 파일 | 무엇의 적발 이력 | 스키마 |
+**적발 이력(catch log)** 과 연구 결론 — 사람 큐레이션이지 측정거울 자동 출력이
+*아닙니다*. `catch_history()`로 조회하되, `audit()`에 자동 연결은 **안 됩니다**
+(매칭이 깔끔한 `task` 키가 아닌 모호한 텍스트라 자동경고하면 거짓양성).
+
+| 파일 | `kind` | 무엇의 적발 이력 |
 |---|---|---|
-| `self_catches` | 내 작업에 대한 거짓*양성* 적발 | `{case, catch, outcome, source}` |
-| `false_negative_guards` | 믿기 전 재검증한 거짓*음성* | `{case, guard, resolution, source}` |
-| `gaming_patterns` | 목격한 게이밍/신기루 시그니처 | `{id, name, signature, seen_in[]}` |
-| `contamination` | 발견한 데이터 누설 | `{type, where, detail, fix}` |
-
-이것들은 `audit()`에 자동 연결 안 됩니다 — 새 주장과의 매칭이 `reproductions`의
-깔끔한 `task` 키와 달리 모호한 텍스트라, 자동경고하면 거짓양성이 됩니다. **구조화된
-검색 가능 로컬 자산**이지 죽은 노트가 아닙니다. `catch_history()`로 조회하세요.
+| `curated/self_catches.jsonl` | `self_catch` | 내 작업에 대한 거짓*양성* 적발 |
+| `curated/false_negative_guards.jsonl` | `false_negative` | 재검증한 거짓*음성* |
+| `curated/gaming_patterns.json` | `gaming` | 목격한 게이밍/신기루 시그니처 |
+| `curated/contamination.jsonl` | `contamination` | 발견한 데이터 누설 |
+| `curated/research_closures.jsonl` | `closure` | 정성 음성 결론 (`acc`/`n` 없음 — 측정거울 verdict **아님**) |
 
 ```python
-mm.catch_history(db_dir="db")                  # 전체 적발 이력
+mm.catch_history(db_dir="db")                  # 전체 큐레이션 레코드
 mm.catch_history(kind="gaming", db_dir="db")   # 게이밍 수법 카탈로그만
-mm.catch_history(source="fm_cde_pixel_feasibility")  # 특정 아크 관련 적발
+mm.catch_history(source="fm_cde_pixel_feasibility")  # 특정 아크 관련
 ```
+
+**분리가 정직한 이유**: `db/` 전체를 "측정거울 이력"이라 부르면 과대주장입니다 —
+`measured/`만 그렇습니다. `measured/`의 모든 레코드는 교차검증됐습니다: `(acc, n)`을
+측정거울 자체 Wilson-CI 로직에 다시 넣으면 기록된 verdict가 **0건 불일치**로 재현됩니다.
 
 ---
 

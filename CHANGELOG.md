@@ -5,6 +5,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.14.1] — 2026-06-12
+
+**db split by producer** — `db/` is now physically divided so "what the tool
+measured" and "what we wrote by hand" can never be confused.
+
+### Changed
+- **`db/measured/`** — measure-mirror's own quantitative output:
+  `baselines.json`, `reproductions.jsonl`. Verdicts are computed by the tool;
+  cross-check confirmed feeding `(acc, n)` back through the Wilson-CI logic
+  reproduces every recorded verdict with **0 mismatches**.
+- **`db/curated/`** — human-curated qualitative records: `self_catches`,
+  `false_negative_guards`, `gaming_patterns`, `contamination`, and the new
+  `research_closures.jsonl`.
+- **13 qualitative closures moved out of `reproductions.jsonl`** — they carried
+  `verdict: FAIL` but no `acc`/`n`, so they were never measure-mirror output.
+  They now live in `curated/research_closures.jsonl` (`catch_history` kind
+  `closure`). `reproductions.jsonl` keeps only the 2 quantitative records the
+  tool can actually re-judge.
+- Code paths updated: `lookup_baseline` / `lookup_reproduction` /
+  `record_reproduction` → `db/measured/`; `catch_history` → `db/curated/`
+  (now 5 kinds, adds `closure`).
+- New `db/README.md` documents the measured/curated distinction.
+- README / README_KO `db/` sections rewritten around the split.
+- `__version__` 0.14.1. 183 tests still pass (paths updated).
+
+---
+
 ## [0.14.0] — 2026-06-12
 
 **Local memory release** — `db/` reframed from a (dead) shared database into

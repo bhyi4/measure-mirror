@@ -58,8 +58,8 @@ def test_db_baseline_lookup():
 
 def _repro_db(tmp_path):
     db = tmp_path / "db"
-    db.mkdir()
-    (db / "reproductions.jsonl").write_text(
+    (db / "measured").mkdir(parents=True)
+    (db / "measured" / "reproductions.jsonl").write_text(
         '{"_doc":"header comment, not a record"}\n'
         '{"task":"musr","claim":"X 55%","acc_claimed":0.55,"n_claimed":9,'
         '"reproduction":{"n":1000,"acc":0.38},"verdict":"FAIL","note":"chance 미만"}\n'
@@ -153,18 +153,19 @@ def test_record_reproduction_pass_not_warned(tmp_path):
 
 def _catch_db(tmp_path):
     db = tmp_path / "db"
-    db.mkdir()
-    (db / "self_catches.jsonl").write_text(
+    cur = db / "curated"
+    cur.mkdir(parents=True)
+    (cur / "self_catches.jsonl").write_text(
         '{"_doc":"header"}\n'
         '{"case":"FP1","catch":"too-good self-suspect","outcome":"fixed","source":"arc_x"}\n',
         encoding="utf-8")
-    (db / "false_negative_guards.jsonl").write_text(
+    (cur / "false_negative_guards.jsonl").write_text(
         '{"case":"FN1","guard":"stand-in","resolution":"re-ran","source":"arc_x"}\n',
         encoding="utf-8")
-    (db / "contamination.jsonl").write_text(
+    (cur / "contamination.jsonl").write_text(
         '{"type":"target_leak","where":"pretrain","detail":"future info","fix":"diff"}\n',
         encoding="utf-8")
-    (db / "gaming_patterns.json").write_text(
+    (cur / "gaming_patterns.json").write_text(
         '{"_doc":"sigs","patterns":[{"id":"best_of_n","name":"cherry","signature":"max of N"}]}',
         encoding="utf-8")
     return str(db)

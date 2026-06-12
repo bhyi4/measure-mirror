@@ -689,13 +689,17 @@ measure-mirror/
 │   ├── demo_field.py      # Field false-positive (dog-food)
 │   ├── demo_judge.py      # LLM-judge failure modes (no API key needed)
 │   └── mcp_example.py     # MCP tool usage reference
-├── db/                    # local memory (baselines + reproductions wired to audit)
-│   ├── baselines.json         task-level fair baselines
-│   ├── gaming_patterns.json   known gaming signatures
-│   ├── reproductions.jsonl    failed replications
-│   ├── contamination.jsonl    data leakage fingerprints
-│   ├── false_negative_guards.jsonl
-│   └── self_catches.jsonl     our own false positives
+├── db/                    # local memory, split by who produced the record
+│   ├── README.md              the measured/ vs curated/ distinction
+│   ├── measured/             ← measure-mirror's own output (quantitative)
+│   │   ├── baselines.json         task-level fair baselines
+│   │   └── reproductions.jsonl    reproductions (verdict auto-judged)
+│   └── curated/              ← human-curated (qualitative)
+│       ├── self_catches.jsonl          false positives on ourselves
+│       ├── false_negative_guards.jsonl false negatives re-checked
+│       ├── gaming_patterns.json        gaming signatures
+│       ├── contamination.jsonl         data leakage found
+│       └── research_closures.jsonl     qualitative negative conclusions
 └── tests/
     ├── test_mm.py         # 145 tests for core probes, CI-enforced
     ├── test_judge.py      # 17 tests for judge.py module
@@ -718,18 +722,25 @@ The value that *does* hold needs no sharing at all: **warn future-you about a
 pattern past-you already got burned by.** It works regardless of how private the
 data is — it never leaves your machine.
 
-Two files are wired into the audit loop and work **locally, automatically**:
+`db/` is split by **who produced the record**, so the two kinds are never
+confused (see [`db/README.md`](db/README.md) for the full structure):
 
-| File | How it's used | Status |
-|---|---|---|
-| `baselines.json` | `audit(task="musr")` auto-fetches the fair baseline | ✅ read by `lookup_baseline` |
-| `reproductions.jsonl` | `audit(task=...)` warns if that task has a prior reproduction failure; `record_reproduction(...)` appends new ones (verdict auto-judged) | ✅ read + write |
+### `db/measured/` — what measure-mirror produces (quantitative)
+
+Verdicts computed by the tool itself; re-running on the same numbers reproduces
+the same verdict exactly. These are wired into the audit loop and grow only via
+`record_reproduction()`.
+
+| File | How it's used |
+|---|---|
+| `measured/baselines.json` | `audit(task="musr")` auto-fetches the fair baseline |
+| `measured/reproductions.jsonl` | `audit(task=...)` warns on a prior reproduction failure; `record_reproduction(...)` appends new ones (verdict auto-judged from Wilson CI) |
 
 ```python
 # memory grows: you reproduce a claim and record the result
 mm.record_reproduction("musr", claim="ZERO 55.6%", acc_claimed=0.556,
                        n_claimed=9, acc=0.385, n=1050, note="collapsed at scale")
-# → verdict auto-judged FAIL, appended to db/reproductions.jsonl
+# → verdict auto-judged FAIL, appended to db/measured/reproductions.jsonl
 
 # later: any audit on the same task surfaces it automatically
 mm.audit("ledger.jsonl", "new_claim", reported_metric="acc",
@@ -738,26 +749,31 @@ mm.audit("ledger.jsonl", "new_claim", reported_metric="acc",
 #    'ZERO 55.6%' claimed 0.556 (n=9) → reproduced 0.385 (n=1050). collapsed at scale
 ```
 
-The other four files are your **catch log** — structured records of what you've
-already caught, so you can search past catches instead of re-deriving them:
+### `db/curated/` — what we wrote by hand (qualitative)
 
-| File | Catch history of | Schema |
+Our **catch log** and research closures — human-curated, *not* the tool's
+automatic output. Searchable via `catch_history()`, but **not** auto-wired into
+`audit()` (matching is fuzzy text, not a clean `task` key, so auto-warning would
+mean false positives).
+
+| File | `kind` | Catch history of |
 |---|---|---|
-| `self_catches` | false *positives* you flagged on yourself | `{case, catch, outcome, source}` |
-| `false_negative_guards` | false *negatives* you re-checked before believing | `{case, guard, resolution, source}` |
-| `gaming_patterns` | gaming / mirage signatures you've seen | `{id, name, signature, seen_in[]}` |
-| `contamination` | data leakage you found | `{type, where, detail, fix}` |
-
-These aren't auto-wired into `audit()` — matching them to a new claim is fuzzy
-text, not a clean `task` key like `reproductions` has, so auto-warning would mean
-false positives. They are **structured, searchable local assets**, not dead
-notes:
+| `curated/self_catches.jsonl` | `self_catch` | false *positives* you flagged on yourself |
+| `curated/false_negative_guards.jsonl` | `false_negative` | false *negatives* you re-checked |
+| `curated/gaming_patterns.json` | `gaming` | gaming / mirage signatures you've seen |
+| `curated/contamination.jsonl` | `contamination` | data leakage you found |
+| `curated/research_closures.jsonl` | `closure` | qualitative negative conclusions (no `acc`/`n` — **not** a tool verdict) |
 
 ```python
-mm.catch_history(db_dir="db")                 # all past catches
+mm.catch_history(db_dir="db")                 # all curated records
 mm.catch_history(kind="gaming", db_dir="db")  # the gaming-signature catalog
-mm.catch_history(source="fm_cde_pixel_feasibility")  # catches from one arc
+mm.catch_history(source="fm_cde_pixel_feasibility")  # records from one arc
 ```
+
+**Why the split is honest**: calling `db/` as a whole "measure-mirror history"
+would over-claim — only `measured/` is that. Every `measured/` record was
+cross-checked: feeding its `(acc, n)` back through the tool's own Wilson-CI logic
+reproduces the recorded verdict with **0 mismatches**.
 
 ---
 

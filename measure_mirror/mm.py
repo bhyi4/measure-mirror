@@ -373,7 +373,7 @@ def baseline_fairness(name: str, claimed: float, baseline: float, *,
 def lookup_baseline(task: str | None, db_dir: str | None = None) -> float | None:
     if not task:
         return None
-    p = os.path.join(db_dir or "db", "baselines.json")
+    p = os.path.join(db_dir or "db", "measured", "baselines.json")
     if not os.path.exists(p):
         return None
     try:
@@ -396,7 +396,7 @@ def lookup_reproduction(task: str | None, db_dir: str | None = None) -> list[dic
     """
     if not task:
         return []
-    p = os.path.join(db_dir or "db", "reproductions.jsonl")
+    p = os.path.join(db_dir or "db", "measured", "reproductions.jsonl")
     if not os.path.exists(p):
         return []
     out: list[dict] = []
@@ -455,7 +455,7 @@ def record_reproduction(task: str, *, claim: str,
         "note":         note,
         "source":       source,
     }
-    p = os.path.join(db_dir or "db", "reproductions.jsonl")
+    p = os.path.join(db_dir or "db", "measured", "reproductions.jsonl")
     os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
     with open(p, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -466,10 +466,11 @@ def record_reproduction(task: str, *, claim: str,
 # Not auto-wired into audit() — matching a new claim is fuzzy text (no clean
 # task key), so auto-warning would mean false positives. Searchable, not dead.
 _CATCH_FILES = {
-    "self_catch":     ("self_catches.jsonl",          "jsonl"),
-    "false_negative": ("false_negative_guards.jsonl", "jsonl"),
-    "gaming":         ("gaming_patterns.json",         "patterns"),
-    "contamination":  ("contamination.jsonl",          "jsonl"),
+    "self_catch":     ("curated/self_catches.jsonl",          "jsonl"),
+    "false_negative": ("curated/false_negative_guards.jsonl", "jsonl"),
+    "gaming":         ("curated/gaming_patterns.json",         "patterns"),
+    "contamination":  ("curated/contamination.jsonl",          "jsonl"),
+    "closure":        ("curated/research_closures.jsonl",      "jsonl"),
 }
 
 
@@ -482,6 +483,8 @@ def catch_history(*, kind: str | None = None, source: str | None = None,
       false_negative — a false negative you re-checked before believing
       gaming         — a gaming / mirage signature you've seen
       contamination  — data leakage you found
+      closure        — a qualitative research closure (negative conclusion with
+                       no quantitative acc/n — NOT a measure-mirror verdict)
 
     Filters (optional): `kind` restricts to one catch type; `source` matches
     the originating arc/source string (jsonl files only). Returns [] if nothing
