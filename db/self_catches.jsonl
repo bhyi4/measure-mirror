@@ -3,3 +3,5 @@
 {"case":"latent_oee 51_ 생성성 부호버그","catch":"측정거울 자가적발 + 부호버그 정정","outcome":"사전등록 metric-sanity 게이트로 해킹 차단","source":"chrysalis_latent_oee_pivot"}
 {"case":"FM×CDE 픽셀 F1 거짓음성","catch":"Adjoint 비용을 과대평가한 자기 결함 적발","outcome":"O(1) 자가정정","source":"fm_cde_pixel_feasibility"}
 {"case":"측정거울 MVP 0.385를 'OK'로 판정","catch":"baseline 배제만 보고 방향 누락 자가적발","outcome":"방향 패치 → anti-signal로 정정","source":"measurement_mirror_product_pivot"}
+{"case": "측정거울 자기측정 — ⑥ scope 과대주장", "catch": "\"zero dependencies\"+\"audits all AI eval claims\"를 mm_scope_check가 과대일반화 FAIL (judge.py는 openai/anthropic 옵션의존, 커버는 분류/회귀/판정/순위 한정)", "outcome": "README \"Zero-dep core; judge optional\"로 정직화", "source": "measure_mirror_self_audit_20260612"}
+{"case": "측정거울 자기측정 — ⑬ 음성결론 과대선언", "catch": "\"공유 db never works\" 결론을 mm_negative_audit이 FAIL: 각도 미등록 + 결론범위(never)가 검증범위(우리 사례·이론·코드) 초과", "outcome": "README \"우리 맥락 인센티브 불일치\"로 약화", "source": "measure_mirror_self_audit_20260612"}

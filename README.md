@@ -10,7 +10,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 
 **Catch AI evaluation illusions — false positives and false negatives — automatically.**  
-Zero training · Deterministic · Zero dependencies (Python 3.10+ stdlib only).
+Zero training · Deterministic · Zero-dep core (Python 3.10+ stdlib; `judge` module optional).
 
 > Built while honestly killing our own project.  
 > The makers ran it on themselves first. → [🦋 Origin Story](docs/CHRONICLE.md)
@@ -707,10 +707,12 @@ measure-mirror/
 ## Local Memory (`db/`)
 
 `db/` is your **local memory of past audits** — not a shared/crowd database.
-We tried the "CVE / shared signature" framing and it doesn't hold: contributing
-means publishing *your own research that was wrong* (`self_catches`) or *a peer's
-failed reproduction* (`reproductions`), which runs straight into the
-trust ⊥ reputation dilemma. Nobody crowd-shares their own embarrassments.
+We tried the "CVE / shared signature" framing and **for us it didn't earn its
+keep** (this is a scoped observation, not a universal law): contributing would
+mean publishing *your own research that was wrong* (`self_catches`) or *a peer's
+failed reproduction* (`reproductions`), which runs into the trust ⊥ reputation
+dilemma. A team with the right incentives might sustain a shared DB; we didn't,
+and the value below needs no sharing anyway.
 
 The value that *does* hold needs no sharing at all: **warn future-you about a
 pattern past-you already got burned by.** It works regardless of how private the
@@ -761,7 +763,7 @@ mm.catch_history(source="fm_cde_pixel_feasibility")  # catches from one arc
 
 ## Design Principles
 
-- **Zero dependencies** — pure Python stdlib. Nothing to install, nothing to break.
+- **Zero-dep core** — pure Python stdlib. The optional `judge` module adds openai/anthropic for LLM-as-a-Judge; nothing else, nothing in the core.
 - **Bidirectional** — catches false *positives* **and** false *negatives*. Premature negative closures are also illusions.
 - **Tamper-evident pre-registration** — SHA-256 seal on first write. Re-registration is silently ignored. Ledger tampering is detected on every audit.
 - **Independent probes** — each check is a standalone function. Add new ones without touching existing code.
