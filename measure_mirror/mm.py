@@ -310,6 +310,12 @@ def grim_check(reported_acc: float, n: int, *,
 
     n_decimals: decimal places in the reported value. Auto-detected from the
     float if not provided (works for typical reporting like 0.72, 0.715).
+
+    SCOPE — small samples only. GRIM's power is granularity: with small N few
+    values are reachable. Once N ≳ 10^d (e.g. a 2-decimal mean at n ≥ 100) every
+    value is reachable and GRIM can flag nothing. It also catches only ARITHMETIC
+    impossibility, not distributional fabrication (a large fake dataset usually
+    passes GRIM; digit/distribution forensics catch those — out of scope).
     """
     if n <= 0:
         return Finding("⑩ GRIM", "WARN", f"n={n} ≤ 0 — cannot run GRIM check.")

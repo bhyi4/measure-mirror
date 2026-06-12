@@ -363,11 +363,12 @@ f = mm.scope_check(claimed_scope=["task_a"],
 
 #### ⑩ `grim_check`
 
-**잡아내는 것**: 산술적으로 불가능한 정확도 값 — 조작되었거나 n을 잘못 기재한 가능성
+**잡아내는 것**: 산술적으로 불가능한 정확도/평균 값 — 조작되었거나 n을 잘못 기재한 가능성
 
-GRIM (Granularity-Related Inconsistency of Means): `acc = k/n`이 어떤 정수 k에
-대해 성립한다면, `round(k/n, d) == acc`가 반드시 성립해야 합니다. 이를 만족하는
-정수 k가 없다면, 해당 값은 불가능합니다.
+GRIM (Granularity-Related Inconsistency of Means): `acc = k/N`이 어떤 정수 k에
+대해 성립한다면(`N = n·items`), `round(k/N, d) == acc`가 반드시 성립해야 합니다.
+이를 만족하는 정수 k가 없다면 그 값은 불가능합니다. 비율·퍼센트·정수(리커트 등)
+데이터의 평균에 모두 작동합니다.
 
 ```python
 f = mm.grim_check(reported_acc=0.33, n=10)
@@ -377,11 +378,23 @@ f = mm.grim_check(reported_acc=0.33, n=10)
 
 f = mm.grim_check(reported_acc=0.30, n=10)   # OK — round(3/10, 2) = 0.30
 
+# 다문항 척도의 평균: granularity는 n·items
+f = mm.grim_check(5.90, n=40, items=3)        # N=120
+
 # 소수점 자리수 자동 추론; n_decimals로 재정의 가능
 f = mm.grim_check(0.333, n=10, n_decimals=3)
 ```
 
 **`audit()` 내부에서 자동 실행** — FAIL만 추가, OK는 조용히 통과.
+
+> **범위 — 소표본 전용.** GRIM의 힘은 *granularity*에서 나옵니다: N이 작으면
+> 도달 가능한 값이 몇 개뿐이라 불가능한 값이 튀어나옵니다. N이 커지면 도달 가능한
+> 값이 빽빽이 채워져 GRIM은 눈이 멉니다 — d자리로 보고된 값은 `N ≳ 10^d`(예:
+> 2자리 평균에서 n ≥ 100)부터 아무것도 못 잡습니다. 또한 *산술적* 불가능만 잡지
+> *분포적* 조작은 못 잡습니다: 대규모 조작 데이터셋(예: AI 생성)은 보통 GRIM을
+> 통과하고, 대신 디지트 패턴/분포 포렌식에 걸립니다(여기 범위 밖). **실증 확인**:
+> 무작위 2자리 평균은 n=20에서 ~79%가 GRIM-불가능이지만 n≥100에서는 ~0%.
+> GRIM은 소표본 산술 게이트이지 범용 사기 탐지기가 아닙니다.
 
 ---
 

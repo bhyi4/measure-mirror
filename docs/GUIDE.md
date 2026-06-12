@@ -366,11 +366,12 @@ f = mm.scope_check(claimed_scope=["task_a"],
 
 #### ⑩ `grim_check`
 
-**Catches**: arithmetically impossible accuracy values — likely fabricated or mis-reported n
+**Catches**: arithmetically impossible accuracy / mean values — likely fabricated or mis-reported n
 
-GRIM (Granularity-Related Inconsistency of Means): if `acc = k/n` for some
-integer k, then `round(k/n, d) == acc` must hold. If no integer k satisfies
-this, the value is impossible.
+GRIM (Granularity-Related Inconsistency of Means): if `acc = k/N` for some
+integer k (where `N = n·items`), then `round(k/N, d) == acc` must hold. If no
+integer k satisfies this, the value is impossible. Works for proportions,
+percentages, and means of integer (e.g. Likert) data.
 
 ```python
 f = mm.grim_check(reported_acc=0.33, n=10)
@@ -380,11 +381,25 @@ f = mm.grim_check(reported_acc=0.33, n=10)
 
 f = mm.grim_check(reported_acc=0.30, n=10)   # OK — round(3/10, 2) = 0.30
 
+# Means of multi-item scales: granularity is n·items
+f = mm.grim_check(5.90, n=40, items=3)        # N=120
+
 # Decimal precision is auto-inferred; override with n_decimals
 f = mm.grim_check(0.333, n=10, n_decimals=3)
 ```
 
 **Runs automatically inside `audit()`** — FAIL is appended, OK is silent.
+
+> **Scope — small samples only.** GRIM's power comes from *granularity*: with a
+> small `N`, only a few values are reachable, so an impossible one stands out.
+> As `N` grows the reachable values fill in and GRIM goes blind — for a value
+> reported to `d` decimals, GRIM can flag nothing once `N ≳ 10^d` (e.g. a
+> 2-decimal mean at n ≥ 100). It also catches only *arithmetic* impossibility,
+> not *distributional* fabrication: a large fabricated dataset (e.g. an AI-
+> generated one) typically passes GRIM and is caught instead by digit-pattern /
+> distribution forensics, which are out of scope here. **Verified empirically**:
+> random 2-decimal means are GRIM-impossible ~79% of the time at n=20 but ~0% at
+> n≥100. Use GRIM as a small-sample arithmetic gate, not a general fraud detector.
 
 ---
 
