@@ -27,11 +27,14 @@ The honest distinction (verified — see below):
   same numbers reproduces the same verdict **exactly**. These are the tool's own
   output, and they grow only via `record_reproduction()`.
 
-- **`curated/`** records are our human-curated catch log and research closures.
-  They summarize or interpret past findings; they are **not** measure-mirror's
-  automatic output, and most carry no `acc`/`n` the tool could re-judge. Calling
-  `db/` as a whole "measure-mirror history" would over-claim — only `measured/`
-  is that.
+- **`curated/`** records are our human-curated catch log and research closures —
+  **representative cases, not an exhaustive log.** Each record stands for a
+  pattern (one `gaming_patterns` entry covers many sightings; one
+  `research_closures` entry compresses a whole multi-angle arc). The full record
+  of what we caught lives in our memory and agent_chat ledgers; `curated/` is the
+  reusable index into it. They are **not** measure-mirror's automatic output, and
+  most carry no `acc`/`n` the tool could re-judge. Calling `db/` as a whole
+  "measure-mirror history" would over-claim — only `measured/` is that.
 
 ## Verification
 
