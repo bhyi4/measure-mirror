@@ -1318,5 +1318,50 @@ Agent: [calls mm_register, then mm_audit]
 
 ---
 
+## Threat model — what measure-mirror cannot catch
+
+We red-teamed measure-mirror against deliberate fabrication. It loses, by design.
+This section is the honest map of that loss — read it before trusting an `OK`.
+
+**The core limit: measure-mirror checks *internal consistency*, not *source
+truth*.** It verifies that the reported numbers don't contradict each other or
+the arithmetic. It cannot verify that the numbers came from a real experiment.
+Fabricate every number *consistently* and the whole audit returns `OK`. This is
+not a bug we can fix — no tool can detect fraud from reported numbers alone if
+the fraud is internally coherent.
+
+Verified red-team results:
+
+| Attack | Outcome |
+|---|---|
+| GRIM-consistent fake means (large `n`, values snapped to `k/N`) | **passes** — GRIM is a small-`N` gate (see ⑩ scope) |
+| Fully fabricated study: pre-registered, large `n`, fair baseline, kill-condition, stable seeds | **passes `full_audit` clean** — every number was invented, consistently |
+| `witness()` a lying script | **passes** — witness seals *that the script ran and produced this output*, not that the output is *true* |
+
+Every defence (pre-registration, audit, witness, anchor) rests on the assumption
+that the data and code are honest. measure-mirror hardens the *paper trail*, not
+the *underlying truth*.
+
+**What it does buy you — fraud is forced to be modest.** To pass, a lie must stay
+humble. Reach for too much and a probe catches you:
+
+| Greedy lie | Caught by |
+|---|---|
+| Suspiciously large Δ over baseline | ⑦ `too_good_check` |
+| Small sample | ⑩ `grim_check`, ④a Wilson CI |
+| Unstable / impossibly perfect seeds | ⑤ `multiseed_check` |
+| Claim wider than tested | ⑥ `scope_check` |
+
+So measure-mirror's real job is **not catching the determined fraud** (a rare,
+unsolvable case) but **catching honest self-deception** — p-hacking, cherry-
+picking, small-`n` overconfidence, premature closure. That is the *common* form
+of research dishonesty, and the tool catches it. Read an `OK` as *"the numbers
+are internally honest and not over-reached"*, never as *"this is true"*.
+
+*(This map was drawn by red-teaming the tool until it broke — the most
+measure-mirror thing we could do to it.)*
+
+---
+
 *Built while honestly killing our own projects. The makers ran it on themselves first.*  
 *→ [Origin story](CHRONICLE.md)*
