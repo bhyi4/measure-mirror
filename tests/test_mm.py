@@ -590,6 +590,33 @@ def test_grim_mean_div20_second_decimal():
     assert mm.grim_check(3.15, 20).level == "OK"      # k=63
 
 
+def test_grim_items_multi_item_granularity():
+    """items>1: granularity is n·items, not n (GRIM paper's standard form)."""
+    # 5.90 from n=40 subjects × 3 items → N=120; consistent
+    assert mm.grim_check(5.90, 40, items=3).level == "OK"
+    assert mm.grim_check(0, 5, items=0).level == "WARN"   # guard items<1
+
+
+def test_grim_external_validation_set():
+    """Cross-check against scrutiny (R) — 18 cases with known GRIM verdicts.
+    Source: cran.r-project.org/web/packages/scrutiny grim vignette.
+    Measure-mirror must reproduce all 18 verdicts (means, multi-item, percents).
+    """
+    cases = [  # (value, n, items, consistent?)
+        (5.27, 43, 1, False), (8.97, 28, 1, False), (2.61, 28, 1, True),
+        (7.26, 28, 1, False), (3.64, 28, 1, True),  (9.26, 28, 1, False),
+        (10.46, 28, 1, True), (7.39, 28, 1, True),
+        (5.90, 40, 3, True),  (5.71, 40, 3, True),  (3.50, 40, 3, True),
+        (3.82, 40, 3, True),  (4.61, 40, 3, True),  (5.24, 40, 3, True),
+        (0.325, 438, 1, False), (0.356, 455, 1, True),
+        (0.217, 501, 1, False), (0.393, 516, 1, True),
+    ]
+    for value, n, items, consistent in cases:
+        expected = "OK" if consistent else "FAIL"
+        got = mm.grim_check(value, n, items=items).level
+        assert got == expected, f"grim({value}, n={n}, items={items}): {got} ≠ {expected}"
+
+
 def test_grim_in_audit_fail_appended(tmp_path):
     """GRIM FAIL is appended to audit findings (probe name in result set)."""
     ledger = str(tmp_path / "l.jsonl")

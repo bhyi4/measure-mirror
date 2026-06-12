@@ -292,13 +292,18 @@ def _infer_decimals(x: float) -> int:
 
 
 def grim_check(reported_acc: float, n: int, *,
-               n_decimals: int | None = None) -> Finding:
+               n_decimals: int | None = None, items: int = 1) -> Finding:
     """⑩ GRIM test: verify that acc × n is arithmetically possible.
 
-    Works for both a proportion (k/n) and a MEAN of n integers (sum/n, e.g. a
+    Works for both a proportion (k/n) and a MEAN of integers (sum/N, e.g. a
     Likert 1–7 average). There must exist an integer k such that
-    round(k/n, d) == reported_acc; if none does, the number was fabricated or
-    n was mis-reported. (k may exceed n for a mean — see the k≥0 note below.)
+    round(k/N, d) == reported_acc; if none does, the number was fabricated or
+    n was mis-reported. (k may exceed N for a mean — see the k≥0 note below.)
+
+    items: number of items averaged per subject (default 1). A mean of `items`
+    integer responses from each of `n` subjects has granularity N = n·items
+    (the GRIM paper's standard form). For a single-item scale or a plain
+    proportion, items=1.
 
     Current audit() silently does round(acc × n) and hides this signal —
     this probe makes it explicit.
@@ -308,29 +313,33 @@ def grim_check(reported_acc: float, n: int, *,
     """
     if n <= 0:
         return Finding("⑩ GRIM", "WARN", f"n={n} ≤ 0 — cannot run GRIM check.")
+    if items < 1:
+        return Finding("⑩ GRIM", "WARN", f"items={items} < 1 — cannot run GRIM check.")
 
+    N = n * items   # granularity denominator
     d = n_decimals if n_decimals is not None else _infer_decimals(reported_acc)
     d = max(d, 1)  # at minimum 1 decimal place
 
-    k_lo = math.floor(reported_acc * n)
+    k_lo = math.floor(reported_acc * N)
     k_hi = k_lo + 1
     target = round(reported_acc, d)
+    gran = f"n={n}" if items == 1 else f"n={n}×items={items}=N={N}"
 
-    # k >= 0 only: a proportion has k ≤ n, but a MEAN of integers (e.g. a
-    # Likert 1–7 average like 5.18) has k = mean·n > n. Capping at n silently
+    # k >= 0 only: a proportion has k ≤ N, but a MEAN of integers (e.g. a
+    # Likert 1–7 average like 5.18) has k = mean·N > N. Capping at N silently
     # assumed proportions and wrongly failed valid means — caught dog-fooding
     # the GRIM paper's own example (mean 5.18, n=28). See db/curated/self_catches.
     for k in (k_lo, k_hi):
-        if k >= 0 and round(k / n, d) == target:
+        if k >= 0 and round(k / N, d) == target:
             return Finding("⑩ GRIM", "OK",
-                f"acc={reported_acc} consistent with n={n} "
-                f"(k={k}, {k}/{n}={k/n:.{d+2}f} → {round(k/n, d)}).")
+                f"acc={reported_acc} consistent with {gran} "
+                f"(k={k}, {k}/{N}={k/N:.{d+2}f} → {round(k/N, d)}).")
 
     return Finding("⑩ GRIM", "FAIL",
-        f"acc={reported_acc} is arithmetically impossible for n={n}. "
-        f"No integer k satisfies round(k/{n}, {d}) = {target}. "
-        f"(candidates: k={k_lo} → {round(k_lo/n, d)}, "
-        f"k={k_hi} → {round(k_hi/n, d)}). "
+        f"acc={reported_acc} is arithmetically impossible for {gran}. "
+        f"No integer k satisfies round(k/{N}, {d}) = {target}. "
+        f"(candidates: k={k_lo} → {round(k_lo/N, d)}, "
+        f"k={k_hi} → {round(k_hi/N, d)}). "
         f"Fabricated value or mis-reported n.")
 
 

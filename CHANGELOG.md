@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.14.3] — 2026-06-12
+
+### Added
+- **⑩ GRIM `items=` parameter** — number of items averaged per subject
+  (default 1). A mean of `items` integer responses from each of `n` subjects
+  has granularity `N = n·items` (the GRIM paper's standard multi-item form).
+  Previously the caller had to pass `n·items` by hand; now `grim_check(value,
+  n, items=3)` handles it. `items < 1` guards to WARN.
+- **External validation test** — `grim_check` cross-checked against the
+  `scrutiny` (R) package's GRIM vignette: **18/18 verdicts reproduced** (means,
+  multi-item Likert, percentages). Locked in as a regression test so our GRIM
+  stays aligned with the de-facto reference implementation.
+- 2 new tests (186 → 188, all passing). `__version__` 0.14.3.
+
+### Notes
+- Dog-fooding GRIM against external data (scrutiny's 18-case set) is what
+  surfaced both the `items` gap here and the `k≤n` mean bug in 0.14.2 — the
+  tool's own discipline applied to itself, again.
+
 ## [0.14.2] — 2026-06-12
 
 ### Fixed
