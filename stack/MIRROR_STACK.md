@@ -14,6 +14,11 @@ The stack bundles three existing, independent tools (no code merge — only conv
 | **action-mirror** | Did the agent actually **do** it? (chain-linked action history + mutual witness) | action |
 | **provenance-mirror** | Where did this **artifact** come from? (distribution fingerprinting, tracing) | artifact |
 
+Plus a shared **[witness hub](https://github.com/bhyi4/mirror-witness)** — a public, CI-verified
+GitHub board where operators declare their ledger heads, so witnessing (J3) can extend beyond one
+agent family. No server: GitHub provides timestamping + immutable history, CI provides the
+consistency check.
+
 ## The five conventions (J1–J5)
 
 - **J1 action→claim:** when recording an experiment run in the action ledger, set
