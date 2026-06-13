@@ -25,6 +25,13 @@
 > 원장 실물 포함(직접 검증 가능). measure-mirror 본체는 그대로입니다(기능동결 코어 — 스택은
 > 프로브가 아니라 규약을 추가).
 
+| 도구 | 감사 대상 | 질문 |
+|---|---|---|
+| 🪞 **measure-mirror** (현재 위치) | AI 평가 주장 | **주장이 정직한가?** |
+| 🪪 [action-mirror](https://github.com/bhyi4/action-mirror) | 에이전트 행동 | 누가 뭘 했나, **증명 가능하게**? |
+| 🔎 [provenance-mirror](https://github.com/bhyi4/provenance-mirror) | 콘텐츠 진위 | **출처**가 증명되나? |
+| 👁 [mirror-witness](https://github.com/bhyi4/mirror-witness) | 운영자 간 증인 게시판 | 또 **누가 증인** 섰나? |
+
 ---
 
 ## 문제

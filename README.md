@@ -25,6 +25,13 @@ Zero training · Deterministic · Zero-dep core (Python 3.10+ stdlib; `judge` mo
 > with the actual chain-sealed ledger bundled so you can verify it yourself.
 > measure-mirror itself is unchanged (feature-frozen core; the stack adds conventions, not probes).
 
+| Tool | Audits | Question |
+|---|---|---|
+| 🪞 **measure-mirror** (you are here) | AI evaluation claims | **Is the claim honest?** |
+| 🪪 [action-mirror](https://github.com/bhyi4/action-mirror) | Agent behaviour | Who did what, **provably**? |
+| 🔎 [provenance-mirror](https://github.com/bhyi4/provenance-mirror) | Content authenticity | Is the **origin** proven? |
+| 👁 [mirror-witness](https://github.com/bhyi4/mirror-witness) | Cross-operator witness board | Who else **witnessed** it? |
+
 ---
 
 ## The Problem
