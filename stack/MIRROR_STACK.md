@@ -79,6 +79,29 @@ after peeking (amendments are append-only).
   the same agent family — they are **not independent third parties**. An independent witness
   network is future work.
 
+### Multi-agent independence (verified, not guaranteed)
+
+The discipline leans on multiple agents (independent reproduction; cross-witness). The stack
+verifies the **record** of that — sealed, chained, witnessed — but **cannot guarantee the agents
+were genuinely independent.** If agent B "reproduces" A's result but B is the same model, or A
+told B the answer, the cross-witness still passes while the spirit of "reproduction, not
+agreement" is violated. Independence cannot be manufactured by a tool; it must come from
+genuinely separate operators/models.
+
+Two consequences worth stating plainly:
+
+- **The "who" is currently self-asserted.** An action's `agent` field is a plaintext label, not a
+  cryptographic identity — the chain proves the *entry* wasn't altered, not that the named agent
+  is who acted. There is no per-session signing key today; agent harnesses expose a `session_id`
+  (a UUID), but it is self-reportable, not a signature.
+- **The honest path is *visibility*, not prevention.** Recording each reproducer's model/operator,
+  and sealing B's *own run artifact* (so "agreement without a run" is detectable), makes
+  non-independence **visible** even though the tool cannot forbid it. A cryptographic **session
+  identity** (each agent signs its entries; public keys published, e.g. on the witness board)
+  would upgrade the "who" from self-asserted to attested — but even keys give attribution and
+  impersonation-resistance, **not** independence: one operator can mint many keys (Sybil). Keys
+  make *same-identity* provable; they do not make distinct keys *independent*.
+
 ## Evidence
 
 See [`CASE_STUDY_compute_governor.md`](CASE_STUDY_compute_governor.md) — a full autonomous
