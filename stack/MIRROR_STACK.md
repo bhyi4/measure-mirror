@@ -1,5 +1,7 @@
 # 🪞🔎🪪 Mirror Stack — Joint Convention v0.1
 
+<img src="docs/mirror_stack_og.png" alt="Mirror Stack" width="600">
+
 *[한국어 →](MIRROR_STACK_KO.md)*
 
 > **One sentence:** Make a loop agent's honesty *provable* instead of *promised*.

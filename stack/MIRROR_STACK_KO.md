@@ -1,5 +1,7 @@
 # 🪞🔎🪪 미러스택 — 조인트 규약 v0.1
 
+<img src="docs/mirror_stack_og.png" alt="Mirror Stack" width="600">
+
 *[English →](MIRROR_STACK.md)*
 
 > **한 문장:** 루프 에이전트의 정직을 *약속*이 아니라 *증명 가능*하게 만든다.
