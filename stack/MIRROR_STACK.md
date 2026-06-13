@@ -26,6 +26,10 @@ GitHub board where operators declare their ledger heads, so witnessing (J3) can 
 agent family. No server: GitHub provides timestamping + immutable history, CI provides the
 consistency check.
 
+The methodology that drives all this — *how to measure honestly* — is the
+**[Measurement Mirror Discipline](DISCIPLINE.md)** (7 principles + their proving probes + the
+stack's augmentations). A compact form is auto-injected by the unified MCP server on connect.
+
 ## The five conventions (J1–J5)
 
 - **J1 action→claim:** when recording an experiment run in the action ledger, set
