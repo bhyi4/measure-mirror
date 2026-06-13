@@ -1,7 +1,7 @@
 {
   "_type": "anchor",
   "ts": "2026-06-12T22:43:54Z",
-  "ledger_path": "/data/seara/mirror_ledgers/compute_governor.jsonl",
+  "ledger_path": "compute_governor.jsonl",
   "entry_count": 4,
   "head_seal": "1b6bc161f4fc3e09",
   "anchor_hash": "55042913bf0f4d352a12244013f3746fe1af9ce1ec0dac1e2cf6bfe0a18ddba9",
