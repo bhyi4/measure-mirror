@@ -1,6 +1,8 @@
 # 🪞🔎🪪 Mirror Stack — Joint Convention v0.1
 
-<img src="docs/mirror_stack_og.png" alt="Mirror Stack" width="600">
+<p align="center">
+  <img src="docs/mirror_stack_og.png" alt="Mirror Stack" width="600">
+</p>
 
 *[한국어 →](MIRROR_STACK_KO.md)*
 
