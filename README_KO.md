@@ -16,7 +16,7 @@
 > **🪞🔎🪪 New — 미러스택** ([`stack/`](stack/)): measure-mirror는 자율연구 에이전트용 3거울
 > 무결성 스택(주장·행동·출처)의 *주장* 층입니다. 규약 5개 + `verify-all` 한 명령으로 묶이며,
 > 실제 사례연구를 동봉했습니다:
-> **[측정 토큰 한 푼도 쓰기 전에 스스로 실험을 철회한 에이전트](stack/CASE_STUDY_compute_governor.md)**
+> **[측정 토큰 한 푼도 쓰기 전에 스스로 실험을 철회한 에이전트](stack/CASE_STUDY_compute_governor_KO.md)**
 > — 사전등록 → 검정력 체크가 설계 교정 → 적대 amendment → 선행연구 철회까지, 체인봉인된
 > 원장 실물 포함(직접 검증 가능). measure-mirror 본체는 그대로입니다(기능동결 코어 — 스택은
 > 프로브가 아니라 규약을 추가).

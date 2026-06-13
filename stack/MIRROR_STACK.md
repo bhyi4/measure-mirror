@@ -1,5 +1,7 @@
 # 🪞🔎🪪 Mirror Stack — Joint Convention v0.1
 
+*[한국어 →](MIRROR_STACK_KO.md)*
+
 > **One sentence:** Make a loop agent's honesty *provable* instead of *promised*.
 > This is not a system that prevents dishonesty — it is a system in which only honesty
 > leaves evidence that cannot be reconstructed after the fact.

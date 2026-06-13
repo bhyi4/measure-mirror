@@ -1,5 +1,7 @@
 # Case Study: An Agent That Retracted Its Own Experiment Before Spending a Single Token
 
+*[한국어 →](CASE_STUDY_compute_governor_KO.md)*
+
 *Mirror Stack (measure-mirror + action-mirror + provenance-mirror) · 2026-06-12 ~ 13 · one autonomous research arc, fully chain-sealed*
 
 ## TL;DR
