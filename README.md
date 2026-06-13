@@ -48,6 +48,14 @@ AI/ML papers routinely overclaim. The most common failure modes:
 
 Measurement Mirror catches these **structurally**, not by opinion.
 
+> **Precisely what it does (and does not).** It runs deterministic checks on the inputs *you
+> provide* — it is **input-driven**, not an autonomous flaw-hunter. Arithmetic/statistical probes
+> (small-sample CI, GRIM, power, multiple-comparisons) are fully deterministic. But design-flaw
+> probes (crippled baseline, gaming, scope) only fire on the baseline / reward terms / scopes you
+> *declare* — the tool cannot discover a flaw you hide, and many real catches are still **your
+> judgment**, guided by the [discipline](https://github.com/bhyi4/measure-mirror/tree/main/stack/DISCIPLINE.md).
+> It makes honesty *provable*; it does not *force* it.
+
 ---
 
 ## Install

@@ -48,6 +48,12 @@ AI/ML 논문은 일상적으로 과장된 주장을 합니다. 가장 흔한 실
 
 Measurement Mirror는 이것들을 **구조적으로** 잡아냅니다. 의견이 아닌 규칙과 통계로.
 
+> **정확히 무엇을 하나(그리고 안 하나).** *당신이 준 입력*에 결정론 검사를 돌립니다 — **입력 구동**이지
+> 자율 결함탐색기가 아닙니다. 산술·통계 프로브(소표본 CI·GRIM·검정력·다중비교)는 완전 결정론. 그러나
+> 설계결함 프로브(crippled baseline·gaming·scope)는 당신이 *선언한* baseline/reward항/scope에만 발동 —
+> **숨긴 결함은 자율로 못 찾고**, 진짜 catch의 상당수는 여전히 *당신의 판단*입니다([규율](https://github.com/bhyi4/measure-mirror/tree/main/stack/DISCIPLINE_KO.md) 가이드).
+> 정직을 *증명 가능*하게 하지, *강제*하지 않습니다.
+
 ---
 
 ## 설치
