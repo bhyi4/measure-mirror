@@ -11,8 +11,11 @@ The stack bundles three existing, independent tools (no code merge — only conv
 | Mirror | Question it answers | Ledger unit |
 |---|---|---|
 | **measure-mirror** (this repo) | Is this **claim** honest? (preregistration, kill conditions, 31 statistical/gaming probes) | claim |
-| **action-mirror** | Did the agent actually **do** it? (chain-linked action history + mutual witness) | action |
-| **provenance-mirror** | Where did this **artifact** come from? (distribution fingerprinting, tracing) | artifact |
+| **[action-mirror](https://github.com/bhyi4/action-mirror)** | Did the agent actually **do** it? (chain-linked action history + mutual witness) | action |
+| **[provenance-mirror](https://github.com/bhyi4/provenance-mirror)** | Where did this **artifact** come from? (distribution fingerprinting, tracing) | artifact |
+
+All three are open (Apache 2.0), so every layer of the case study below is independently
+verifiable — not just the claims layer.
 
 Plus a shared **[witness hub](https://github.com/bhyi4/mirror-witness)** — a public, CI-verified
 GitHub board where operators declare their ledger heads, so witnessing (J3) can extend beyond one
