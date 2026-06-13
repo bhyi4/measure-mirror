@@ -1,0 +1,10 @@
+{
+  "_type": "anchor",
+  "ts": "2026-06-12T14:29:56Z",
+  "ledger_path": "/data/seara/mirror_ledgers/compute_governor.jsonl",
+  "entry_count": 2,
+  "head_seal": "45b491ece0e4d149",
+  "anchor_hash": "763c97d30d957d020372e1ecb5572ca330cd84d64d7647cd82aeddeeb255a2f3",
+  "chain_ok": true,
+  "note": "Gate-0 사전등록 봉인 직후 스냅샷. claims=cg_gate0_h1_predictability, cg_gate0_h2_efficiency. prereg doc sha256=e77a45dd4b5b3443dda59d3254630015953e192bb1a7fdcdf6ee44e9fe22eaa9"
+}

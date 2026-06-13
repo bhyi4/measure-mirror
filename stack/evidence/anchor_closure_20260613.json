@@ -1,0 +1,10 @@
+{
+  "_type": "anchor",
+  "ts": "2026-06-12T23:02:12Z",
+  "ledger_path": "/data/seara/mirror_ledgers/compute_governor.jsonl",
+  "entry_count": 6,
+  "head_seal": "1f811b94480f5c57",
+  "anchor_hash": "f0d0d326856963f4aca9fdfff4b704f9a8cca205696514ebc7c08787af98956e",
+  "chain_ok": true,
+  "note": "종결(Resolved-by-prior-art) 철회 2건 직후 최종 앵커. CLOSURE.md 참조"
+}
