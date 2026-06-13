@@ -66,9 +66,10 @@ Unified check (single command, real output, 2026-06-13):
 ```
 
 > Reproduce it yourself: the claims ledger and all four anchor snapshots are bundled under
-> [`evidence/`](evidence/) — `python verify_all.py` re-runs the L1+L3 checks (6/6) on your
-> machine. The L2 witness pins live in a private family ledger (see honesty box), so the
-> 10/10 output above is the operator's full run, reproduced verbatim.
+> [`evidence/`](evidence/) — `python verify_self.py` re-runs the L1+L3 checks (6/6) on your
+> machine with nothing installed. The L2 witness pins live in a private family ledger (see
+> honesty box), so the 10/10 output above is the operator's full `verify_all.py` run,
+> reproduced verbatim.
 
 ## Honesty box (what this does NOT prove)
 

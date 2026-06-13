@@ -27,17 +27,27 @@ The stack bundles three existing, independent tools (no code merge — only conv
 - **J5 distribution fingerprint:** when an artifact leaves the system, fingerprint it per
   recipient (provenance-mirror). The thinnest joint — stated honestly.
 
-## verify-all — three verification layers
+## Verification — two scripts, by layer of responsibility
 
-`verify_all.py` checks everything in one command:
+The split is deliberate: a single mirror should not contain the engine that coordinates all
+three. So verification is two files.
 
-- **L1 self-chain:** every entry's `prev_seal` links to the previous `seal` (format-agnostic),
-  plus each tool's own seal verification where available.
-- **L2 cross-witness:** pinned heads in the witness ledger match the claims ledger's actual
-  history (append-only respected).
-- **L3 external anchors:** current ledger vs stored snapshots — `intact` (unchanged),
-  `extended` (anchored head still present at its anchored position), or **`REPLACED?`**
-  (anchored head vanished — tampering signal).
+- **`verify_self.py`** — *measure-mirror's own job*. Verifies one claims ledger and its anchors:
+  - **L1 self-chain:** every entry's `prev_seal` links to the previous `seal` + mm native seal recomputation.
+  - **L3 external anchors:** current ledger vs stored snapshots — `intact` / `extended`
+    (anchored head still at its position) / **`REPLACED?`** (anchored head vanished — tampering signal).
+  - **Zero external-tool dependency** — needs only this repo. This is the part that legitimately
+    belongs to measure-mirror.
+- **`verify_all.py`** — *the stack orchestrator, one layer up*. Delegates L1+L3 to `verify_self`,
+  then adds the check no single mirror can do alone:
+  - **L2 cross-witness:** pinned heads in another agent's ledger match this claims ledger's
+    actual history (append-only respected). Requires the action-mirror `am` CLI; if absent, L2
+    is skipped and the stack degrades to measure-mirror's self-verification.
+
+Run `python verify_self.py` to check the bundled evidence with nothing installed; run
+`python verify_all.py --config your_stack.json` once you have all three mirrors wired together.
+(When the stack grows beyond measure-mirror, `verify_all.py` is what graduates to its own repo —
+`verify_self.py` stays here.)
 
 ## Threat model (honesty box)
 
@@ -58,8 +68,8 @@ after peeking (amendments are append-only).
 See [`CASE_STUDY_compute_governor.md`](CASE_STUDY_compute_governor.md) — a full autonomous
 research arc (preregistration → power-check design correction → adversarial amendments →
 prior-art retraction at zero measurement cost), with the real claims ledger and anchor
-snapshots bundled under [`evidence/`](evidence/). Run `python verify_all.py` in this directory
-to verify them yourself.
+snapshots bundled under [`evidence/`](evidence/). Run `python verify_self.py` in this directory
+to verify them yourself (no install needed).
 
 ## Relation to neighboring work (checked 2026-06-13)
 
