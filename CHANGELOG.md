@@ -5,6 +5,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.15.0] — 2026-06-14
+
+Driven by external review and a new self-evaluation of the tool's own FP/FN.
+
+### Added
+- **`eval/self_fpfn/`** — measures the probe suite's *own* false-positive /
+  false-negative rate on a labeled set (answers "who measures the measurer?").
+  v1: core 33 in-scope cases → FN 0/19, FP 0/14 (small-n Wilson upper ~0.17–0.22,
+  a gross-miscalibration smoke test). v2: 1119 oracle-labeled cases with oracles
+  **independent of the probe** — GRIM vs brute-force k-sweep (0/304, shortcut
+  proven complete) and small-sample vs **exact binomial** (FN 7/542 = 0.0129,
+  all over-optimistic near the boundary; quantifies the Wilson-vs-exact gap and
+  motivates a future exact/Clopper-Pearson option). Each run pre-registered and
+  hash-sealed before execution; `tests/test_self_fpfn.py` guards the result.
+- **`baseline_fairness(..., n=…)`** — optional sample size. For accuracy-style
+  metrics, a Δ above the fixed `margin` must *also* clear the baseline by 95%
+  Wilson CI; otherwise it is flagged as not statistically distinguishable. The
+  fixed margin alone is n-blind. Backward compatible (no `n` → prior behaviour).
+- **`leakage_check` fuzzy matching** — beyond exact hash intersection: a
+  normalized match (case / whitespace / punctuation) → FAIL, and a token-Jaccard
+  near-duplicate (≥ threshold, default 0.7) → WARN. `fuzzy=False` restores
+  exact-only. Honest limit: semantic paraphrase below the threshold still needs
+  embedding-based matching (documented, not papered over with a lossy low
+  threshold). Both new options are exposed on the MCP server.
+- 6 new tests (188 → 194, all passing). `__version__` 0.15.0.
+
 ## [0.14.3] — 2026-06-12
 
 ### Added

@@ -1,0 +1,38 @@
+{"_doc":"measure-mirror self FP/FN labeled set v1. label=defective(should FLAG: FAIL/WARN) | clean(should PASS: OK). bucket=core(in-scope, clear-cut or statistically-grounded borderline) | known_limitation_trap(disclosed limitations — FN/FP expected, demonstrates external critique points 3/4 + scope exact-match). Ground truth from statistical definitions, not probe code. Constructor knew probe logic -> calibration, not field FP/FN."}
+{"id":"ss01","probe":"small_sample","label":"defective","bucket":"core","args":{"reported_acc":0.556,"n":9,"baseline":0.5},"note":"README example: 95%CI contains 0.5 -> indistinguishable from chance"}
+{"id":"ss02","probe":"small_sample","label":"defective","bucket":"core","args":{"reported_acc":0.6,"n":5,"baseline":0.5},"note":"tiny n, CI engulfs 0.5"}
+{"id":"ss03","probe":"small_sample","label":"defective","bucket":"core","args":{"reported_acc":0.6,"n":30,"baseline":0.5},"note":"borderline: n=30 acc=0.6 still NOT distinguishable from chance at 95% (CI [0.42,0.75])"}
+{"id":"ss04","probe":"small_sample","label":"defective","bucket":"core","args":{"reported_acc":0.30,"n":40,"baseline":0.5},"note":"anti-signal: CI entirely below baseline -> worse than chance, must flag"}
+{"id":"ss05","probe":"small_sample","label":"clean","bucket":"core","args":{"reported_acc":0.62,"n":200,"baseline":0.5},"note":"CI [0.55,0.69] clears 0.5"}
+{"id":"ss06","probe":"small_sample","label":"clean","bucket":"core","args":{"reported_acc":0.70,"n":100,"baseline":0.5},"note":"CI clears 0.5"}
+{"id":"ss07","probe":"small_sample","label":"clean","bucket":"core","args":{"reported_acc":0.72,"n":50,"baseline":0.5},"note":"CI clears 0.5"}
+{"id":"gr01","probe":"grim","label":"defective","bucket":"core","args":{"reported_acc":0.55,"n":9},"note":"no integer k: 4/9=.44, 5/9=.56 -> 0.55 impossible"}
+{"id":"gr02","probe":"grim","label":"defective","bucket":"core","args":{"reported_acc":0.333,"n":7},"note":"2/7=.286, 3/7=.429 -> 0.333 impossible"}
+{"id":"gr03","probe":"grim","label":"defective","bucket":"core","args":{"reported_acc":0.80,"n":3},"note":"2/3=.67, 3/3=1.0 -> 0.8 impossible"}
+{"id":"gr04","probe":"grim","label":"clean","bucket":"core","args":{"reported_acc":0.556,"n":9},"note":"5/9=0.556 reachable"}
+{"id":"gr05","probe":"grim","label":"clean","bucket":"core","args":{"reported_acc":0.75,"n":8},"note":"6/8=0.75 reachable"}
+{"id":"gr06","probe":"grim","label":"clean","bucket":"core","args":{"reported_acc":0.50,"n":8},"note":"4/8=0.5 reachable"}
+{"id":"gr07","probe":"grim","label":"clean","bucket":"core","args":{"reported_acc":0.55,"n":200},"note":"GRIM scope honesty: large n -> 110/200=0.55 reachable, correctly cannot flag (TN)"}
+{"id":"lk01","probe":"leakage","label":"defective","bucket":"core","args":{"train":["a","b","c"],"test":["c","d","e"]},"note":"exact dup 'c' across train/test"}
+{"id":"lk02","probe":"leakage","label":"clean","bucket":"core","args":{"train":["a","b","c"],"test":["x","y","z"]},"note":"disjoint"}
+{"id":"lk03","probe":"leakage","label":"defective","bucket":"known_limitation_trap","args":{"train":["The cat sat on the mat."],"test":["A cat was sitting on the mat."],"limitation":"near-duplicate paraphrase","critique_point":4},"note":"true contamination via paraphrase; exact-hash misses -> EXPECTED FN (demonstrates critique point 4)"}
+{"id":"lk04","probe":"leakage","label":"defective","bucket":"known_limitation_trap","args":{"train":["Paris is the capital of France."],"test":["paris is the capital of france."],"limitation":"case-only near-duplicate","critique_point":4},"note":"same item differing only in case; exact-hash misses -> EXPECTED FN"}
+{"id":"bf01","probe":"baseline_fairness","label":"defective","bucket":"core","args":{"claimed":0.70,"baseline":0.72},"note":"claimed worse than baseline"}
+{"id":"bf02","probe":"baseline_fairness","label":"defective","bucket":"core","args":{"claimed":0.705,"baseline":0.70},"note":"tied within margin 0.01"}
+{"id":"bf03","probe":"baseline_fairness","label":"clean","bucket":"core","args":{"claimed":0.80,"baseline":0.60},"note":"genuine 20pt beat"}
+{"id":"bf04","probe":"baseline_fairness","label":"defective","bucket":"known_limitation_trap","args":{"claimed":0.62,"baseline":0.60,"intended_n":20,"limitation":"n-blind fixed margin","critique_point":3},"note":"Δ0.02>margin so PASSES, but at n=20 two-proportion CIs overlap heavily = statistically tied -> EXPECTED FN (demonstrates critique point 3: fixed 0.01 margin ignores n)"}
+{"id":"gm01","probe":"gaming","label":"defective","bucket":"core","args":{"metric":"accuracy","reward_terms":["cross_entropy","accuracy_bonus"]},"note":"eval metric inside a reward term -> self-fulfilling"}
+{"id":"gm02","probe":"gaming","label":"clean","bucket":"core","args":{"metric":"accuracy","reward_terms":["cross_entropy","kl_div"]},"note":"metric absent from reward"}
+{"id":"gm03","probe":"gaming","label":"defective","bucket":"core","args":{"metric":"bleu","reward_terms":["bleu_reward"]},"note":"metric rewarded directly"}
+{"id":"ms01","probe":"multiseed","label":"defective","bucket":"core","args":{"seeds":[0.48,0.55,0.51,0.49,0.53]},"note":"seed range straddles baseline 0.5 -> unstable"}
+{"id":"ms02","probe":"multiseed","label":"clean","bucket":"core","args":{"seeds":[0.70,0.72,0.71,0.69,0.73]},"note":"tight, well above baseline"}
+{"id":"ms03","probe":"multiseed","label":"defective","bucket":"core","args":{"seeds":[0.60,0.85,0.62,0.88,0.61]},"note":"above baseline but CV~20% -> high variance, should WARN"}
+{"id":"sc01","probe":"scope","label":"defective","bucket":"core","args":{"claimed_scope":["en","ko","ja"],"tested_scope":["en","ko"]},"note":"claimed ja untested -> over-generalization"}
+{"id":"sc02","probe":"scope","label":"clean","bucket":"core","args":{"claimed_scope":["en","ko"],"tested_scope":["en","ko","ja"]},"note":"claimed subset of tested"}
+{"id":"sc_trap01","probe":"scope","label":"clean","bucket":"known_limitation_trap","args":{"claimed_scope":["GSM8K"],"tested_scope":["gsm8k"],"limitation":"exact-match scope, case/format-sensitive","critique_point":"scope-analog-of-4"},"note":"same benchmark differing only in case IS covered, but exact set-membership flags it -> EXPECTED FP (over-flagging; scope analog of leakage exact-match brittleness)"}
+{"id":"tg01","probe":"too_good","label":"defective","bucket":"core","args":{"claimed":0.95,"baseline":0.50},"note":"Δ0.45 suspiciously large -> WARN"}
+{"id":"tg02","probe":"too_good","label":"clean","bucket":"core","args":{"claimed":0.62,"baseline":0.50},"note":"modest Δ0.12 normal"}
+{"id":"tg03","probe":"too_good","label":"defective","bucket":"core","args":{"claimed":0.88,"baseline":0.55},"note":"Δ0.33 >= 0.30 suspicious"}
+{"id":"pw01","probe":"power","label":"defective","bucket":"core","args":{"n":20,"baseline":0.5},"note":"n=20 far below n_required(~782) for mde=0.05 -> underpowered WARN"}
+{"id":"pw02","probe":"power","label":"clean","bucket":"core","args":{"n":1000,"baseline":0.5},"note":"n=1000 >= n_required -> adequately powered"}
+{"id":"pw03","probe":"power","label":"defective","bucket":"core","args":{"n":100,"baseline":0.5},"note":"n=100 below n_required(~782) -> underpowered WARN"}

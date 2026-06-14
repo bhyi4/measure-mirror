@@ -33,6 +33,17 @@ def test_baseline_tie():
     assert mm.baseline_fairness("x", 0.996, 0.998, higher_better=False).level == "FAIL"
 
 
+def test_baseline_n_aware():
+    # Δ above the fixed margin but not distinguishable at small n -> FAIL
+    assert mm.baseline_fairness("x", 0.62, 0.60, n=20).level == "FAIL"
+    # same Δ, large enough n -> CI excludes baseline -> OK
+    # (n=2000 is NOT enough: a 2-pt gap needs ~n≥5000 to clear 95% — the very
+    #  reason a fixed n-blind margin is misleading)
+    assert mm.baseline_fairness("x", 0.62, 0.60, n=5000).level == "OK"
+    # n omitted -> backward-compatible (no n-check)
+    assert mm.baseline_fairness("x", 0.62, 0.60).level == "OK"
+
+
 def test_scope_overgeneralization():
     assert mm.scope_check(["reasoning"], ["musr_1task"]).level == "FAIL"
 
@@ -43,6 +54,22 @@ def test_scope_ok():
 
 def test_leakage():
     assert mm.leakage_check([1, 2, 3], [3, 4, 5]).level == "FAIL"
+
+
+def test_leakage_normalized_nearduplicate():
+    # differs only in case / punctuation -> caught by normalization
+    assert mm.leakage_check(["Hello, World!"], ["hello world"]).level == "FAIL"
+    # exact-only mode must NOT flag the normalized near-dup
+    assert mm.leakage_check(["Hello, World!"], ["hello world"], fuzzy=False).level == "OK"
+
+
+def test_leakage_token_jaccard_nearduplicate():
+    # high token overlap (one word of seven changed: J=6/8=0.75) -> WARN
+    assert mm.leakage_check(
+        ["one two three four five six seven"],
+        ["one two three four five six eight"]).level == "WARN"
+    # genuinely disjoint -> OK
+    assert mm.leakage_check(["alpha beta gamma"], ["delta epsilon zeta"]).level == "OK"
 
 
 def test_wilson_extreme():

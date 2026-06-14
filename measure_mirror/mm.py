@@ -6,8 +6,8 @@
       metric-swap detection, tamper detection, re-registration detection
   ② Fair baseline — crippled / tied / reversed baseline
   ③ Gaming boundary — metric directly in reward/loss
-  ④a Small-sample Wilson CI + direction + data leakage (hash intersection)
-      + effect-size (continuous metrics)
+  ④a Small-sample Wilson CI + direction + data leakage (exact hash +
+      normalized + token-Jaccard near-dup) + effect-size (continuous metrics)
   ⑤ Multi-seed reproduction — cross-seed variance alarm
   ⑥ Scope — claimed scope wider than tested scope
   ⑦ Too-good — suspiciously large improvement alarm
@@ -52,7 +52,7 @@ Design:
   - Ledger = append-only JSONL + chain hash + first-write wins + SHA-256 seal.
 """
 from __future__ import annotations
-import json, math, time, hashlib, os, random, statistics
+import json, math, time, hashlib, os, random, re, statistics
 from dataclasses import dataclass
 
 
@@ -350,9 +350,33 @@ def grim_check(reported_acc: float, n: int, *,
 
 
 # ─────────────────────────────────────────────────────────────
-# ④a-2 Data leakage (train ∩ test hash intersection)
+# ④a-2 Data leakage (exact hash + normalized + token-Jaccard near-dup)
 # ─────────────────────────────────────────────────────────────
-def leakage_check(train_items, test_items) -> Finding:
+def _normalize_text(x) -> str:
+    """Lowercase, strip punctuation, collapse whitespace — for near-dup matching."""
+    s = re.sub(r"[^\w\s]", " ", str(x).lower())
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _tokens(x) -> set:
+    return set(_normalize_text(x).split())
+
+
+def leakage_check(train_items, test_items, *, fuzzy: bool = True,
+                  jaccard_threshold: float = 0.7) -> Finding:
+    """Detect train∩test contamination.
+
+    Tiered, most-confident first:
+      1. exact hash intersection            -> FAIL (identical items)
+      2. normalized match (case/space/punct) -> FAIL (trivial near-dup)
+      3. token-Jaccard ≥ threshold           -> WARN (likely paraphrase; review)
+
+    SCOPE — fuzzy matching is lexical. A semantic paraphrase whose token overlap
+    falls below `jaccard_threshold` (e.g. heavy rewording) is NOT caught; that
+    needs embedding-based matching, which is out of scope (a hand-tuned low
+    threshold would just trade misses for false alarms). Set fuzzy=False for the
+    exact-only behaviour.
+    """
     def H(xs):
         return {hashlib.sha256(str(x).encode()).hexdigest() for x in xs}
     th, eh = H(train_items), H(test_items)
@@ -360,15 +384,56 @@ def leakage_check(train_items, test_items) -> Finding:
     if inter:
         frac = len(inter) / max(1, len(eh))
         return Finding("④a data-leakage", "FAIL",
-            f"train∩test = {len(inter)} items ({frac:.1%} of test). Contaminated.")
-    return Finding("④a data-leakage", "OK", "train∩test = 0. No leakage.")
+            f"train∩test = {len(inter)} items ({frac:.1%} of test) exact-match. Contaminated.")
+    if not fuzzy:
+        return Finding("④a data-leakage", "OK", "train∩test = 0 (exact). No leakage.")
+
+    # 2. normalized-exact: differs only in case / whitespace / punctuation
+    nt = {n for n in (_normalize_text(x) for x in train_items) if n}
+    norm_hits = [x for x in test_items if _normalize_text(x) in nt]
+    if norm_hits:
+        return Finding("④a data-leakage", "FAIL",
+            f"{len(norm_hits)} test item(s) match a train item after normalization "
+            f"(case/whitespace/punctuation). Contaminated.")
+
+    # 3. token-Jaccard near-duplicate (lower confidence -> WARN)
+    train_tok = [t for t in (_tokens(x) for x in train_items) if t]
+    near = 0
+    example = 0.0
+    for x in test_items:
+        et = _tokens(x)
+        if not et:
+            continue
+        best = max((len(et & tt) / len(et | tt) for tt in train_tok), default=0.0)
+        if best >= jaccard_threshold:
+            near += 1
+            example = max(example, best)
+    if near:
+        return Finding("④a data-leakage", "WARN",
+            f"{near} test item(s) are near-duplicates of a train item "
+            f"(token Jaccard ≥ {jaccard_threshold:.2f}; max {example:.2f}). "
+            f"Possible paraphrase contamination — review.")
+
+    return Finding("④a data-leakage", "OK",
+        "train∩test = 0 (exact, normalized, token-Jaccard). No leakage detected "
+        "(semantic paraphrase below threshold needs embedding matching — out of scope).")
 
 
 # ─────────────────────────────────────────────────────────────
 # ② Fair baseline
 # ─────────────────────────────────────────────────────────────
 def baseline_fairness(name: str, claimed: float, baseline: float, *,
-                      higher_better: bool = True, margin: float = 0.01) -> Finding:
+                      higher_better: bool = True, margin: float = 0.01,
+                      n: int | None = None) -> Finding:
+    """② Is the claimed metric a genuine advantage over the baseline?
+
+    The fixed `margin` is n-blind: a Δ above it can still be sampling noise. When
+    `n` is supplied (accuracy-style proportions, higher_better=True), additionally
+    require the claimed value's 95% Wilson CI to actually exclude the baseline —
+    otherwise the "advantage" is not statistically distinguishable. n is ignored
+    for error-style metrics (higher_better=False), where the proportion model
+    does not apply.
+    """
     diff = (claimed - baseline) if higher_better else (baseline - claimed)
     if diff <= -margin:
         return Finding("② fair-baseline", "FAIL",
@@ -378,6 +443,17 @@ def baseline_fairness(name: str, claimed: float, baseline: float, *,
         return Finding("② fair-baseline", "FAIL",
             f"{name}: claimed {claimed:.3f} ≈ baseline {baseline:.3f} "
             f"(Δ{diff:+.3f} < {margin}). Tied — no genuine advantage.")
+    if n is not None and n > 0 and higher_better:
+        lo, hi = wilson_ci(round(claimed * n), n)
+        if lo <= baseline <= hi:
+            return Finding("② fair-baseline", "FAIL",
+                f"{name}: claimed {claimed:.3f} beats baseline {baseline:.3f} "
+                f"(Δ{diff:+.3f} > margin {margin}) but at n={n} the 95% CI "
+                f"[{lo:.3f}, {hi:.3f}] still includes the baseline — "
+                f"not statistically distinguishable.")
+        return Finding("② fair-baseline", "OK",
+            f"{name}: claimed {claimed:.3f} beats baseline {baseline:.3f} "
+            f"(Δ{diff:+.3f}; n={n} 95% CI [{lo:.3f}, {hi:.3f}] excludes baseline).")
     return Finding("② fair-baseline", "OK",
         f"{name}: claimed {claimed:.3f} beats baseline {baseline:.3f} (Δ{diff:+.3f}).")
 
