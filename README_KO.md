@@ -32,6 +32,8 @@
 | 🔎 [provenance-mirror](https://github.com/bhyi4/provenance-mirror) | 콘텐츠 진위 | **출처**가 증명되나? |
 | 👁 [mirror-witness](https://github.com/bhyi4/mirror-witness) | 운영자 간 증인 게시판 | 또 **누가 증인** 섰나? |
 
+💬 **[Discussions](https://github.com/orgs/mirror-stack/discussions)** — 질문 · 아이디어 · 독립 재현 공유 환영.
+
 ---
 
 ## 문제

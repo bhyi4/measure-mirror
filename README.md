@@ -32,6 +32,8 @@ Zero training · Deterministic · Zero-dep core (Python 3.10+ stdlib; `judge` mo
 | 🔎 [provenance-mirror](https://github.com/bhyi4/provenance-mirror) | Content authenticity | Is the **origin** proven? |
 | 👁 [mirror-witness](https://github.com/bhyi4/mirror-witness) | Cross-operator witness board | Who else **witnessed** it? |
 
+💬 **[Discussions](https://github.com/orgs/mirror-stack/discussions)** — questions · ideas · independent reproductions welcome.
+
 ---
 
 ## The Problem
