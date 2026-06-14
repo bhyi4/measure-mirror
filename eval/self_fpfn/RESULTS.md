@@ -40,4 +40,18 @@ Each fired exactly as designed — the disclosed limitations are now measured:
 ## So what
 - Core deterministic suite: no implementation bug surfaced on in-scope cases (bounded by small n).
 - Critique pts ③④ are **confirmed and quantified**, not denied — strengthens honesty, not the tool.
-- Next-precision step (if pursued): expand n per probe to tighten the CI; add an independent witness.
+- Precision pass: see [v2/RESULTS_v2.md](v2/RESULTS_v2.md) (oracle-labeled, 1119 cases).
+
+## Update — ③④ patched (mm_fix_pt34_v1, seal `af14a7ce5fac14ba`)
+The traps above drove a fix; the **same eval is the regression proof** (re-run,
+sealed, core stayed 0/0, no pre-existing test regression):
+
+| trap | before | after | how |
+|---|---|---|---|
+| lk04 (case-only near-dup) | FN | **TP — fixed** | leakage_check normalization (case/whitespace/punct) |
+| bf04 (n-blind baseline) | FN | **TP — fixed** | baseline_fairness optional `n` → Wilson-CI distinguishability |
+| lk03 (semantic paraphrase) | FN | FN — **still open** | needs embedding matching; token Jaccard 0.375 < 0.7 (a low threshold to force-catch was rejected — trades misses for false alarms) |
+| sc_trap01 (scope exact-match) | FP | FP — **out of scope** | scope is a separate limitation, not part of the ③④ patch |
+
+Honest partial fix: lexical near-dups closed, semantic paraphrase explicitly
+left to a future embedding-based pass rather than papered over.

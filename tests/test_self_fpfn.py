@@ -31,15 +31,20 @@ def test_core_no_false_decisions(result):
 
 
 def test_traps_match_documented_behaviour(result):
-    """The disclosed limitations behave as RESULTS.md records (current tool)."""
+    """The disclosed limitations behave as RESULTS.md records.
+
+    After the ③④ patch (n-aware baseline_fairness, fuzzy leakage):
+      - lk04 (case-only near-dup)   FIXED  -> caught (TP) by normalization
+      - bf04 (n-blind baseline)     FIXED  -> caught (TP) by Wilson-CI at n
+    Still open (honest):
+      - lk03 (semantic paraphrase)  -> FN, needs embedding matching (out of scope)
+      - sc_trap01 (scope exact-match) -> FP, a separate limitation (not ③④)
+    """
     by_id = {t["id"]: t["outcome"] for t in result["trap_detail"]}
-    # near-duplicate leakage slips past exact-hash matching -> FN
-    assert by_id["lk03"] == "FN"
-    assert by_id["lk04"] == "FN"
-    # n-blind fixed baseline margin -> FN on a statistically-tied claim
-    assert by_id["bf04"] == "FN"
-    # exact-match scope is case-sensitive -> FP on a covered-but-recased scope
-    assert by_id["sc_trap01"] == "FP"
+    assert by_id["lk04"] == "TP"   # fixed: normalized near-dup
+    assert by_id["bf04"] == "TP"   # fixed: n-aware distinguishability
+    assert by_id["lk03"] == "FN"   # still open: semantic paraphrase
+    assert by_id["sc_trap01"] == "FP"  # out of patch scope: scope exact-match
 
 
 def test_v2_grim_shortcut_is_complete():

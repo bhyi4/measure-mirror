@@ -276,6 +276,11 @@ async def list_tools() -> list[types.Tool]:
                     "baseline":      {"type": "number"},
                     "higher_better": {"type": "boolean", "default": True},
                     "margin":        {"type": "number",  "default": 0.01},
+                    "n":             {"type": "integer", "description":
+                                      "Sample size (optional). When given for an "
+                                      "accuracy-style metric, also require the 95% "
+                                      "Wilson CI to exclude the baseline — a Δ above "
+                                      "the fixed margin can still be noise at small n."},
                 },
                 "required": ["name", "claimed", "baseline"],
             },
@@ -319,12 +324,17 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="mm_leakage_check",
-            description="④a Detect train∩test data contamination via hash intersection.",
+            description="④a Detect train∩test contamination: exact hash + normalized + token-Jaccard near-dup.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "train_items": {"type": "array", "items": {}, "description": "Train set items"},
                     "test_items":  {"type": "array", "items": {}, "description": "Test set items"},
+                    "fuzzy":       {"type": "boolean", "default": True, "description":
+                                    "Also catch normalized (case/whitespace/punct -> FAIL) and "
+                                    "token-Jaccard near-duplicates (-> WARN). False = exact-only."},
+                    "jaccard_threshold": {"type": "number", "default": 0.7,
+                                          "description": "Token-Jaccard WARN threshold for near-dups."},
                 },
                 "required": ["train_items", "test_items"],
             },
@@ -839,6 +849,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 arguments["baseline"],
                 higher_better=arguments.get("higher_better", True),
                 margin=arguments.get("margin", 0.01),
+                n=arguments.get("n"),
             ))
 
         elif name == "mm_gaming_check":
@@ -858,6 +869,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             result = _single(mm.leakage_check(
                 arguments["train_items"],
                 arguments["test_items"],
+                fuzzy=arguments.get("fuzzy", True),
+                jaccard_threshold=arguments.get("jaccard_threshold", 0.7),
             ))
 
         elif name == "mm_scope_check":

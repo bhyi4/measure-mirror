@@ -48,7 +48,7 @@ def probe_level(probe, a):
     if probe == "small_sample":     return small_sample_level(a)
     if probe == "grim":             return mm.grim_check(a["reported_acc"], a["n"]).level
     if probe == "leakage":          return mm.leakage_check(a["train"], a["test"]).level
-    if probe == "baseline_fairness":return mm.baseline_fairness("case", a["claimed"], a["baseline"]).level
+    if probe == "baseline_fairness":return mm.baseline_fairness("case", a["claimed"], a["baseline"], n=a.get("intended_n")).level
     if probe == "gaming":           return mm.gaming_check(a["metric"], a["reward_terms"]).level
     if probe == "multiseed":        return mm.multiseed_check(a["seeds"]).level
     if probe == "scope":            return mm.scope_check(a["claimed_scope"], a["tested_scope"]).level
