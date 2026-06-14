@@ -40,3 +40,14 @@ def test_traps_match_documented_behaviour(result):
     assert by_id["bf04"] == "FN"
     # exact-match scope is case-sensitive -> FP on a covered-but-recased scope
     assert by_id["sc_trap01"] == "FP"
+
+
+def test_v2_grim_shortcut_is_complete():
+    """v2 kill-condition guard: the GRIM 2-candidate shortcut must agree with a
+    full brute-force k-sweep on every case (any disagreement = a real bug)."""
+    sys.path.insert(0, os.path.abspath(os.path.join(EVAL_DIR, "v2")))
+    import analyze_v2
+    out = analyze_v2.evaluate()
+    grim = out["per_probe"]["grim"]
+    assert grim["FN"] == 0 and grim["FP"] == 0, \
+        [d for d in out["disagreements"] if d["probe"] == "grim"]
