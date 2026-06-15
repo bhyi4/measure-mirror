@@ -25,3 +25,23 @@ jobs:
           for d in usage_example demo_zero demo_field demo_survivor demo_db demo_scope; do
             python examples/$d.py
           done
+
+  package:
+    # Build the wheel and exercise it in a CLEAN env — catches "works in the
+    # repo, broken on pip install" (missing modules / data files / import errors).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist + wheel
+        run: |
+          pip install build
+          python -m build
+      - name: Show what the wheel actually ships
+        run: python -m zipfile -l dist/*.whl
+      - name: Install ONLY the built wheel (no source tree)
+        run: pip install dist/*.whl
+      - name: Smoke-test the installed package (run from /tmp, not the repo)
+        run: cd /tmp && python "$GITHUB_WORKSPACE/tests/smoke_installed.py"

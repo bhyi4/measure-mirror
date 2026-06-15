@@ -5,6 +5,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.15.1] — 2026-06-15
+
+Pre-PyPI stability hardening (no public API change).
+
+### Changed
+- **Narrowed exception handling** in the `db/` lookup helpers
+  (`lookup_baseline`, `lookup_reproduction`, the curated-pattern loader): the
+  broad `except Exception:` that silently returned `None`/`[]` is now
+  `except (OSError, json.JSONDecodeError)`. Missing/corrupt db files still
+  degrade gracefully, but an *unexpected* error now surfaces instead of being
+  swallowed — for an integrity tool a hidden error must never become a silent
+  "OK".
+
+### Added
+- **Property-based tests** (`tests/test_properties.py`, Hypothesis) for the
+  deterministic probes — random inputs across the whole domain assert invariants
+  (Wilson CI is always a valid sub-interval of [0,1]; GRIM never rejects a
+  reachable proportion; exact/identical leakage always FAILs; no probe crashes on
+  edge inputs like n=0, p=0/1, empty lists, unicode). 188 → 206 tests.
+- **`package` CI job** + `tests/smoke_installed.py` — builds the wheel, installs
+  it into a clean environment, and smoke-tests the *installed* package (run from
+  outside the source tree). Catches the "works in the repo, broken on
+  `pip install`" class and locks the graceful-degrade contract when `db/` is
+  absent (`db/` is repo-local and intentionally not shipped in the wheel).
+
+---
+
 ## [0.15.0] — 2026-06-14
 
 Driven by external review and a new self-evaluation of the tool's own FP/FN.

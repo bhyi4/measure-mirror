@@ -474,8 +474,8 @@ def lookup_baseline(task: str | None, db_dir: str | None = None) -> float | None
         return None
     try:
         db = json.load(open(p, encoding="utf-8"))
-    except Exception:
-        return None
+    except (OSError, json.JSONDecodeError):
+        return None        # missing/corrupt db → degrade; unexpected errors surface
     e = db.get(task)
     return e.get("baseline") if isinstance(e, dict) else None
 
@@ -510,8 +510,8 @@ def lookup_reproduction(task: str | None, db_dir: str | None = None) -> list[dic
                     continue
                 if e.get("task") == task and e.get("verdict") == "FAIL":
                     out.append(e)
-    except Exception:
-        return []
+    except OSError:
+        return []          # unreadable db → degrade; unexpected errors surface
     return out
 
 
@@ -616,8 +616,8 @@ def catch_history(*, kind: str | None = None, source: str | None = None,
                     continue   # pattern records carry no source field
                 for pat in d.get("patterns", []):
                     out.append({"kind": k, **pat})
-        except Exception:
-            continue
+        except (OSError, json.JSONDecodeError):
+            continue       # missing/corrupt db file → skip; unexpected errors surface
     return out
 
 
