@@ -280,6 +280,44 @@ def wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
 
 
 # ─────────────────────────────────────────────────────────────
+# ④a-2 Exact small-sample distinguishability (two-sided binomial test)
+# Wilson's normal approximation is over-optimistic right at the boundary; for
+# small n the exact two-sided binomial test is the correct method (the one
+# scipy.stats.binomtest implements, but pure-python — no scipy dependency).
+# eval/self_fpfn/v2 measured ~1.3% boundary over-optimism in the Wilson path.
+# ─────────────────────────────────────────────────────────────
+_EXACT_MAX_N = 10_000  # exact is cheap O(n) here; Wilson ≈ exact above this
+
+
+def binom_two_sided_p(k: int, n: int, p0: float) -> float:
+    """Exact two-sided binomial test p-value: k successes in n under H0 p=p0.
+
+    Matches scipy.stats.binomtest(k, n, p0, alternative='two-sided') — sums the
+    pmf of every outcome no more likely than the observed one. Pure-python,
+    log-space (no overflow). Returns 1.0 for degenerate inputs.
+    """
+    if n <= 0:
+        return 1.0
+    k = max(0, min(n, int(k)))
+    if p0 <= 0.0:
+        return 1.0 if k == 0 else 0.0
+    if p0 >= 1.0:
+        return 1.0 if k == n else 0.0
+    logp, log1mp, lgn = math.log(p0), math.log1p(-p0), math.lgamma(n + 1)
+
+    def _logpmf(i: int) -> float:
+        return lgn - math.lgamma(i + 1) - math.lgamma(n - i + 1) + i * logp + (n - i) * log1mp
+
+    thresh = _logpmf(k) + 1e-7          # rel-tolerance for float ties (scipy-style)
+    total = 0.0
+    for i in range(n + 1):
+        lp = _logpmf(i)
+        if lp <= thresh:
+            total += math.exp(lp)
+    return min(1.0, total)
+
+
+# ─────────────────────────────────────────────────────────────
 # ⑩ GRIM — arithmetic consistency check
 # ─────────────────────────────────────────────────────────────
 def _infer_decimals(x: float) -> int:
@@ -444,7 +482,20 @@ def baseline_fairness(name: str, claimed: float, baseline: float, *,
             f"{name}: claimed {claimed:.3f} ≈ baseline {baseline:.3f} "
             f"(Δ{diff:+.3f} < {margin}). Tied — no genuine advantage.")
     if n is not None and n > 0 and higher_better:
-        lo, hi = wilson_ci(round(claimed * n), n)
+        k = round(claimed * n)
+        if n <= _EXACT_MAX_N:
+            # Exact two-sided binomial test — the correct small-sample method
+            # (Wilson is over-optimistic at the boundary; see eval/self_fpfn/v2).
+            p = binom_two_sided_p(k, n, baseline)
+            if p > 0.05:
+                return Finding("② fair-baseline", "FAIL",
+                    f"{name}: claimed {claimed:.3f} beats baseline {baseline:.3f} "
+                    f"(Δ{diff:+.3f} > margin {margin}) but at n={n} an exact binomial "
+                    f"test gives p={p:.3f} > 0.05 — not statistically distinguishable.")
+            return Finding("② fair-baseline", "OK",
+                f"{name}: claimed {claimed:.3f} beats baseline {baseline:.3f} "
+                f"(Δ{diff:+.3f}; n={n} exact binomial p={p:.3f} ≤ 0.05 — distinguishable).")
+        lo, hi = wilson_ci(k, n)
         if lo <= baseline <= hi:
             return Finding("② fair-baseline", "FAIL",
                 f"{name}: claimed {claimed:.3f} beats baseline {baseline:.3f} "
@@ -1440,20 +1491,37 @@ def audit(ledger_path: str, claim_id: str, *,
         findings.append(grim)
 
     k = round(reported_acc * n)
-    lo, hi = wilson_ci(k, n)
-
-    if lo <= baseline <= hi:
-        findings.append(Finding("④a small-sample CI", "FAIL",
-            f"n={n}, acc={reported_acc:.3f} → 95%CI [{lo:.3f}, {hi:.3f}] "
-            f"⊃ baseline({baseline}).{db_note} Indistinguishable from chance."))
-    elif hi < baseline:
-        findings.append(Finding("④a direction(anti-signal)", "FAIL",
-            f"n={n}, acc={reported_acc:.3f} → CI [{lo:.3f}, {hi:.3f}] "
-            f"< baseline({baseline}). Worse than chance."))
+    if 0 < n <= _EXACT_MAX_N:
+        # Exact two-sided binomial test — the correct small-sample method. Wilson's
+        # normal approximation is over-optimistic right at the boundary; eval/self_fpfn/v2
+        # measured it passing ~1.3% of boundary cases the exact test calls chance.
+        p = binom_two_sided_p(k, n, baseline)
+        if p > 0.05:
+            findings.append(Finding("④a small-sample CI", "FAIL",
+                f"n={n}, acc={reported_acc:.3f} → exact binomial p={p:.3f} > 0.05 "
+                f"vs baseline({baseline}).{db_note} Indistinguishable from chance."))
+        elif reported_acc < baseline:
+            findings.append(Finding("④a direction(anti-signal)", "FAIL",
+                f"n={n}, acc={reported_acc:.3f} → exact binomial p={p:.3f} ≤ 0.05 but "
+                f"below baseline({baseline}). Worse than chance."))
+        else:
+            findings.append(Finding("④a small-sample CI", "OK",
+                f"n={n}, acc={reported_acc:.3f} → exact binomial p={p:.3f} ≤ 0.05 "
+                f"clears baseline({baseline})."))
     else:
-        findings.append(Finding("④a small-sample CI", "OK",
-            f"n={n}, acc={reported_acc:.3f} → CI [{lo:.3f}, {hi:.3f}] "
-            f"clears baseline({baseline})."))
+        lo, hi = wilson_ci(k, n)
+        if lo <= baseline <= hi:
+            findings.append(Finding("④a small-sample CI", "FAIL",
+                f"n={n}, acc={reported_acc:.3f} → 95%CI [{lo:.3f}, {hi:.3f}] "
+                f"⊃ baseline({baseline}).{db_note} Indistinguishable from chance."))
+        elif hi < baseline:
+            findings.append(Finding("④a direction(anti-signal)", "FAIL",
+                f"n={n}, acc={reported_acc:.3f} → CI [{lo:.3f}, {hi:.3f}] "
+                f"< baseline({baseline}). Worse than chance."))
+        else:
+            findings.append(Finding("④a small-sample CI", "OK",
+                f"n={n}, acc={reported_acc:.3f} → CI [{lo:.3f}, {hi:.3f}] "
+                f"clears baseline({baseline})."))
 
     # ① pre-registration
     pre = _load_prereg(ledger_path, claim_id)
