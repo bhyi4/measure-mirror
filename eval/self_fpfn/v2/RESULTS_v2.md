@@ -55,3 +55,22 @@ code**, and surfaces a real (small) calibration gap.
   (L2) is still open — addressed by committing this for external reproduction,
   not by manufacturing a witness.
 - Still deterministic-probe-only; LLM-judge probes out of scope.
+
+## Update — small-sample switched to exact (mm_smallsample_exact_v1)
+
+v2 above recommended it, so the `④a small-sample CI` probe (and the parallel
+`② fair-baseline` n-aware check) now use the **exact two-sided binomial test**
+for small n (`binom_two_sided_p`, pure-python, matches `scipy.stats.binomtest`),
+falling back to Wilson only for `n > 10_000` where the two agree. Re-running this
+eval now reports **small_sample 0 FN / 0 FP**.
+
+**Honest reading (important):** that 0 is now **tautological** — the probe and the
+v2 oracle are the *same* exact test for `n ≤ 10_000`, so "0 disagreement" is a
+**consistency check, not independent evidence**. The real validation of the fix is
+elsewhere: the full **206-test suite still passes** (no regression) and boundary
+sanity holds (`5/5 @ n=5` now correctly FAILs — exact min p = 0.0625 > 0.05; clear
+signal `0.90/100` OK; clear noise `0.52/100` and anti-signal `0.30/100` FAIL; large
+clear `0.62/1000` OK). The gap closed was the sub-threshold one v2 measured, and
+closing it is what external critique point ① asked for. Pre-registered:
+`mm_smallsample_exact_v1` (kill-conditions incl. any test regression / clear-case
+flip; none tripped).
