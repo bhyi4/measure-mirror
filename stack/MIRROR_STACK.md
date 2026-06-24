@@ -30,6 +30,9 @@ The methodology that drives all this — *how to measure honestly* — is the
 **[Measurement Mirror Discipline](DISCIPLINE.md)** (7 principles + their proving probes + the
 stack's augmentations). A compact form is auto-injected by the unified MCP server on connect.
 
+**What the stack guarantees** — and what it deliberately does **not** (independence) — is laid out
+as four pillars in **[PILLARS.md](PILLARS.md)**: integrity, non-erasure, falsifiability, verifiability.
+
 ## The five conventions (J1–J5)
 
 - **J1 action→claim:** when recording an experiment run in the action ledger, set
