@@ -65,6 +65,15 @@ Run `python verify_self.py` to check the bundled evidence with nothing installed
 (When the stack grows beyond measure-mirror, `verify_all.py` is what graduates to its own repo —
 `verify_self.py` stays here.)
 
+### `tombstone.py` — the non-erasure view
+
+A *view* built on the same linkage check, not a third verifier. `python tombstone.py LEDGER.jsonl`
+lists the sealed **negatives** in a ledger — retractions and `KILL` / `NULL` / falsified verdicts —
+and confirms the chain is intact, so a *deleted* failure would show up. This makes visible the
+guarantee the stack leans on most: you cannot quietly drop a failure; a killed hypothesis stays on
+the record. Honest scope is in the tool — it proves **non-erasure of what was sealed**, not
+completeness of what happened.
+
 ## Threat model (honesty box)
 
 **Catches:** post-hoc edits and deletions (L1), tail-cutting and whole-file replacement
