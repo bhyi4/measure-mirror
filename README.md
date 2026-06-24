@@ -23,6 +23,8 @@ Zero training · Deterministic · Zero-dep core (Python 3.10+ stdlib; `judge` mo
 > **[an agent that retracted its own experiment before spending a single token](stack/CASE_STUDY_compute_governor.md)**
 > — preregistration → power-check design fix → adversarial amendments → prior-art retraction,
 > with the actual chain-sealed ledger bundled so you can verify it yourself.
+> What it guarantees — and the one thing no tool can (independence) — is mapped in four pillars:
+> **[PILLARS.md](stack/PILLARS.md)** (integrity · non-erasure · falsifiability · verifiability).
 > measure-mirror itself is unchanged (feature-frozen core; the stack adds conventions, not probes).
 
 | Tool | Audits | Question |
