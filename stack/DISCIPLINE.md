@@ -61,8 +61,15 @@ be faked after the fact":
 - **Anchor** externally at milestones (`mm_anchor`) — detects whole-file replacement.
 - **Witness** across agents (`am_witness`) — what hash chains alone cannot catch.
 - **Retract** in the open (`mm_retract`) — negatives and withdrawals are sealed too; dependents
-  go STALE. A *missing* ledger is itself a signal.
-- Run `stack_verify_all` before declaring a verdict.
+  go STALE. A *missing* ledger is itself a signal. (`tombstone.py` surfaces the sealed
+  graveyard — visible proof a failure can't be quietly deleted.)
+- **Enforce**, don't just suggest (`mirror-stack-gate` exits non-zero on BLOCK — wire it into a
+  compute launcher or a pre-commit hook so an unsealed claim can't proceed).
+- Run `stack_verify_all` before declaring a verdict — or, for an outsider with no MCP client,
+  the one-command `mirror-stack-verify` (chain linkage + Bitcoin cross-check on a public explorer).
+
+**The four guarantees** these add up to — integrity, non-erasure, falsifiability, verifiability —
+and the one no tool can give (independence) are mapped in **[PILLARS.md](PILLARS.md)**.
 
 ## Honest limits
 
