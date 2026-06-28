@@ -5,6 +5,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.17.0] — 2026-06-25
+
+Auto-resolution — `falsifiability_check` evaluates a sealed result, instead of
+warning "result not yet provided".
+
+### Changed
+- **`falsifiability_check(...)` self-evaluates from a sealed resolution.** When no
+  `reported_acc` is handed in, it now recovers one from the ledger instead of
+  returning WARN: a **retraction** → `FAIL` (RETRACTED, resolved-negative); an
+  **`am_record(target=claim_id)`** with a numeric result (`reported_acc`/`acc`/
+  `result`/`value`/…) → the kill-condition is evaluated against it (annotated
+  *auto-recovered*); an `am_record` with a categorical `verdict` (or a
+  `VERDICT … = X` action) → `FAIL` for KILL/FALSIFIED/…, `OK` for PASS/SUPPORTED/….
+  An explicit `reported_acc` still wins; an unresolved claim keeps the WARN.
+
+### Added
+- **`am_ledger=` arg** on `falsifiability_check` (the action ledger to scan for the
+  result; the claims ledger is always scanned for retractions + co-located actions).
+- `_recover_resolution()` helper and `tests/test_auto_resolution.py` (8 tests:
+  unresolved WARN, numeric recovery, KILL/PASS verdicts, sealed retraction,
+  explicit override, co-located action, unknown-verdict fall-through).
+
+### Migration
+No change for callers that pass `reported_acc`. Standalone falsifiability checks
+on a resolved claim now return a verdict instead of WARN — pass `am_ledger=` if
+the result lives in a separate action ledger.
+
+---
+
 ## [0.16.0] — 2026-06-25
 
 Metric-kind self-calibration — the proportion probes no longer false-FAIL on
