@@ -92,7 +92,9 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
                 min_n: int, baseline: float, pass_threshold: float,
                 kill_condition: str | None = None,
                 kill_threshold: dict | None = None,
-                depends_on: list[str] | None = None) -> dict:
+                depends_on: list[str] | None = None,
+                metric_range: list | str | None = None,
+                chance: float | None = None) -> dict:
     """Seal evaluation criteria BEFORE seeing results.
 
     Each entry is cryptographically linked to the previous one (chain hash).
@@ -130,6 +132,10 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
         entry["kill_threshold"] = kill_threshold
     if depends_on:
         entry["depends_on"] = depends_on
+    if metric_range is not None:
+        entry["metric_range"] = metric_range
+    if chance is not None:
+        entry["chance"] = chance
     entry["seal"] = hashlib.sha256(
         json.dumps(entry, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()[:16]
@@ -1453,20 +1459,74 @@ def ranking_stability_check(scores_a: list, scores_b: list, *,
 
 
 # ─────────────────────────────────────────────────────────────
+# Metric kind — so the binary/proportion probes don't false-FAIL on a
+# percentage / delta / span / unbounded metric. A *declared* range/chance
+# (from the prereg or an explicit arg) wins; otherwise it is inferred from the
+# metric name; otherwise it defaults to the [0,1] proportion.
+# ─────────────────────────────────────────────────────────────
+_DELTA_HINTS = ("delta", "diff", "Δ", "change", "_lift", "gain", "improve_abs", "drop", "shift")
+_PCT_HINTS = ("_pct", "pct", "percent", "_pp")
+_SPAN_HINTS = ("span", "width", "elastic", "window", "magnitude", "count", "tokens",
+               "steps", "length", "distance", "capacity")
+
+
+def resolve_metric_kind(metric_name: str, metric_range=None, chance=None):
+    """Return (lo, hi, chance, is_proportion, declared).
+
+    is_proportion = the integer-grid / binomial probes (GRIM, small-sample CI) apply
+    — true only for a [0,1] proportion or a [0,100] percentage (which normalises to
+    one). Delta / span / unbounded metrics are continuous: those probes are skipped.
+    """
+    declared = metric_range is not None or chance is not None
+    name = (metric_name or "").lower()
+    if metric_range in ("unbounded", "real"):
+        lo, hi = float("-inf"), float("inf")
+    elif isinstance(metric_range, (list, tuple)) and len(metric_range) == 2:
+        lo, hi = float(metric_range[0]), float(metric_range[1])
+    elif any(h in name for h in _DELTA_HINTS):
+        lo, hi = float("-inf"), float("inf")        # signed delta/change
+    elif any(h in name for h in _PCT_HINTS):
+        lo, hi = 0.0, 100.0                         # percentage
+    elif any(h in name for h in _SPAN_HINTS):
+        lo, hi = 0.0, float("inf")                  # non-negative magnitude
+    else:
+        lo, hi = 0.0, 1.0                           # default: proportion
+    is_proportion = (lo, hi) == (0.0, 1.0) or (lo, hi) == (0.0, 100.0)
+    if chance is None and is_proportion:
+        chance = 50.0 if hi == 100.0 else 0.5
+    return lo, hi, chance, is_proportion, declared
+
+
+# ─────────────────────────────────────────────────────────────
 # Binary / classification metric audit
 # ─────────────────────────────────────────────────────────────
 def audit(ledger_path: str, claim_id: str, *,
           reported_metric: str, reported_acc: float, n: int,
           baseline: float | None = None, task: str | None = None,
-          db_dir: str | None = None) -> list[Finding]:
+          db_dir: str | None = None,
+          metric_range: list | str | None = None,
+          chance: float | None = None) -> list[Finding]:
     findings: list[Finding] = []
     db_note = ""
+    pre = _load_prereg(ledger_path, claim_id)
+
+    # Metric kind: explicit arg > sealed prereg > inference from the metric name.
+    if metric_range is None and pre is not None:
+        metric_range = pre.get("metric_range")
+    if chance is None and pre is not None:
+        chance = pre.get("chance")
+    lo, hi, chance, is_prop, declared = resolve_metric_kind(reported_metric, metric_range, chance)
+
+    # Baseline precedence: explicit arg > declared chance > task DB > 0.5.
     if baseline is None:
-        b = lookup_baseline(task, db_dir)
-        if b is not None:
-            baseline, db_note = b, f"  ← DB lookup (task={task})"
+        if chance is not None:
+            baseline = chance
         else:
-            baseline = 0.5
+            b = lookup_baseline(task, db_dir)
+            if b is not None:
+                baseline, db_note = b, f"  ← DB lookup (task={task})"
+            else:
+                baseline = 0.5
 
     # Local memory: prior FAILED reproductions for this task (db/reproductions.jsonl)
     for r in lookup_reproduction(task, db_dir):
@@ -1477,54 +1537,75 @@ def audit(ledger_path: str, claim_id: str, *,
             f"(n={r.get('n_claimed','?')}) → reproduced acc={rep.get('acc','?')} "
             f"(n={rep.get('n','?')}). {r.get('note','')}".rstrip()))
 
-    if not (0.0 <= reported_acc <= 1.0):
-        findings.append(Finding("④a acc-range", "FAIL",
-            f"reported_acc={reported_acc:.3f} out of [0, 1]."))
+    # ④a range — against the metric's declared/inferred range, not a hardcoded [0,1].
+    if not (lo <= reported_acc <= hi):
+        guide = "" if declared else (
+            "  → if this is a %/delta/span metric, declare metric_range "
+            "(e.g. [0,100] or \"unbounded\") + chance in mm_preregister.")
+        findings.append(Finding("④a metric-range", "FAIL",
+            f"reported value {reported_acc:.3f} is outside metric range "
+            f"[{lo}, {hi}].{guide}"))
         return findings
     if n < 0:
         findings.append(Finding("④a n-range", "FAIL", f"n={n} must be ≥ 0."))
         return findings
 
-    # ⑩ GRIM — runs before CI; only appended when FAIL to keep OK output clean
-    grim = grim_check(reported_acc, n)
-    if grim.level != "OK":
-        findings.append(grim)
+    if is_prop:
+        # Proportion ([0,1]) or percentage ([0,100], normalised) — integer-grid + binomial apply.
+        scale = 100.0 if hi == 100.0 else 1.0
+        acc01, base01 = reported_acc / scale, baseline / scale
+        unit = "%" if scale == 100.0 else ""
 
-    k = round(reported_acc * n)
-    if 0 < n <= _EXACT_MAX_N:
-        # Exact two-sided binomial test — the correct small-sample method. Wilson's
-        # normal approximation is over-optimistic right at the boundary; eval/self_fpfn/v2
-        # measured it passing ~1.3% of boundary cases the exact test calls chance.
-        p = binom_two_sided_p(k, n, baseline)
-        if p > 0.05:
-            findings.append(Finding("④a small-sample CI", "FAIL",
-                f"n={n}, acc={reported_acc:.3f} → exact binomial p={p:.3f} > 0.05 "
-                f"vs baseline({baseline}).{db_note} Indistinguishable from chance."))
-        elif reported_acc < baseline:
-            findings.append(Finding("④a direction(anti-signal)", "FAIL",
-                f"n={n}, acc={reported_acc:.3f} → exact binomial p={p:.3f} ≤ 0.05 but "
-                f"below baseline({baseline}). Worse than chance."))
+        # ⑩ GRIM — only appended when FAIL to keep OK output clean
+        grim = grim_check(acc01, n)
+        if grim.level != "OK":
+            findings.append(grim)
+
+        k = round(acc01 * n)
+        if 0 < n <= _EXACT_MAX_N:
+            # Exact two-sided binomial test — the correct small-sample method (Wilson's
+            # normal approximation is over-optimistic at the boundary; see eval/self_fpfn/v2).
+            p = binom_two_sided_p(k, n, base01)
+            if p > 0.05:
+                findings.append(Finding("④a small-sample CI", "FAIL",
+                    f"n={n}, acc={reported_acc:.3f}{unit} → exact binomial p={p:.3f} > 0.05 "
+                    f"vs chance({baseline}{unit}).{db_note} Indistinguishable from chance."))
+            elif acc01 < base01:
+                findings.append(Finding("④a direction(anti-signal)", "FAIL",
+                    f"n={n}, acc={reported_acc:.3f}{unit} → exact binomial p={p:.3f} ≤ 0.05 but "
+                    f"below chance({baseline}{unit}). Worse than chance."))
+            else:
+                findings.append(Finding("④a small-sample CI", "OK",
+                    f"n={n}, acc={reported_acc:.3f}{unit} → exact binomial p={p:.3f} ≤ 0.05 "
+                    f"clears chance({baseline}{unit})."))
         else:
-            findings.append(Finding("④a small-sample CI", "OK",
-                f"n={n}, acc={reported_acc:.3f} → exact binomial p={p:.3f} ≤ 0.05 "
-                f"clears baseline({baseline})."))
+            clo, chi = wilson_ci(k, n)
+            if clo <= base01 <= chi:
+                findings.append(Finding("④a small-sample CI", "FAIL",
+                    f"n={n}, acc={reported_acc:.3f}{unit} → 95%CI [{clo:.3f}, {chi:.3f}] "
+                    f"⊃ chance({base01}).{db_note} Indistinguishable from chance."))
+            elif chi < base01:
+                findings.append(Finding("④a direction(anti-signal)", "FAIL",
+                    f"n={n}, acc={reported_acc:.3f}{unit} → CI [{clo:.3f}, {chi:.3f}] "
+                    f"< chance({base01}). Worse than chance."))
+            else:
+                findings.append(Finding("④a small-sample CI", "OK",
+                    f"n={n}, acc={reported_acc:.3f}{unit} → CI [{clo:.3f}, {chi:.3f}] "
+                    f"clears chance({base01})."))
     else:
-        lo, hi = wilson_ci(k, n)
-        if lo <= baseline <= hi:
-            findings.append(Finding("④a small-sample CI", "FAIL",
-                f"n={n}, acc={reported_acc:.3f} → 95%CI [{lo:.3f}, {hi:.3f}] "
-                f"⊃ baseline({baseline}).{db_note} Indistinguishable from chance."))
-        elif hi < baseline:
-            findings.append(Finding("④a direction(anti-signal)", "FAIL",
-                f"n={n}, acc={reported_acc:.3f} → CI [{lo:.3f}, {hi:.3f}] "
-                f"< baseline({baseline}). Worse than chance."))
-        else:
-            findings.append(Finding("④a small-sample CI", "OK",
-                f"n={n}, acc={reported_acc:.3f} → CI [{lo:.3f}, {hi:.3f}] "
-                f"clears baseline({baseline})."))
+        # Continuous (delta / span / unbounded): the proportion probes do not apply and
+        # would false-FAIL, so they are skipped.
+        msg = (f"'{reported_metric}' is a continuous metric (range [{lo}, {hi}]); the "
+               f"integer-grid / binomial probes (GRIM, small-sample CI) are skipped.")
+        if chance is None:
+            msg += (" For a distinguishability test use continuous_audit() with a "
+                    "baseline_value + std, or declare chance.")
+        findings.append(Finding("④a metric-kind", "INFO", msg))
+        if chance is not None and reported_acc < chance:
+            findings.append(Finding("④a direction(anti-signal)", "WARN",
+                f"value {reported_acc} is below chance {chance}."))
 
     # ① pre-registration
-    pre = _load_prereg(ledger_path, claim_id)
     if pre is None:
         findings.append(Finding("① pre-registration", "WARN",
             f"No pre-registration found for '{claim_id}'."))
