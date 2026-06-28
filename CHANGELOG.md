@@ -5,6 +5,40 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.16.0] — 2026-06-25
+
+Metric-kind self-calibration — the proportion probes no longer false-FAIL on
+percentage / delta / span / unbounded metrics.
+
+### Changed
+- **`audit()` is metric-kind aware.** The hardcoded `0.0 ≤ acc ≤ 1.0` range check
+  and the `baseline = 0.5` default are gone. The metric's range and chance level
+  now come from (in precedence) an explicit arg → the sealed pre-registration →
+  inference from the metric name (`*_pct` → `[0,100]`, `*delta` → unbounded,
+  `*span`/`*window` → `[0,∞)`, else the `[0,1]` proportion). The integer-grid /
+  binomial probes (GRIM, small-sample CI) now run **only on proportions** — a
+  percentage is normalised to `[0,1]`; a delta/span/unbounded metric skips them
+  (with an explicit `④a metric-kind` note pointing to `continuous_audit()`).
+  A range error now tells you how to fix it (`declare metric_range=…`).
+- **Small-sample distinguishability uses an exact two-sided binomial test** for
+  small `n` (Wilson's normal approximation is over-optimistic at the boundary;
+  measured in `eval/self_fpfn/v2`), falling back to Wilson for `n > 10_000`.
+
+### Added
+- **`metric_range` + `chance`** optional fields on `preregister()` (sealed) and
+  optional args on `audit()`. Backward compatible: omitting them reproduces the
+  previous behaviour for `[0,1]` proportions.
+- `resolve_metric_kind()` helper and `tests/test_metric_kind.py` (15 tests:
+  inference, explicit override, no-false-FAIL on %/delta/span, declared-chance
+  beats 0.5, GRIM still catches genuine impossibilities, sealed round-trip).
+
+### Migration
+No change needed for `[0,1]` accuracy claims. For a percentage / delta / span
+metric, pass `metric_range` (and `chance` for a distinguishability test) to
+`preregister`/`audit`, or rely on the name-based inference.
+
+---
+
 ## [0.15.1] — 2026-06-15
 
 Pre-PyPI stability hardening (no public API change).
