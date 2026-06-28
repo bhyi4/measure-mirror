@@ -819,8 +819,61 @@ def multiple_comparisons_check(ledger_path: str, *, alpha: float = 0.05) -> Find
 # ─────────────────────────────────────────────────────────────
 # ⑪ Falsifiability — Popper gate
 # ─────────────────────────────────────────────────────────────
+_NEG_VERDICTS = ("KILL", "FAIL", "FALSIF", "RETRACT", "NEGATIVE", "REJECT")
+_POS_VERDICTS = ("PASS", "SUPPORTED", "CONFIRMED", "WORTH", "OK")
+_RESULT_KEYS = ("reported_acc", "acc", "result", "value", "metric_value", "reported_value")
+
+
+def _recover_resolution(ledger_path: str, claim_id: str, am_ledger: str | None = None):
+    """Find a *sealed* resolution for claim_id so falsifiability can self-evaluate.
+
+    Returns (kind, value):
+      ('retracted', reason)  — a retraction is sealed for the claim,
+      ('acc', float)         — an am_record(target=claim_id) carries a numeric result,
+      ('verdict', 'KILL'…)   — an am_record(target=claim_id) carries a categorical verdict,
+      (None, None)           — nothing sealed yet.
+    Scans the claims ledger (retractions + any co-located actions) and, if given, the
+    action ledger. A retraction wins; otherwise a numeric result wins over a verdict label.
+    """
+    files = [ledger_path] + ([am_ledger] if am_ledger and am_ledger != ledger_path else [])
+    acc, verdict = None, None
+    for f in files:
+        if not os.path.exists(f):
+            continue
+        with open(f, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if e.get("_type") == "retraction" and e.get("claim_id") == claim_id:
+                    return "retracted", e.get("reason", "")
+                if e.get("_type") == "action" and e.get("target") == claim_id:
+                    pv = e.get("payload") if isinstance(e.get("payload"), dict) else {}
+                    if acc is None:
+                        for kk in _RESULT_KEYS:
+                            if isinstance(pv.get(kk), (int, float)) and not isinstance(pv.get(kk), bool):
+                                acc = float(pv[kk])
+                                break
+                    if verdict is None:
+                        v = pv.get("verdict") if isinstance(pv.get("verdict"), str) else None
+                        if v is None:
+                            m = re.search(r"VERDICT\b.*?=\s*([A-Za-z_-]+)", e.get("action", "") or "", re.I)
+                            v = m.group(1) if m else None
+                        verdict = v
+    if acc is not None:
+        return "acc", acc
+    if verdict is not None:
+        return "verdict", verdict
+    return None, None
+
+
 def falsifiability_check(ledger_path: str, claim_id: str, *,
-                          reported_acc: float | None = None) -> Finding:
+                          reported_acc: float | None = None,
+                          am_ledger: str | None = None) -> Finding:
     """⑪ Popper gate: verify a kill-condition was registered; auto-evaluate it.
 
     Checks the pre-registration for kill_condition / kill_threshold.
@@ -839,7 +892,35 @@ def falsifiability_check(ledger_path: str, claim_id: str, *,
         return Finding("⑪ falsifiability", "WARN",
                        f"No pre-registration for '{claim_id}' — "
                        "kill-condition unknown.")
-    return _falsifiability_eval(pre, reported_acc)
+
+    # Auto-resolution: if no result was handed in, recover one from a sealed
+    # resolution (retraction / am_record) instead of warning "not yet provided".
+    note = ""
+    if reported_acc is None:
+        kind, val = _recover_resolution(ledger_path, claim_id, am_ledger)
+        if kind == "retracted":
+            tail = f": {val}" if val else ""
+            return Finding("⑪ falsifiability", "FAIL",
+                           f"Claim '{claim_id}' is RETRACTED (sealed){tail}. "
+                           "Resolved as withdrawn / falsified.")
+        if kind == "acc":
+            reported_acc, note = val, "  ← auto-recovered from sealed am_record"
+        elif kind == "verdict":
+            vu = val.upper()
+            if vu.startswith(_NEG_VERDICTS):
+                return Finding("⑪ falsifiability", "FAIL",
+                               f"Sealed verdict for '{claim_id}' = {val} → falsified "
+                               "(per am_record(target)).")
+            if vu.startswith(_POS_VERDICTS):
+                return Finding("⑪ falsifiability", "OK",
+                               f"Sealed verdict for '{claim_id}' = {val} → not falsified "
+                               "(per am_record(target)).")
+            # unknown verdict label → fall through to the standard (WARN) path
+
+    f = _falsifiability_eval(pre, reported_acc)
+    if note and f.msg:
+        f = Finding(f.probe, f.level, f.msg + note)
+    return f
 
 
 # ─────────────────────────────────────────────────────────────
