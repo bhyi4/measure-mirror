@@ -272,6 +272,43 @@ def verify_chain(ledger_path: str) -> list[Finding]:
     return findings
 
 
+def linkage_check(path: str) -> tuple[bool, str, list | None]:
+    """Format-agnostic prev_seal→seal linkage — the SINGLE SOURCE of this check
+    for the stack verifiers.
+
+    Unlike `verify_chain()`, this does NOT recompute measure-mirror's own seal,
+    so it works on ANY mirror ledger (claims / actions / provenance): it only
+    confirms that each entry's `prev_seal` points at the previous entry's `seal`,
+    rooted at "genesis". A break means an entry was inserted, deleted, or
+    reordered after sealing. Stdlib only.
+
+    Returns ``(ok, message, entries)`` — ``entries`` is the parsed list when the
+    ledger was readable (so callers needn't re-read it), else ``None``. Both
+    `stack/verify_self.py:generic_linkage` and the outsider `mirror-stack-verify`
+    CLI use this one definition so they cannot drift apart.
+    """
+    try:
+        text = open(path, encoding="utf-8").read()
+    except OSError as e:
+        return False, f"ledger unreadable: {e}", None
+    try:
+        entries = [json.loads(l) for l in text.splitlines() if l.strip()]
+    except json.JSONDecodeError as e:
+        return False, f"malformed JSON in ledger: {e}", None
+    if not entries:
+        return False, "ledger is empty", []
+    prev = None
+    for i, e in enumerate(entries):
+        declared = str(e.get("prev_seal", ""))
+        if i == 0:
+            if declared.lower() != "genesis":
+                return False, f"first entry prev_seal={declared!r} is not 'genesis'", entries
+        elif declared != prev:
+            return False, f"linkage broken at entry {i}: prev_seal {declared} != {prev}", entries
+        prev = str(e.get("seal", ""))
+    return True, f"linkage intact — {len(entries)} entries, head={prev[:16]}", entries
+
+
 # ─────────────────────────────────────────────────────────────
 # ④a-1 Small-sample confidence interval (Wilson score, binomial)
 # ─────────────────────────────────────────────────────────────
