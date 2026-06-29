@@ -17,10 +17,12 @@ print("=" * 60)
 
 # ─── Step 1: BEFORE the experiment — seal the criteria ───────
 print("\n[Step 1] Pre-registration: seal criteria before running experiment")
+# Always seal a kill-condition — a claim you can't fail is unfalsifiable.
 entry = mm.preregister(LEDGER, "my_classifier",
-                       metric="acc", min_n=200, baseline=0.5, pass_threshold=0.60)
+                       metric="acc", min_n=200, baseline=0.5, pass_threshold=0.60,
+                       kill_threshold={"metric": "acc", "threshold": 0.55, "direction": "below"})
 print(f"  ✅ Sealed — claim_id=my_classifier  metric=acc  "
-      f"min_n=200  baseline=0.5  seal={entry['seal']}")
+      f"min_n=200  baseline=0.5  kill=acc<0.55  seal={entry['seal']}")
 
 # ─── Step 2: Run the experiment (simulated here) ─────────────
 print("\n[Step 2] Run experiment... (simulated)")
@@ -70,7 +72,8 @@ LEDGER2 = "/tmp/mm_quickstart_ledger2.jsonl"
 if os.path.exists(LEDGER2):
     os.remove(LEDGER2)
 mm.preregister(LEDGER2, "full_test", metric="acc", min_n=50,
-               baseline=0.5, pass_threshold=0.65)
+               baseline=0.5, pass_threshold=0.65,
+               kill_threshold={"metric": "acc", "threshold": 0.55, "direction": "below"})
 
 findings = mm.full_audit(
     LEDGER2, "full_test",
