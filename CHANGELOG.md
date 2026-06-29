@@ -5,6 +5,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.18.0] — 2026-06-29
+
+Single-source the stack's linkage check (P2). The format-agnostic
+`prev_seal→seal` linkage verification existed in **three** copies that had
+already drifted — and two of them carried latent crash bugs.
+
+### Added
+- **`mm.linkage_check(path) -> (ok, message, entries)`** — the one canonical,
+  stdlib-only, format-agnostic linkage verifier (works on any mirror ledger:
+  claims / actions / provenance). Unlike `verify_chain()` it does not recompute
+  measure-mirror's own seal, so it is the check both stack verifiers share.
+
+### Fixed
+- **`stack/verify_self.py:generic_linkage` no longer crashes on bad input.** It
+  now delegates to `mm.linkage_check`, so an **empty** ledger (previously
+  `None[:16]` → `TypeError`) and a **malformed JSON** line (previously an
+  uncaught `JSONDecodeError`) are reported as a clean `FAIL`, not a stack trace.
+  Valid ledgers verify identically (bundled evidence still `ALL OK 6/6`).
+
+### Notes
+- The outsider `mirror-stack-verify` CLI (in `mirror-stack-mcp`) keeps an
+  intentional inline copy for self-containment, now **conformance-pinned** to
+  this canonical definition by a test there — so the two can no longer diverge.
+
+Adds 6 tests (235 → 241). No probe semantics changed.
+
+---
+
 ## [0.17.1] — 2026-06-29
 
 Stranger-onboarding fixes — the Quick Start now walks a newcomer from install to
