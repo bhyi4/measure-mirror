@@ -83,15 +83,20 @@ MCP entry point: `mm-mcp`
 
 ```bash
 # Step 1 — BEFORE running your experiment: seal the criteria
-mm register my_model --metric acc --min-n 200 --baseline 0.5 --pass 0.60
+#   always include a kill-condition — a claim you can't fail is unfalsifiable
+mm register my_model --metric acc --min-n 200 --baseline 0.5 --pass 0.60 \
+           --kill-threshold 0.55 --kill-direction below
 
-# Step 2 — AFTER evaluation: one-command audit
+# Step 2 — AFTER evaluation: audit the result against the sealed criteria
+mm audit my_model --acc 0.72 --n 500   # pass the result inline — nothing else to create
+
+# …or audit from a result file you write yourself:
+echo '{"claim_id":"my_model","metric":"acc","acc":0.72,"n":500}' > my_model.json
 mm my_model                            # auto-loads my_model.json
-mm audit my_model --acc 0.72 --n 500
-mm audit --file results.json
+mm audit --file my_model.json          # or any path via --file
 ```
 
-`results.json` format: `{"claim_id": "my_model", "metric": "acc", "acc": 0.72, "n": 500}`
+`my_model.json` format: `{"claim_id": "my_model", "metric": "acc", "acc": 0.72, "n": 500}`
 
 ### Python API
 
@@ -100,9 +105,14 @@ from measure_mirror import mm
 
 LEDGER = "mm_ledger.jsonl"
 
+# Your train / test item ids (disjoint here → no leakage)
+train_items, test_items = list(range(800)), list(range(800, 1000))
+
 # ① Before experiment — seal criteria (tamper-evident hash)
+#    kill_threshold seals a falsification criterion — never omit it
 mm.preregister(LEDGER, "my_model",
-               metric="acc", min_n=200, baseline=0.5, pass_threshold=0.60)
+               metric="acc", min_n=200, baseline=0.5, pass_threshold=0.60,
+               kill_threshold={"metric": "acc", "threshold": 0.55, "direction": "below"})
 
 # ② After evaluation — full 7-probe audit at once
 findings = mm.full_audit(
@@ -111,7 +121,7 @@ findings = mm.full_audit(
     baseline=0.5,
     competing_name="strong_baseline", competing_acc=0.68,   # ② fairness
     reward_terms=["cross_entropy"],                          # ③ gaming check
-    train_items=train_set, test_items=test_set,              # ④ leakage
+    train_items=train_items, test_items=test_items,         # ④ leakage
     seed_results=[0.70, 0.72, 0.74],                         # ⑤ multi-seed
     claimed_scope=["reasoning"], tested_scope=["task_a"],    # ⑥ scope
 )
@@ -808,7 +818,7 @@ reproduces the recorded verdict with **0 mismatches**.
 
 - **Zero-dep core** — pure Python stdlib. The optional `judge` module adds openai/anthropic for LLM-as-a-Judge; nothing else, nothing in the core.
 - **Bidirectional** — catches false *positives* **and** false *negatives*. Premature negative closures are also illusions.
-- **Tamper-evident pre-registration** — SHA-256 seal on first write. Re-registration is silently ignored. Ledger tampering is detected on every audit.
+- **Tamper-evident pre-registration** — SHA-256 seal on first write. Only the *first* sealed registration for a `claim_id` counts in `audit()`; a later re-registration is still appended to the chain (the record is never silently dropped) but cannot override the original. Ledger tampering is detected on every audit.
 - **Independent probes** — each check is a standalone function. Add new ones without touching existing code.
 - **Adversarial by default** — "too good to be true" is flagged before you believe it.
 

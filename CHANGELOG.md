@@ -5,6 +5,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.17.1] — 2026-06-29
+
+Stranger-onboarding fixes — the Quick Start now walks a newcomer from install to
+first sealed claim and verify with **0 blocking steps** (measured against a clean venv).
+
+### Fixed
+- **CLI Quick Start no longer dead-ends.** The README presented `mm my_model` (auto-loads
+  `my_model.json`) as the natural Step 2, but nothing in the walk created that file — a
+  newcomer hit `🪞 No result file found` (exit 1). Step 2 now leads with the inline-flags
+  audit (`mm audit my_model --acc 0.72 --n 500`, nothing else to create) and shows the
+  file-based forms only after actually writing `my_model.json`.
+- **Quick Start now models the disciplined seal.** Both the README examples and
+  `examples/quickstart.py` pre-registered *without* a kill-condition, so every audit on the
+  "honest happy path" printed a `⚠️ Unfalsifiable` warning — teaching newcomers the
+  un-falsifiable path. They now seal a `kill_threshold` (`acc < 0.55`), so the happy path
+  audits clean (✅ OK) and a failing value trips a proper `FAIL` (falsified by its own
+  pre-registered criterion). Python-API snippet corrected to the structured
+  `kill_threshold={"metric","threshold","direction"}` form.
+- **Python-API Quick Start snippet now runs copy-paste verbatim.** It referenced
+  undefined `train_set`/`test_set` in `full_audit(...)` (→ `NameError`) and then a
+  differently-named `train_items`/`test_items` in the individual-probe line. Both unified
+  and defined up front, so the whole block runs clean (exit 0) as a newcomer pastes it.
+- **Clarified "re-registration is silently ignored."** The Design Principles wording read
+  as if the *file write* is dropped; reworded to state precisely that only the first sealed
+  registration counts in `audit()`, while a later one is still appended to the chain (the
+  record is never silently lost) and cannot override the original.
+
+Docs/examples only — no probe semantics changed (235 tests unchanged). Verified by an
+independent newcomer agent: CLI Quick Start = 0 blocks; Python Quick Start now runs verbatim.
+
+---
+
 ## [0.17.0] — 2026-06-25
 
 Auto-resolution — `falsifiability_check` evaluates a sealed result, instead of
