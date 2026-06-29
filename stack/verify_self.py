@@ -25,24 +25,17 @@ def load_jsonl(path):
 
 
 def generic_linkage(path, name, report):
-    """Format-agnostic prev_seal→seal linkage check (works on any mirror ledger)."""
-    try:
-        entries = load_jsonl(path)
-    except OSError as e:
-        report(FAIL, "L1 chain", name, f"ledger unreadable: {e}")
-        return None
-    prev = None
-    for i, e in enumerate(entries):
-        declared_prev = str(e.get("prev_seal", ""))
-        if i == 0:
-            if declared_prev.lower() != "genesis":
-                report(WARN, "L1 chain", name, f"first entry prev_seal={declared_prev!r} (not genesis)")
-        elif declared_prev != prev:
-            report(FAIL, "L1 chain", name,
-                   f"linkage broken at entry {i}: prev_seal={declared_prev} != {prev}")
-            return entries
-        prev = str(e.get("seal", ""))
-    report(OK, "L1 chain", name, f"linkage intact — {len(entries)} entries, head={prev[:16]}")
+    """Format-agnostic prev_seal→seal linkage check (works on any mirror ledger).
+
+    Thin adapter over the single source `measure_mirror.mm.linkage_check` — the
+    same algorithm the outsider `mirror-stack-verify` CLI uses, so the two cannot
+    drift (an empty or malformed ledger is reported, not crashed). Returns the
+    parsed entries (or None when unreadable) so the caller can gate seal-verify.
+    """
+    sys.path.insert(0, str(HERE.parent))
+    from measure_mirror.mm import linkage_check
+    ok, msg, entries = linkage_check(path)
+    report(OK if ok else FAIL, "L1 chain", name, msg)
     return entries
 
 
