@@ -5,6 +5,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.23.0] — 2026-07-03
+
+### Fixed
+- **Malformed `kill_threshold` no longer seals silently then crashes**
+  (issue #18). A `kill_threshold` dict without a numeric `threshold` key
+  used to pass `preregister()` unchecked and then raise `KeyError: 'threshold'`
+  inside `audit()` / `falsifiability_check()` the moment a result was
+  provided — and first-write-wins made it uncorrectable (re-registering the
+  same `claim_id` was a no-op). Defense in depth:
+  - **`preregister()` validates at seal time** — a dict `kill_threshold` must
+    carry a numeric `threshold` and (if present) `direction ∈ {below, above}`,
+    else `ValueError` while it can still be fixed.
+  - **`_falsifiability_eval` degrades gracefully** — an already-sealed
+    malformed entry now returns `WARN` ("Malformed kill_threshold … cannot
+    auto-evaluate") instead of crashing every downstream audit.
+
+  Found by dogfooding: it's easy to pass a domain-specific `kill_threshold`
+  (e.g. `{"H1_reject_if": ...}`) that reads fine and seals fine. 5 regression
+  tests added (`tests/test_kill_threshold_validation.py`).
+
+---
+
 ## [0.22.1] — 2026-07-02
 
 Docs consistency sweep after the day's five releases (audited EN↔KO drift,
