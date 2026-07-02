@@ -16,14 +16,18 @@
 > 만든 사람들이 자신에게 먼저 실행해봤습니다. → [🦋 탄생 배경](docs/CHRONICLE.md)
 
 **[📖 프로브 완전 가이드 →](docs/GUIDE_KO.md)** — 23개 프로브 전체 설명·예제·워크플로우
+**[📜 MIRROR-SPEC v1.0 →](docs/SPEC_KO.md)** — 원장 포맷·검증 프로토콜의 규범 명세(2026-07-02 비준·동결; 이 패키지는 그 참조구현. 규범 정본은 [영어판](docs/SPEC.md))
+**[🦋 측정착시 도감 →](catalog/README_KO.md)** — 측정이 만든 이를 속인 실제 봉인 사례 30표본(게이밍·자가적발·거짓음성 가드·오염)
 
 > **🪞🔎🪪 New — 미러스택** ([`stack/`](stack/)): measure-mirror는 자율연구 에이전트용 3거울
 > 무결성 스택(주장·행동·출처)의 *주장* 층입니다. 규약 5개 + `verify-all` 한 명령으로 묶이며,
 > 실제 사례연구를 동봉했습니다:
 > **[측정 토큰 한 푼도 쓰기 전에 스스로 실험을 철회한 에이전트](stack/CASE_STUDY_compute_governor_KO.md)**
 > — 사전등록 → 검정력 체크가 설계 교정 → 적대 amendment → 선행연구 철회까지, 체인봉인된
-> 원장 실물 포함(직접 검증 가능). measure-mirror 본체는 그대로입니다(기능동결 코어 — 스택은
-> 프로브가 아니라 규약을 추가).
+> 원장 실물 포함(직접 검증 가능). 스택이 보증하는 것과 — 어떤 도구도 줄 수 없는 단 하나
+> (독립성) — 는 네 기둥으로 정리돼 있습니다: **[PILLARS_KO.md](stack/PILLARS_KO.md)**
+> (무결성 · 불소거 · 반증가능성 · 검증가능성). measure-mirror 본체는 그대로입니다(기능동결
+> 코어 — 스택은 프로브가 아니라 규약을 추가).
 
 | 도구 | 감사 대상 | 질문 |
 |---|---|---|
@@ -79,15 +83,20 @@ MCP 진입점: `mm-mcp`
 
 ```bash
 # Step 1 — 실험 실행 전: 기준 봉인
-mm register my_model --metric acc --min-n 200 --baseline 0.5 --pass 0.60
+#   kill-condition을 반드시 포함 — 실패할 수 없는 주장은 반증 불가능합니다
+mm register my_model --metric acc --min-n 200 --baseline 0.5 --pass 0.60 \
+           --kill-threshold 0.55 --kill-direction below
 
-# Step 2 — 평가 후: 원커맨드 감사
+# Step 2 — 평가 후: 봉인된 기준에 대해 결과를 감사
+mm audit my_model --acc 0.72 --n 500   # 결과를 인라인으로 — 따로 만들 파일 없음
+
+# …또는 직접 작성한 결과 파일로 감사:
+echo '{"claim_id":"my_model","metric":"acc","acc":0.72,"n":500}' > my_model.json
 mm my_model                            # my_model.json 자동 로드
-mm audit my_model --acc 0.72 --n 500
-mm audit --file results.json
+mm audit --file my_model.json          # 임의 경로는 --file
 ```
 
-`results.json` 형식: `{"claim_id": "my_model", "metric": "acc", "acc": 0.72, "n": 500}`
+`my_model.json` 형식: `{"claim_id": "my_model", "metric": "acc", "acc": 0.72, "n": 500}`
 
 ### Python API
 

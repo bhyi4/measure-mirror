@@ -5,6 +5,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.22.1] — 2026-07-02
+
+Docs consistency sweep after the day's five releases (audited EN↔KO drift,
+stale commands, broken links).
+
+### Added
+- **`docs/SPEC_KO.md`** — Korean reference translation of MIRROR-SPEC v1.0
+  (clearly marked non-normative: the English SPEC.md governs).
+- **`catalog/README_KO.md`** — fully-Korean catalog front page.
+- README (EN+KO): prominent links to MIRROR-SPEC v1.0 and the illusion
+  catalog — v0.19–0.22's two headline artifacts were not reachable from
+  the front page.
+- `docs/CHRONICLE.md`: afterword chapter — the day the mirror forged
+  itself (SPEC ratification + catalog promotion, 4 code bugs / 22 spec
+  defects surfaced by spec-writing).
+
+### Fixed
+- **CHRONICLE evidence links were all broken** (pointed at pre-reorg
+  `db/*.jsonl`; files live under `db/curated/` and `db/measured/`).
+- **README_KO Quick Start taught the unfalsifiable path** — it predated
+  the 0.17.1 onboarding fixes (no `--kill-threshold`, auto-load-first
+  ordering). Ported to parity with the English Quick Start.
+- README_KO stack blockquote was missing the four-pillars sentence
+  (PILLARS_KO link) present in the English version.
+
+---
+
 ## [0.22.0] — 2026-07-02
 
 **측정착시 도감 v1 (Catalog of Measurement Illusions)** — the knowledge asset
