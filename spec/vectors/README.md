@@ -34,7 +34,7 @@ divergence, previously latent:
   uppercase `GENESIS`.
 - `mm.linkage_check` accepts both (case-insensitive, mm.py:304) — this is the
   behavior SPEC §5.1 codifies.
-- `mm.verify_chain` compares case-sensitively (mm.py:247) and therefore
-  false-FAILs any am-produced ledger. **Known conformance bug**; fix candidate
-  for the next measure-mirror release. Until fixed, `verify_chain` is not a
-  conforming L1+ verifier for uppercase-genesis ledgers.
+- `mm.verify_chain` compared case-sensitively and therefore false-FAILed any
+  am-produced ledger. **Fixed in 0.19.1** (first-entry genesis comparison is
+  now case-insensitive, guarded by
+  `test_verify_chain_accepts_uppercase_genesis`).

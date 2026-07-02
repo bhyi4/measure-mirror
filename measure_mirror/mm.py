@@ -258,11 +258,16 @@ def verify_chain(ledger_path: str) -> list[Finding]:
         # Chain link — only for entries that carry prev_seal (new format).
         # Legacy entries without prev_seal are skipped gracefully.
         entry_prev = entry.get("prev_seal")
-        if entry_prev is not None and entry_prev != prev_seal:
-            findings.append(Finding("① chain-integrity", "FAIL",
-                f"Chain break before entry {i + 1} (claim_id={cid}). "
-                f"Expected prev={prev_seal[:8]}…, got {entry_prev[:8]}…. "
-                f"An entry was deleted or inserted before this point."))
+        if entry_prev is not None:
+            # SPEC §5.1: the genesis marker is case-insensitive — action-mirror
+            # ledgers write "GENESIS" where measure-mirror writes "genesis".
+            link_ok = (str(entry_prev).lower() == "genesis" if i == 0
+                       else entry_prev == prev_seal)
+            if not link_ok:
+                findings.append(Finding("① chain-integrity", "FAIL",
+                    f"Chain break before entry {i + 1} (claim_id={cid}). "
+                    f"Expected prev={prev_seal[:8]}…, got {entry_prev[:8]}…. "
+                    f"An entry was deleted or inserted before this point."))
 
         prev_seal = entry.get("seal", "")
 

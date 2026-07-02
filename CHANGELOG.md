@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.19.1] — 2026-07-02
+
+### Fixed
+- **`verify_chain` false-FAIL on uppercase genesis** (the 0.19.0 known
+  issue). First-entry `prev_seal` is now compared case-insensitively per
+  SPEC §5.1, matching `linkage_check`. action-mirror writes `"GENESIS"`
+  (9 real family ledgers), measure-mirror writes `"genesis"`; both are
+  valid. Caught by conformance vector `valid_02_legacy`; regression test
+  `test_verify_chain_accepts_uppercase_genesis` added.
+
+---
+
 ## [0.19.0] — 2026-07-02
 
 MIRROR-SPEC v1 (DRAFT): promote the ledger format from "what the code does"
