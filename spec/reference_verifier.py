@@ -37,6 +37,10 @@ def l1_linkage(path):
         entries = [json.loads(ln) for ln in lines]
     except json.JSONDecodeError as e:
         return False, f"malformed JSON: {e}", None
+    # SPEC §3.1: non-object JSON lines are malformed, same as unparseable JSON
+    for i, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            return False, f"malformed JSON: entry {i} is not an object", None
     if not entries:
         return False, "ledger is empty", []
     prev = None

@@ -16,6 +16,10 @@
     "L1_seal_recompute": "OK",
     "L2_vs_valid_03_peer.jsonl": "OK"
   },
+  "valid_04_numbers.jsonl": {
+    "L1": "OK",
+    "L1_seal_recompute": "OK"
+  },
   "invalid_01_linkage_broken.jsonl": {
     "L1": "FAIL",
     "reason": "linkage broken at entry 1"
@@ -46,5 +50,9 @@
     "L1": "OK",
     "L2_vs_valid_03_witness.jsonl": "FAIL",
     "reason": "REWRITTEN: head at witnessed position differs"
+  },
+  "invalid_08_non_object.jsonl": {
+    "L1": "FAIL",
+    "reason": "non-object JSON line is malformed"
   }
 }

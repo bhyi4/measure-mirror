@@ -5,6 +5,45 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.20.0] — 2026-07-02
+
+SPEC r2: close the 12 ambiguities logged by the newcomer interoperability
+test (a clean-room agent given ONLY docs/SPEC.md; it produced a valid ledger
+and judged 5 blind vectors 5/5, but flagged every place it had to guess).
+
+### Changed (spec)
+- **§4.1 canonical JSON is now spelled out byte-exactly** — recursive key
+  sort, separators, escaping, and number serialization (shortest round-trip
+  float repr, int≠float) — instead of deferring to "Python json.dumps
+  defaults". This is what the "any language" claim needed.
+- §4 rule 4: Ed25519 layer specified (sig = hex signature over the UTF-8
+  bytes of the 16-hex seal string; pubkey = hex 32-byte raw key) — matches
+  action-mirror's implementation.
+- §3: non-object JSON lines are malformed; missing seal/prev_seal read as
+  `""` (verifiers MUST NOT crash); on-disk line formatting explicitly
+  unconstrained; LF + anchor-hash byte-sensitivity note.
+- §6.1: indices are 0-based entry positions; conformance granularity defined
+  (verdict + failing step, message text informative).
+- §6.2: "type-aware" mislabel fixed (recomputation needs no type knowledge).
+- §7.1: preregister identified by shape (`_type` optional, both accepted);
+  amendment's normative marker = top-level `amends_seal` (kill_threshold
+  copy + metric prefix = tolerated legacy); retraction claim_id matching
+  scoped to audit layer.
+- §4 rule 5: 64-bit seal truncation / duplicate-seal non-guarantee stated.
+
+### Fixed
+- **`linkage_check` crashed (AttributeError) on JSON lines that parse but
+  are not objects** (`42`, `[1,2]`) — found because the newcomer asked what
+  the verdict should be and the spec had no answer. Now FAILs as malformed
+  (§6.1 step 2). Reference verifier fixed identically.
+
+### Added
+- Vector `valid_04_numbers` — byte-pins §4.1 canonicalization (floats, int
+  vs float, nested sort, unicode, bool, null).
+- Vector `invalid_08_non_object` — regression guard for the crash fix.
+
+---
+
 ## [0.19.1] — 2026-07-02
 
 ### Fixed
