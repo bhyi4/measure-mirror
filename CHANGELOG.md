@@ -5,6 +5,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.22.0] — 2026-07-02
+
+**측정착시 도감 v1 (Catalog of Measurement Illusions)** — the knowledge asset
+promoted to a first-class artifact: 30 entries, every one backed by a real
+recorded case from our own sealed research history (no invented examples).
+
+### Added
+- **`catalog/`** — 30 entries across 4 categories: `gaming/` 12 (best-of-N,
+  small-n, crippled baseline, metric switch, …), `self-catch/` 7,
+  `fn-guard/` 9, `contamination/` 2. One file per illusion: signature /
+  mechanism / real case (provenance to `db/curated/` + ledger seals) /
+  detection probe / **misapplication warning** (bidirectional defense —
+  over-labeling is itself an illusion).
+- 4 new specimens mined from a sealed retrospective census of the family
+  ledgers (44 files, 571 lines; census protocol preregistered, seal
+  `f7fd1cda…`, result sealed `9cc064ad…`): instrument-bug-as-verdict,
+  anchor-reproduction-failure, untestable-substrate,
+  kill-tripped-but-invalid. Raw seeds appended to
+  `db/curated/false_negative_guards.jsonl` (5 → 9).
+
+### Notes
+- Census byproduct worth recording: **166/166 preregistrations (100%) carry
+  kill criteria** — falsifiability compliance across the whole ledger
+  history; 22 retractions, 3 amendments, 0 malformed lines.
+
+---
+
 ## [0.21.0] — 2026-07-02
 
 **MIRROR-SPEC v1.0 RATIFIED.** The second clean-room round (fresh agent,

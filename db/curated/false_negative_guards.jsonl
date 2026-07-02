@@ -4,3 +4,7 @@
 {"case":"latent_oee '분기1 FALSIFIED' 선언","guard":"지평(T) 너무 짧아 거짓음성","resolution":"대장님 비판 적중→철회, 지평-sweep 정정","source":"chrysalis_latent_oee_pivot"}
 {"case":"DCC 0.32 plateau를 '천장'으로 단정","guard":"천장이라 믿은 거짓음성","resolution":"천장 아님 — 처방(자모CE헤드+보존ODE) 존재","source":"dcc_plateau_metric_phantom"}
 {"case":"aphasia Match_tf 코사인 프록시","guard":"프록시가 진짜 readout 아님","resolution":"fresh linear/MLP probe로 직접 측정 → 정보보존 10.2% 확정","source":"aphasia_576d_attractor_collapse"}
+{"case":"cand_a_edge_selection κ NaN을 NULL 판정으로","guard":"계기 버그(floor 차원 0개→measure 전부 None)가 판정으로 위장","resolution":"Degenerate 측정으로 철회 — 실판정 아님, 계기 수리 후 재측정 대상","source":"ledger_retraction:cand_a_edge_selection"}
+{"case":"neoul_residual_decomp ctrl 앵커 0.745 재현 실패","guard":"통제조건(양성대조) 미재현이면 그 실험의 음성은 무효 — VOCAB 256→1024 무단 변경이 confound","resolution":"INCONCLUSIVE-confound 자가적발(측정거울) 철회, closure/sanity 조건 상설화","source":"ledger_retraction:neoul_residual_decomp"}
+{"case":"metacog_lang_selfmonitor 기질이 과제 자체를 chance 수행","guard":"기질 무능(recall acc 0.00~0.20)이면 가설은 반증이 아니라 검증불가","resolution":"UNTESTABLE terminal GUARD로 철회 — 가설 KILL 아님을 명시 분리","source":"ledger_retraction:metacog_lang_selfmonitor"}
+{"case":"neoul_window_elastic_copy kill 액면 트립","guard":"kill-condition이 액면 발동해도 측정 자체가 무효(설계결함 2)면 반증 아님","resolution":"INCONCLUSIVE-confound 철회(결과 전 자가적발) → v2 재설계로 유효 측정","source":"ledger_retraction:neoul_window_elastic_copy"}
