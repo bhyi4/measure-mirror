@@ -54,3 +54,13 @@ def test_uppercase_genesis_vector_present():
     assert first["prev_seal"] == "GENESIS"
     ok, msg, _ = linkage_check(str(VECTORS / "valid_02_legacy.jsonl"))
     assert ok, msg
+
+
+def test_verify_chain_accepts_uppercase_genesis():
+    """verify_chain (L1+) must also honor SPEC §5.1 — regression guard for the
+    case-sensitivity bug caught by the first conformance run (false-FAIL on
+    am-produced ledgers starting with "GENESIS")."""
+    from measure_mirror.mm import verify_chain
+
+    findings = verify_chain(str(VECTORS / "valid_02_legacy.jsonl"))
+    assert all(f.level != "FAIL" for f in findings), findings
