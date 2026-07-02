@@ -33,6 +33,9 @@ def l1_linkage(path):
             lines = [ln for ln in f.read().splitlines() if ln.strip()]
     except OSError as e:
         return False, f"ledger unreadable: {e}", None
+    except UnicodeDecodeError as e:
+        # SPEC §3.1: non-UTF-8 bytes are malformed content, not unreadable file
+        return False, f"malformed JSON: not valid UTF-8 ({e})", None
     try:
         entries = [json.loads(ln) for ln in lines]
     except json.JSONDecodeError as e:

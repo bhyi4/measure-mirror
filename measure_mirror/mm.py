@@ -296,6 +296,10 @@ def linkage_check(path: str) -> tuple[bool, str, list | None]:
         text = open(path, encoding="utf-8").read()
     except OSError as e:
         return False, f"ledger unreadable: {e}", None
+    except UnicodeDecodeError as e:
+        # SPEC §3.1: bytes that don't decode as UTF-8 are malformed content,
+        # not an unreadable file.
+        return False, f"malformed JSON in ledger: not valid UTF-8 ({e})", None
     try:
         entries = [json.loads(l) for l in text.splitlines() if l.strip()]
     except json.JSONDecodeError as e:

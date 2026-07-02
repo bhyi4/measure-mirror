@@ -1,6 +1,10 @@
 # MIRROR-SPEC v1.0 — Mirror Stack Ledger Format & Verification Protocol
 
-**Status: DRAFT** (pending newcomer interoperability test before freeze)
+**Status: v1.0, ratified 2026-07-02.** Frozen per §9 — normative statements
+will not change; clarifications append as errata. Ratification criterion:
+two clean-room interoperability rounds (an agent given only this document
+achieved byte-exact seal reproduction, 5/5 blind-vector verdicts, and valid
+ledger production including amendments).
 
 This document is the **normative specification** of the Mirror Stack ledger format.
 The Python packages (`measure-mirror`, `action-mirror`, `provenance-mirror`) are
@@ -50,16 +54,22 @@ It does NOT guarantee:
 ## 3. Ledger file format
 
 1. A ledger MUST be a UTF-8 encoded file of newline-separated JSON objects
-   (JSONL). Blank lines MUST be ignored by verifiers. A non-blank line that
-   parses as JSON but is not an object (e.g. `42`, `[1,2]`) makes the ledger
-   malformed, exactly like unparseable JSON (§6.1 step 2).
+   (JSONL). Blank lines (empty or whitespace-only) MUST be ignored by
+   verifiers. A non-blank line that parses as JSON but is not an object
+   (e.g. `42`, `[1,2]`) makes the ledger malformed, exactly like unparseable
+   JSON (§6.1 step 2). Bytes that do not decode as UTF-8 are likewise
+   malformed content (§6.1 step 2), not an unreadable file. If a line
+   contains duplicate keys, the last occurrence wins (common-parser
+   behavior, pinned here because it changes recomputed seals).
 2. Entries MUST only ever be appended. Implementations MUST NOT rewrite,
    reorder, or delete existing lines.
 3. Every entry MUST contain the fields `seal` (string) and `prev_seal`
    (string), and SHOULD contain an ISO 8601 timestamp field (`ts`, or
    `ts_start`/`ts_end` for command witnesses). A verifier MUST treat a
-   missing `seal` or `prev_seal` as the empty string (which then fails the
-   §6 comparisons); it MUST NOT crash.
+   missing `seal` or `prev_seal` as the empty string, and a present but
+   non-string value by its decimal/JSON string form (`42` → `"42"`); either
+   way the §6 comparisons then fail naturally and the verifier MUST NOT
+   crash.
 4. Timestamps SHOULD be UTC with an explicit `Z` suffix. Verifiers MUST accept
    timestamps without a timezone suffix (legacy entries exist).
 5. The bytes of a ledger line are NOT required to be the canonical
@@ -96,9 +106,13 @@ Spelled out:
    use `\b \f \n \r \t` where defined, `\u00XX` otherwise.
 4. **Numbers** — integers without decimal point or exponent (`120`); floats
    as the **shortest string that round-trips to the same IEEE-754 double**
-   (Python/JS `repr` semantics: `0.5` never `0.50`; `1` and `1.0` are
-   *different values with different serializations*). Producers SHOULD avoid
-   non-finite floats (`NaN`/`Infinity` are not interoperable JSON).
+   (`0.5` never `0.50`; `1` and `1.0` are *different values with different
+   serializations*). Where shortest-round-trip renderings differ across
+   languages (e.g. exponent-notation thresholds: Python emits `1e+16`,
+   JavaScript `10000000000000000`), **Python's `repr` output is normative**.
+   Producers SHOULD avoid non-finite floats (`NaN`/`Infinity` are not
+   interoperable JSON) and SHOULD avoid magnitudes where exponent notation
+   kicks in.
 5. **Literals** — `true`, `false`, `null`.
 
 The conformance vector `valid_04_numbers.jsonl` pins these bytes (nested
@@ -128,7 +142,7 @@ SHA-256 (§6.4, §6.5) provides the full-strength commitment.
 ## 5. Chain rules
 
 1. The first entry of a ledger MUST have `prev_seal` equal to `"genesis"`,
-   compared case-insensitively.
+   compared ASCII-case-insensitively.
 2. Every subsequent entry MUST have `prev_seal` equal to the `seal` of the
    immediately preceding entry (exact string match).
 3. A producer appending to a missing or empty ledger MUST treat the previous
@@ -153,8 +167,10 @@ A conforming L1 verifier MUST evaluate, in order:
 
 Indices are 0-based entry positions (blank lines excluded), not file line
 numbers. Missing `seal`/`prev_seal` fields are read as `""` (§3.3) and fail
-steps 4–5 naturally. Conformance (§8) is judged on the OK/FAIL verdict and,
-for FAILs, which step fired; human-readable message text is informative only.
+steps 4–5 naturally. On step 4/5 failures `entries` is the parsed list (only
+steps 1–2 return `null`). Conformance (§8) is judged on the OK/FAIL verdict
+and, for FAILs, which step fired; human-readable message text is informative
+only.
 
 L1 compares **declared** seals only; it MUST NOT require knowledge of record
 types, so it works on any ledger following §3–§5.
@@ -167,10 +183,11 @@ valid internal chain passes L1 — this is L2/L3's job).
 ### 6.2 L1+ — Seal recomputation
 
 A recomputing verifier (e.g. `verify_chain`) SHOULD additionally recompute
-each entry's seal per §4 and FAIL on mismatch. This needs no record-type
-knowledge — §4 is uniform across all types. Reporting the first mismatch is
-sufficient. This catches edits that keep the declared chain consistent but
-alter sealed content.
+each entry's seal per §4 and FAIL on mismatch. L1+ runs only when L1
+returned OK (a broken or malformed chain is already FAIL; recomputation adds
+nothing). This needs no record-type knowledge — §4 is uniform across all
+types. Reporting the first mismatch is sufficient. This catches edits that
+keep the declared chain consistent but alter sealed content.
 
 ### 6.3 L2 — Peer witness (cross-ledger)
 
@@ -236,7 +253,8 @@ without either is unfalsifiable and SHOULD be flagged by audit tooling.
 
 **amendment** — a preregister-shaped entry carrying **top-level
 `amends_seal`** (the seal of the entry it amends) — that is the normative
-marker. Two additional legacy conventions exist in real ledgers and MUST be
+and sole identifying marker (`_type`, if present, MAY be `"preregister"` or
+`"amendment"`; verifiers MUST NOT rely on it). Two additional legacy conventions exist in real ledgers and MUST be
 tolerated (but need not be produced): a duplicated `amends_seal` plus a
 `change` summary inside `kill_threshold`, and an `"[AMENDMENT to seal …]"`
 prefix on `metric`. Amendments change kill conditions *visibly*; silent
@@ -298,7 +316,10 @@ have no dependencies beyond SHA-256, JSON, and file I/O (L3b additionally
 needs an OTS parser and a public block explorer).
 
 **Test vectors:** `spec/vectors/` contains valid and invalid ledgers with
-expected verdicts. An implementation is conformant iff it reproduces every
+expected verdicts. The vectors are companion artifacts distributed alongside
+this spec (same repository), not part of the normative text: the text alone
+suffices to implement; running the vectors is required only to *claim*
+conformance. An implementation is conformant iff it reproduces every
 expected verdict. (Seed suites: `tests/test_linkage_check.py`,
 mirror-stack-mcp `tests/test_linkage_conformance.py`.)
 
