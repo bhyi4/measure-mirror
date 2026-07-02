@@ -86,6 +86,22 @@ expected["valid_03_peer.jsonl"] = {"L1": "OK", "L1_seal_recompute": "OK"}
 expected["valid_03_witness.jsonl"] = {"L1": "OK", "L1_seal_recompute": "OK",
                                       "L2_vs_valid_03_peer.jsonl": "OK"}
 
+# v04: pins SPEC §4.1 canonical JSON byte-exactly — floats (shortest repr),
+# int vs float, recursive key sorting, unicode, booleans, null.
+# An implementation whose seals match these has the canonicalization right.
+v04 = chain([
+    {"_type": "action", "ts": "2026-07-02T03:00:00Z", "agent": "canon-check",
+     "action": "measure", "target": "numbers_claim",
+     "payload": {"zebra": 0.5, "alpha": {"nested_b": 1, "nested_a": 1.0},
+                 "half": 0.25, "big": 120, "flag": True, "nothing": None,
+                 "text": "정규화 テスト ✓"}},
+    {"ts": "2026-07-02T03:10:00Z", "claim_id": "numbers_claim", "metric": "acc",
+     "min_n": 30, "baseline": 0.3333333333333333, "pass_threshold": 0.7,
+     "kill_condition": "acc < 0.55", "chance": 0.1},
+])
+write("valid_04_numbers.jsonl", v04)
+expected["valid_04_numbers.jsonl"] = {"L1": "OK", "L1_seal_recompute": "OK"}
+
 # ---------- invalid ----------
 # i01: linkage broken (middle entry's prev_seal wrong)
 bad = [dict(e) for e in v01]
@@ -145,6 +161,11 @@ write("invalid_07_peer_rewritten.jsonl", rew)
 expected["invalid_07_peer_rewritten.jsonl"] = {
     "L1": "OK",
     "L2_vs_valid_03_witness.jsonl": "FAIL", "reason": "REWRITTEN: head at witnessed position differs"}
+
+# i08: line parses as JSON but is not an object (SPEC §3.1 / §6.1 step 2)
+text = json.dumps(v01[0], ensure_ascii=False) + "\n42\n"
+write("invalid_08_non_object.jsonl", text)
+expected["invalid_08_non_object.jsonl"] = {"L1": "FAIL", "reason": "non-object JSON line is malformed"}
 
 with open(os.path.join(OUT, "expected.json"), "w", encoding="utf-8") as f:
     json.dump(expected, f, indent=2, ensure_ascii=False)

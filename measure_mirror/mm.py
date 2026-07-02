@@ -300,6 +300,11 @@ def linkage_check(path: str) -> tuple[bool, str, list | None]:
         entries = [json.loads(l) for l in text.splitlines() if l.strip()]
     except json.JSONDecodeError as e:
         return False, f"malformed JSON in ledger: {e}", None
+    # SPEC §3.1/§6.1 step 2: a line that parses as JSON but is not an object
+    # (e.g. `42`, `[1,2]`) is malformed, same as unparseable JSON.
+    for i, e in enumerate(entries):
+        if not isinstance(e, dict):
+            return False, f"malformed JSON in ledger: entry {i} is not an object", None
     if not entries:
         return False, "ledger is empty", []
     prev = None

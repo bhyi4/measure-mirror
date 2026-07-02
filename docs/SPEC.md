@@ -50,14 +50,24 @@ It does NOT guarantee:
 ## 3. Ledger file format
 
 1. A ledger MUST be a UTF-8 encoded file of newline-separated JSON objects
-   (JSONL). Blank lines MUST be ignored by verifiers.
+   (JSONL). Blank lines MUST be ignored by verifiers. A non-blank line that
+   parses as JSON but is not an object (e.g. `42`, `[1,2]`) makes the ledger
+   malformed, exactly like unparseable JSON (§6.1 step 2).
 2. Entries MUST only ever be appended. Implementations MUST NOT rewrite,
    reorder, or delete existing lines.
 3. Every entry MUST contain the fields `seal` (string) and `prev_seal`
    (string), and SHOULD contain an ISO 8601 timestamp field (`ts`, or
-   `ts_start`/`ts_end` for command witnesses).
+   `ts_start`/`ts_end` for command witnesses). A verifier MUST treat a
+   missing `seal` or `prev_seal` as the empty string (which then fails the
+   §6 comparisons); it MUST NOT crash.
 4. Timestamps SHOULD be UTC with an explicit `Z` suffix. Verifiers MUST accept
    timestamps without a timezone suffix (legacy entries exist).
+5. The bytes of a ledger line are NOT required to be the canonical
+   serialization of §4 — key order and whitespace on disk are unconstrained.
+   Only the seal *computation* canonicalizes. Producers SHOULD terminate
+   lines with LF (`\n`); note that any byte-level change, including
+   CRLF↔LF conversion, alters the whole-file hashes used by L3 anchors
+   (§6.4–§6.5) — by design.
 
 ## 4. Seal algorithm (normative)
 
@@ -65,25 +75,51 @@ Given an entry object `E`:
 
 ```
 body       = E with the keys "seal" and "sig" removed
-serialized = JSON-serialize body with:
-               • keys sorted lexicographically (codepoint order)
-               • non-ASCII characters NOT escaped (UTF-8 as-is)
-               • separators as produced by Python json.dumps defaults
-                 (", " between items, ": " between key and value)
+serialized = canonical-JSON(body)          # §4.1, byte-exact
 seal       = lowercase hex SHA-256 of serialized (UTF-8 bytes), truncated to
              the first 16 characters
 ```
+
+### 4.1 Canonical JSON (normative, byte-exact)
+
+The canonical serialization is the output of Python's
+`json.dumps(body, sort_keys=True, ensure_ascii=False)`. Because seals bind
+bytes, a cross-language implementation MUST reproduce these bytes exactly.
+Spelled out:
+
+1. **Key order** — object keys sorted by Unicode codepoint, **recursively at
+   every nesting level**.
+2. **Separators** — `", "` between array/object members, `": "` between key
+   and value (single space after comma and colon, none before).
+3. **Strings** — non-ASCII characters emitted as raw UTF-8 (NOT `\uXXXX`).
+   The two mandatory escapes are `\"` and `\\`; control characters U+0000–1F
+   use `\b \f \n \r \t` where defined, `\u00XX` otherwise.
+4. **Numbers** — integers without decimal point or exponent (`120`); floats
+   as the **shortest string that round-trips to the same IEEE-754 double**
+   (Python/JS `repr` semantics: `0.5` never `0.50`; `1` and `1.0` are
+   *different values with different serializations*). Producers SHOULD avoid
+   non-finite floats (`NaN`/`Infinity` are not interoperable JSON).
+5. **Literals** — `true`, `false`, `null`.
+
+The conformance vector `valid_04_numbers.jsonl` pins these bytes (nested
+keys, floats, ints, unicode, booleans, null); an implementation whose seals
+match it has the canonicalization right.
 
 Rules:
 
 1. The keys `seal` and `sig` MUST be excluded from the sealed body. All other
    keys, including `prev_seal`, MUST be included.
-2. Serialization MUST use sorted keys and MUST NOT ASCII-escape non-ASCII
-   characters (`ensure_ascii=False` semantics).
+2. Serialization MUST follow §4.1 byte-exactly.
 3. The digest MUST be truncated to 16 lowercase hex characters.
-4. An entry MAY additionally carry an Ed25519 signature: `sig` is the signature
-   over the seal, `pubkey` identifies the key. `pubkey` IS part of the sealed
-   body; `sig` is not.
+4. An entry MAY additionally carry an Ed25519 signature. `sig` is the
+   lowercase-hex Ed25519 signature over the **UTF-8 bytes of the 16-char
+   lowercase hex seal string** (not the raw digest); `pubkey` is the
+   lowercase-hex 32-byte raw public key. `pubkey` IS part of the sealed body;
+   `sig` is not.
+5. Seals do not guarantee uniqueness: 64-bit truncation admits collisions in
+   principle, and identical entries produce identical seals. Verifiers do not
+   check for duplicate seals; chain position (§5), not the seal value, is an
+   entry's identity.
 
 *Truncation note:* 16 hex chars (64 bits) is a tamper-evidence checksum, not a
 collision-resistant commitment against adversarial preimage search. Whole-file
@@ -107,12 +143,18 @@ Input: ledger path. Output: `(ok, message, entries)`.
 A conforming L1 verifier MUST evaluate, in order:
 
 1. File unreadable → FAIL (`entries = null`)
-2. Any line not parseable as JSON → FAIL (`entries = null`)
+2. Any non-blank line not parseable as a JSON **object** → FAIL
+   (`entries = null`; non-object JSON like `42` or `[1,2]` is malformed, §3.1)
 3. Zero entries → FAIL (`entries = []`)
 4. First entry `prev_seal` ≠ `"genesis"` (case-insensitive) → FAIL
 5. Any entry `i > 0` whose declared `prev_seal` ≠ declared `seal` of entry
    `i−1` → FAIL, reporting the first broken index
 6. Otherwise → OK, reporting entry count and head seal
+
+Indices are 0-based entry positions (blank lines excluded), not file line
+numbers. Missing `seal`/`prev_seal` fields are read as `""` (§3.3) and fail
+steps 4–5 naturally. Conformance (§8) is judged on the OK/FAIL verdict and,
+for FAILs, which step fired; human-readable message text is informative only.
 
 L1 compares **declared** seals only; it MUST NOT require knowledge of record
 types, so it works on any ledger following §3–§5.
@@ -124,9 +166,11 @@ valid internal chain passes L1 — this is L2/L3's job).
 
 ### 6.2 L1+ — Seal recomputation
 
-A type-aware verifier (e.g. `verify_chain`) SHOULD additionally recompute each
-entry's seal per §4 and FAIL on mismatch. This catches edits that keep the
-declared chain consistent but alter sealed content.
+A recomputing verifier (e.g. `verify_chain`) SHOULD additionally recompute
+each entry's seal per §4 and FAIL on mismatch. This needs no record-type
+knowledge — §4 is uniform across all types. Reporting the first mismatch is
+sufficient. This catches edits that keep the declared chain consistent but
+alter sealed content.
 
 ### 6.3 L2 — Peer witness (cross-ledger)
 
@@ -178,9 +222,10 @@ compatibility); producers SHOULD NOT invent new meanings for reserved names.
 
 ### 7.1 Ledger-resident types
 
-**preregister** — seal a claim before results exist. *Has no `_type` field*
-(legacy-normative in v1; producers SHOULD add `_type: "preregister"` going
-forward, verifiers MUST accept its absence).
+**preregister** — seal a claim before results exist. Identified by shape
+(has `claim_id` + `metric` + `pass_threshold`), not by `_type`: legacy
+entries carry no `_type` field. Producers MAY add `_type: "preregister"`;
+verifiers and audit tools MUST accept both forms.
 `ts, claim_id, metric, min_n, baseline, pass_threshold` + (opt)
 `kill_condition` (human-readable falsification criterion), `kill_threshold`
 (object; reserved keys `metric`, `threshold`, `direction`:"below"|"above" —
@@ -189,13 +234,18 @@ retraction cascade), `metric_range` ([lo,hi] or "unbounded"), `chance` (float).
 `kill_condition`/`kill_threshold` SHOULD be present together; a preregistration
 without either is unfalsifiable and SHOULD be flagged by audit tooling.
 
-**amendment** — a preregister-shaped entry carrying `amends_seal` (the seal of
-the entry it amends). Amendments change kill conditions *visibly*; silent
-edits are what the chain forbids. Reserved keys inside `kill_threshold`:
-`amends_seal`, `change` (summary).
+**amendment** — a preregister-shaped entry carrying **top-level
+`amends_seal`** (the seal of the entry it amends) — that is the normative
+marker. Two additional legacy conventions exist in real ledgers and MUST be
+tolerated (but need not be produced): a duplicated `amends_seal` plus a
+`change` summary inside `kill_threshold`, and an `"[AMENDMENT to seal …]"`
+prefix on `metric`. Amendments change kill conditions *visibly*; silent
+edits are what the chain forbids.
 
 **retraction** — `_type: "retraction"`, `ts, claim_id, reason`. Marks a claim
 falsified/withdrawn. MUST be appended, never substituted for deletion.
+Whether `claim_id` matches a prior preregistration is an audit-layer concern
+(certificate/falsifiability tooling), outside L1/L1+ scope.
 
 **witness** (command execution) — `_type: "witness"`, `ts_start, ts_end,
 claim_id, command` (argv list), `returncode`, `run_status`:"ok"|"timeout"|
