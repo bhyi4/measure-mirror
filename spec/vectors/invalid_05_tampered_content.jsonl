@@ -1,0 +1,2 @@
+{"ts": "2026-07-02T00:00:00Z", "claim_id": "demo_claim", "metric": "acc", "min_n": 30, "baseline": 0.5, "pass_threshold": 0.7, "kill_condition": "acc below 0.55 on held-out set", "kill_threshold": {"metric": "acc", "threshold": 0.3, "direction": "below"}, "prev_seal": "genesis", "seal": "c0d0963bf2ee2bba"}
+{"_type": "retraction", "ts": "2026-07-02T01:00:00Z", "claim_id": "demo_claim", "reason": "kill condition triggered: acc=0.51", "prev_seal": "c0d0963bf2ee2bba", "seal": "79f0608e056213a4"}

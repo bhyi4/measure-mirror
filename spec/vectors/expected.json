@@ -1,0 +1,50 @@
+{
+  "valid_01_minimal.jsonl": {
+    "L1": "OK",
+    "L1_seal_recompute": "OK"
+  },
+  "valid_02_legacy.jsonl": {
+    "L1": "OK",
+    "L1_seal_recompute": "OK"
+  },
+  "valid_03_peer.jsonl": {
+    "L1": "OK",
+    "L1_seal_recompute": "OK"
+  },
+  "valid_03_witness.jsonl": {
+    "L1": "OK",
+    "L1_seal_recompute": "OK",
+    "L2_vs_valid_03_peer.jsonl": "OK"
+  },
+  "invalid_01_linkage_broken.jsonl": {
+    "L1": "FAIL",
+    "reason": "linkage broken at entry 1"
+  },
+  "invalid_02_no_genesis.jsonl": {
+    "L1": "FAIL",
+    "reason": "first entry prev_seal must be genesis"
+  },
+  "invalid_03_malformed.jsonl": {
+    "L1": "FAIL",
+    "reason": "malformed JSON"
+  },
+  "invalid_04_empty.jsonl": {
+    "L1": "FAIL",
+    "reason": "ledger is empty"
+  },
+  "invalid_05_tampered_content.jsonl": {
+    "L1": "OK",
+    "L1_seal_recompute": "FAIL",
+    "reason": "declared chain intact but entry 0 seal does not match recomputation (§6.2)"
+  },
+  "invalid_06_peer_truncated.jsonl": {
+    "L1": "OK",
+    "L2_vs_valid_03_witness.jsonl": "FAIL",
+    "reason": "TRUNCATED: peer has 1 < witnessed 2"
+  },
+  "invalid_07_peer_rewritten.jsonl": {
+    "L1": "OK",
+    "L2_vs_valid_03_witness.jsonl": "FAIL",
+    "reason": "REWRITTEN: head at witnessed position differs"
+  }
+}

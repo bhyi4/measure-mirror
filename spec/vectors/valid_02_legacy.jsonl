@@ -1,0 +1,2 @@
+{"ts": "2026-06-19T11:03:11", "claim_id": "레거시_주장", "metric": "held_out_accuracy", "min_n": 120, "baseline": 0.2, "pass_threshold": 0.8, "kill_condition": "정확도 0.8 미만이면 KILL", "prev_seal": "GENESIS", "seal": "8ac0a97e84db123e"}
+{"ts": "2026-06-19T15:19:20", "claim_id": "레거시_주장", "metric": "[AMENDMENT to seal 8ac0a97e84db123e] held_out_accuracy", "min_n": 120, "baseline": 0.2, "pass_threshold": 0.8, "amends_seal": "8ac0a97e84db123e", "kill_threshold": {"amends_seal": "8ac0a97e84db123e", "change": "sampler swap"}, "prev_seal": "8ac0a97e84db123e", "seal": "1a9f79dd81d102b9"}
