@@ -129,6 +129,28 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
     if kill_condition is not None:
         entry["kill_condition"] = kill_condition
     if kill_threshold is not None:
+        # Validate the structured form at seal time — fail fast, while it can
+        # still be fixed. A malformed threshold accepted here would otherwise
+        # only surface as a KeyError inside audit()/falsifiability_check(), and
+        # because pre-registration is first-write-wins it could not be corrected
+        # by re-registering the same claim_id.
+        if isinstance(kill_threshold, dict):
+            if "threshold" not in kill_threshold:
+                raise ValueError(
+                    "kill_threshold must contain a numeric 'threshold' key "
+                    "(structured form: {'metric', 'threshold', 'direction'}). "
+                    "For a free-text criterion, use kill_condition= instead.")
+            try:
+                float(kill_threshold["threshold"])
+            except (TypeError, ValueError):
+                raise ValueError(
+                    "kill_threshold['threshold'] must be numeric, got "
+                    f"{kill_threshold['threshold']!r}.")
+            direction = kill_threshold.get("direction", "below")
+            if direction not in ("below", "above"):
+                raise ValueError(
+                    "kill_threshold['direction'] must be 'below' or 'above', "
+                    f"got {direction!r}.")
         entry["kill_threshold"] = kill_threshold
     if depends_on:
         entry["depends_on"] = depends_on
@@ -179,7 +201,17 @@ def _falsifiability_eval(pre: dict, reported_acc: float | None) -> Finding:
                            "Kill threshold registered but result not yet provided "
                            "— cannot evaluate kill condition.")
         metric    = kill_thresh.get("metric", pre.get("metric", "?"))
-        thr       = float(kill_thresh["threshold"])
+        # Guard already-sealed ledgers that predate seal-time validation: a
+        # malformed threshold degrades to WARN instead of crashing every
+        # downstream audit()/falsifiability_check().
+        try:
+            thr = float(kill_thresh["threshold"])
+        except (KeyError, TypeError, ValueError):
+            return Finding("⑪ falsifiability", "WARN",
+                           f"Malformed kill_threshold for '{pre['claim_id']}' "
+                           "(no numeric 'threshold') — cannot auto-evaluate. "
+                           "Re-register under a new claim_id with the structured "
+                           "form, or use kill_condition= for a text criterion.")
         direction = kill_thresh.get("direction", "below")
         triggered = (
             (direction == "below" and reported_acc < thr) or
