@@ -5,6 +5,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.21.0] — 2026-07-02
+
+**MIRROR-SPEC v1.0 RATIFIED.** The second clean-room round (fresh agent,
+spec text only) achieved byte-exact §4.1 canonicalization, 5/5 blind-vector
+verdicts, correct answers to all five targeted ambiguity probes, and valid
+ledger production including amendments — with zero blocking ambiguities.
+The freeze criterion ("a newcomer interoperates from the spec alone") is
+met; the spec is now frozen per §9.
+
+### Changed (spec — final pre-freeze errata, from round-2 pedantic log)
+- §3.1: non-UTF-8 bytes = malformed content (step 2); blank = empty or
+  whitespace-only; duplicate keys = last-wins (pinned: it changes seals).
+- §3.3: present-but-non-string `seal`/`prev_seal` string-coerced, no crash.
+- §4.1.4: Python `repr` is normative where languages' shortest-round-trip
+  renderings diverge (exponent thresholds); misleading "Python/JS" fixed.
+- §5.1: genesis comparison pinned to ASCII-case-insensitive.
+- §6.1: `entries` value pinned for step 4/5 failures.
+- §6.2: L1+ runs only when L1 is OK.
+- §7.1: amendment identified solely by top-level `amends_seal`; `_type` MAY
+  be "preregister" or "amendment" but MUST NOT be relied on.
+- §8: vectors = companion artifacts; text alone suffices to implement.
+
+### Fixed
+- **`linkage_check` crashed (UnicodeDecodeError) on non-UTF-8 bytes** —
+  the round-2 log asked whether bad bytes are "unreadable" or "malformed";
+  the code's answer was neither. Fourth real bug surfaced by spec-writing.
+  Reference verifier fixed identically; vector `invalid_09_bad_utf8` guards.
+
+---
+
 ## [0.20.0] — 2026-07-02
 
 SPEC r2: close the 12 ambiguities logged by the newcomer interoperability

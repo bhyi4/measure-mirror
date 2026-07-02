@@ -54,5 +54,9 @@
   "invalid_08_non_object.jsonl": {
     "L1": "FAIL",
     "reason": "non-object JSON line is malformed"
+  },
+  "invalid_09_bad_utf8.jsonl": {
+    "L1": "FAIL",
+    "reason": "non-UTF-8 bytes are malformed"
   }
 }

@@ -25,6 +25,7 @@ computed per SPEC §4; no timestamps are generated at runtime).
 | invalid_06_peer_truncated | peer shorter than witnessed count | L2 FAIL (TRUNCATED) |
 | invalid_07_peer_rewritten | peer rewritten with valid internal chain | L1 OK, **L2 FAIL** (REWRITTEN — the attack L1 cannot see) |
 | invalid_08_non_object | line parses as JSON but is not an object (`42`, §3.1) | L1 FAIL (malformed) |
+| invalid_09_bad_utf8 | bytes that do not decode as UTF-8 (§3.1: malformed, not unreadable) | L1 FAIL (malformed) |
 
 ## Findings from first conformance run (2026-07-02)
 

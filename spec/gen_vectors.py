@@ -167,6 +167,12 @@ text = json.dumps(v01[0], ensure_ascii=False) + "\n42\n"
 write("invalid_08_non_object.jsonl", text)
 expected["invalid_08_non_object.jsonl"] = {"L1": "FAIL", "reason": "non-object JSON line is malformed"}
 
+# i09: bytes that do not decode as UTF-8 (SPEC §3.1 — malformed, not unreadable)
+with open(os.path.join(OUT, "invalid_09_bad_utf8.jsonl"), "wb") as f:
+    f.write(json.dumps(v01[0], ensure_ascii=False).encode("utf-8") + b"\n")
+    f.write(b'{"agent": "\xff\xfe"}\n')
+expected["invalid_09_bad_utf8.jsonl"] = {"L1": "FAIL", "reason": "non-UTF-8 bytes are malformed"}
+
 with open(os.path.join(OUT, "expected.json"), "w", encoding="utf-8") as f:
     json.dump(expected, f, indent=2, ensure_ascii=False)
 
