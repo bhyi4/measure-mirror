@@ -5,6 +5,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.19.0] — 2026-07-02
+
+MIRROR-SPEC v1 (DRAFT): promote the ledger format from "what the code does"
+to a normative specification. From ratification onward, the spec is the source
+of truth and the packages are reference implementations.
+
+### Added
+- **`docs/SPEC.md`** — MIRROR-SPEC v1.0 DRAFT: normative ledger format &
+  verification protocol (seal algorithm §4, chain rules §5, verification
+  levels L1/L1+/L2/L3a/L3b §6, all 11 record types §7, conformance §8,
+  freeze policy §9, legacy variances §10). Honest scope stated up front:
+  integrity/non-erasability/falsifiability/verifiability — never content
+  truth, never independence.
+- **`spec/vectors/`** — 11 conformance vectors (4 valid, 7 invalid) with
+  `expected.json` verdicts; each invalid vector pins one attack (tamper,
+  delete, replace, truncate, rewrite…). Regenerable via `spec/gen_vectors.py`.
+- **`spec/reference_verifier.py`** — single-file, zero-dependency verifier
+  implementing L1 + seal recomputation + L2 peer-witness; `--vectors` runs
+  the conformance suite (ALL MATCH).
+- **`tests/test_spec_vectors.py`** — CI guard: reference verifier reproduces
+  all expected verdicts; `mm.linkage_check` agrees with every expected L1.
+
+### Known issue (documented, not yet fixed)
+- Producers split on genesis case (`mm` writes `"genesis"`, `am` writes
+  `"GENESIS"`; 9 real family ledgers start uppercase). `mm.linkage_check`
+  accepts both — SPEC §5.1 codifies this. `mm.verify_chain` compares
+  case-sensitively and false-FAILs am-produced ledgers; pinned by vector
+  `valid_02_legacy`, fix planned as a follow-up release.
+
+---
+
 ## [0.18.0] — 2026-06-29
 
 Single-source the stack's linkage check (P2). The format-agnostic
