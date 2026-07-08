@@ -811,6 +811,112 @@ def scope_check(claimed_scope, tested_scope) -> Finding:
 
 
 # ─────────────────────────────────────────────────────────────
+# ㉑㉒㉓ Grounding probes — mutual-grounding arc sealed defense laws.
+# Analogy from a micro-substrate learning-loop experiment; STRUCTURE only,
+# not ported numbers (scope: micro-substrate·40 gens·single attack family·
+# N≤8·median verdict). Design doc: docs/GROUNDING_PROBES_DESIGN.md
+# ─────────────────────────────────────────────────────────────
+_ANCHOR_DYNAMICS = {"dynamics-measured", "dynamics", "measured", "empirical"}
+_ANCHOR_STATIC = {"structural-argument", "structural", "guaranteed",
+                  "static", "by-construction"}
+
+
+def anchor_basis_check(anchor_basis: str) -> Finding:
+    """㉑ A positive-control anchor must rest on the substrate's MEASURED
+    DYNAMICS, not a static 'it's structurally guaranteed' argument.
+
+    Grounds: mutual-grounding arc M11b (seal ef5fdb20) — a 'structurally
+    guaranteed' anchor was refuted by consumption dynamics (the vote wiring
+    worked 100%, yet resource depletion self-limited the attack, so the anchor
+    failed). Static structural argument ≠ anchor. Catalog:
+    anchor-reproduction-failure (structural-guarantee subtype, 3rd real case).
+    Scope: micro-substrate analogy — structure only, no ported numbers.
+    """
+    basis = str(anchor_basis).strip().lower()
+    if basis in _ANCHOR_DYNAMICS:
+        return Finding("㉑ anchor-basis", "OK",
+                       "PC anchor rests on measured dynamics of the substrate.")
+    if basis in _ANCHOR_STATIC:
+        return Finding("㉑ anchor-basis", "WARN",
+                       "PC anchor rests on a static structural argument "
+                       "('guaranteed by construction'). A structural guarantee "
+                       "can be refuted by the substrate's own dynamics "
+                       "(consumption/depletion) — anchors must be validated by a "
+                       "measured dynamics smoke test (illusion: "
+                       "anchor-reproduction-failure, structural-guarantee subtype).")
+    return Finding("㉑ anchor-basis", "WARN",
+                   f"Unrecognized anchor_basis {anchor_basis!r} — declare "
+                   "'dynamics-measured' or 'structural-argument'.")
+
+
+_THRESH_EXTERNAL = {"external-fixed", "external", "fixed", "human-fixed",
+                    "preregistered"}
+_THRESH_OBSERVED = {"observed-distribution", "observed", "adaptive",
+                    "self-calibrated", "data-driven"}
+
+
+def threshold_provenance_check(threshold_source: str) -> Finding:
+    """㉒ A pass/kill threshold must be EXTERNALLY FIXED, not re-derived from the
+    observed submission distribution.
+
+    Grounds: mutual-grounding arc M9b (c79e541a) / M10b (eb64d325) — a threshold
+    moved by the observed distribution is self-calibrating; an attacker floods
+    low-quality submissions to drag it down (strictly worse than a fixed
+    threshold). Even 'uncontaminable source' variants failed (M10). Scope:
+    micro-substrate analogy — structure only.
+    """
+    src = str(threshold_source).strip().lower()
+    if src in _THRESH_EXTERNAL:
+        return Finding("㉒ threshold-provenance", "OK",
+                       "Threshold is externally fixed.")
+    if src in _THRESH_OBSERVED:
+        return Finding("㉒ threshold-provenance", "WARN",
+                       "Threshold derived from the observed submission "
+                       "distribution is self-calibrating — an attacker drags it "
+                       "down by flooding low-quality submissions (worse than "
+                       "fixed; even uncontaminable-source variants failed). "
+                       "Fix the threshold externally.")
+    return Finding("㉒ threshold-provenance", "WARN",
+                   f"Unrecognized threshold_source {threshold_source!r} — declare "
+                   "'external-fixed' or 'observed-distribution'.")
+
+
+_MATCH_TERMS = {"match", "agreement", "similarity", "consistency", "accuracy",
+                "overlap"}
+_CONTENT_TERMS = {"content-delta", "incompressibility", "change-magnitude",
+                  "cxpl", "compression", "length", "novelty"}
+
+
+def content_delta_check(judgment_basis) -> Finding:
+    """㉓ Judgment resting on agreement/match ALONE is rubber-stampable by
+    near-identity claims — require an incompressibility / change-magnitude
+    (content-delta) check.
+
+    Grounds: mutual-grounding arc M5 (1990c34c) — a match-only gate is
+    rubber-stamped by near-identity (contentless) claims; belief/depth metrics
+    are blind, only a content check (incompressibility/length, cxpl-type)
+    detects it. Scope: micro-substrate analogy — structure only.
+    """
+    basis = judgment_basis if isinstance(judgment_basis, (list, tuple)) else [judgment_basis]
+    basis_l = [str(b).strip().lower() for b in basis]
+    has_match = any(b in _MATCH_TERMS for b in basis_l)
+    has_content = any(b in _CONTENT_TERMS for b in basis_l)
+    if has_content:
+        return Finding("㉓ content-delta", "OK",
+                       "Judgment includes a content-delta "
+                       "(incompressibility / change-magnitude) check.")
+    if has_match:
+        return Finding("㉓ content-delta", "WARN",
+                       "Judgment rests on agreement/match alone — "
+                       "rubber-stampable by near-identity (contentless) claims. "
+                       "Add an incompressibility / change-magnitude "
+                       "(content-delta) check.")
+    return Finding("㉓ content-delta", "WARN",
+                   f"Unrecognized judgment_basis {judgment_basis!r} — declare "
+                   "match-type and/or content-delta terms.")
+
+
+# ─────────────────────────────────────────────────────────────
 # ⑦ Too-good — suspiciously large improvement
 # ─────────────────────────────────────────────────────────────
 def too_good_check(name: str, claimed: float, baseline: float, *,
@@ -1925,7 +2031,9 @@ GROUPS: dict[str, list[str]] = {
                  "too_good_check", "power_check",
                  "multiple_comparisons_check", "grim_check"],
     "design":   ["baseline_fairness", "gaming_check", "leakage_check",
-                 "scope_check", "falsifiability_check"],
+                 "scope_check", "falsifiability_check",
+                 "anchor_basis_check", "threshold_provenance_check",
+                 "content_delta_check"],
     "negative": ["negative_audit"],
     "judge":    ["judge_consistency_check", "judge_bias_check",
                  "inter_rater_agreement", "judge_score_sanity",
@@ -1939,6 +2047,7 @@ _SYMBOL_GROUP = {
     "④": "stats", "⑤": "stats", "⑦": "stats", "⑧": "stats",
     "⑨": "stats", "⑩": "stats",
     "②": "design", "③": "design", "⑥": "design", "⑪": "design",
+    "㉑": "design", "㉒": "design", "㉓": "design",
     "⑬": "negative",
     "⑭": "judge", "⑮": "judge", "⑯": "judge", "⑰": "judge", "⑱": "judge",
     "⑲": "ranking", "⑳": "ranking",
@@ -1968,6 +2077,9 @@ def verify(ledger_path: str, data: dict, *,
       train_items + test_items                    → ④a leakage
       seed_results                                → ⑤ multi-seed
       claimed_scope + tested_scope                → ⑥ scope
+      anchor_basis                                → ㉑ anchor basis
+      threshold_source                            → ㉒ threshold provenance
+      judgment_basis                              → ㉓ content delta
       min_detectable_effect                       → ⑧ power
       check_multiplicity (bool)                   → ⑨ multiple comparisons
       angles [, min_angles, conclusion_scope]     → ⑬ negative audit
@@ -2026,6 +2138,16 @@ def verify(ledger_path: str, data: dict, *,
             for f in verify_chain(ledger_path):
                 if f.level != "OK":
                     findings.append(f)
+
+    # Grounding probes (design group) — run whenever their key is present,
+    # independent of acc/n (these check declared design metadata, not results).
+    if "design" in wanted:
+        if data.get("anchor_basis") is not None:
+            findings.append(anchor_basis_check(data["anchor_basis"]))
+        if data.get("threshold_source") is not None:
+            findings.append(threshold_provenance_check(data["threshold_source"]))
+        if data.get("judgment_basis") is not None:
+            findings.append(content_delta_check(data["judgment_basis"]))
 
     # Judge group
     if "judge" in wanted:
