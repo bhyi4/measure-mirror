@@ -17,7 +17,7 @@ Zero training · Deterministic · Zero-dep core (Python 3.10+ stdlib; `judge` mo
 
 **[📖 Full Probe Guide →](docs/GUIDE.md)** — detailed explanations, worked examples, and workflows for all 23 probes
 **[📜 MIRROR-SPEC v1.0 →](docs/SPEC.md)** — the normative ledger format & verification protocol (ratified & frozen 2026-07-02; this package is its reference implementation)
-**[🦋 Catalog of Measurement Illusions →](catalog/README.md)** — 30 real sealed cases of measurement deceiving its own authors (gaming · self-catch · false-negative guards · contamination)
+**[🦋 Catalog of Measurement Illusions →](catalog/README.md)** — 38 real sealed cases of measurement deceiving its own authors (gaming · self-catch · false-negative guards · contamination)
 
 > **🪞🔎🪪 New — Mirror Stack** ([`stack/`](stack/)): measure-mirror is the *claims* layer of a
 > three-mirror integrity stack for autonomous research agents (claims · actions · provenance,
@@ -238,7 +238,7 @@ extra keys fire extra probes. The `data` keys are identical to the JSON file for
 
 > ㉑㉒㉓ are **grounding probes** — the mutual-grounding arc's sealed defense laws (anchors need measured dynamics · thresholds externally fixed · judgment needs a content check). Analogy from a micro-substrate experiment; structure only. See `docs/GROUNDING_PROBES_DESIGN.md`.
 >
-> ㉑㉒ can also be **declared at seal time**: `preregister(..., anchor_basis="dynamics-measured", threshold_source="external-fixed")` stores the declarations in the sealed entry and `audit()` runs the probes on them automatically (SPEC amendment A1). ㉓ stays on the `verify(data)` path (`judgment_basis` describes the analysis, not the preregistration). Calibrated: FP/FN labeled set in `eval/self_fpfn/` (core 27/27, 0 FN / 0 FP; disclosed fail-closed vocab limitation → see `eval/self_fpfn/RESULTS.md`).
+> ㉑㉒ can also be **declared at seal time**: `preregister(..., anchor_basis="dynamics-measured", threshold_source="external-fixed")` stores the declarations in the sealed entry and `audit()` runs the probes on them automatically (SPEC amendment A1). ㉓ stays on the `verify(data)` path (`judgment_basis` describes the analysis, not the preregistration). Calibrated: FP/FN labeled set in `eval/self_fpfn/` (grounding core 27/27, 0 FN / 0 FP; disclosed fail-closed vocab limitation → see `eval/self_fpfn/RESULTS.md`).
 
 ### `negative` — Resolved-Negative closure gate
 
