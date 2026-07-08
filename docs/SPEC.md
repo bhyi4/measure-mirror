@@ -340,6 +340,30 @@ Verifiers MUST accept, without warning:
 3. `genesis` in any letter case (§5.1).
 4. Heterogeneous `kill_threshold`/`payload` shapes (opaque beyond reserved keys).
 
+## 11. Amendments (appended per §9; the v1.0 normative text above is unchanged)
+
+### A1 — optional `preregister` grounding-declaration fields (2026-07-08)
+
+Adds two **optional** producer fields to the `preregister` type (§7.1):
+
+- `anchor_basis` (string, opt) — basis of the claim's positive-control anchor.
+  Recommended vocabulary: `"dynamics-measured"` | `"structural-argument"`.
+- `threshold_source` (string, opt) — provenance of the pass/kill threshold.
+  Recommended vocabulary: `"external-fixed"` | `"observed-distribution"`.
+
+Rationale: the mutual-grounding arc sealed two failure laws — a positive
+control anchored on a static "structurally guaranteed" argument can be refuted
+by the substrate's own dynamics, and a threshold re-derived from the observed
+distribution is self-calibrating (attacker-draggable). Declaring both at seal
+time makes them checkable before compute is spent; audit tooling (measure-mirror
+probes ㉑/㉒) reads the fields back and evaluates them automatically.
+
+Compatibility: non-breaking. Verifiers already MUST ignore unknown extra
+fields (§7); L1/L1+ semantics are untouched (the fields are sealed like any
+other entry bytes). Consumption is an audit-layer concern. Producers MAY omit
+both fields; no vocabulary is enforced at the format level (audit tooling
+treats unrecognized values as fail-closed advisories).
+
 ---
 
 *Reference implementations:* `measure-mirror` (canonical `linkage_check`),

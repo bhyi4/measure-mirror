@@ -5,6 +5,42 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.24.0] — 2026-07-08
+
+Grounding probes: the mutual-grounding arc's sealed defense laws land as
+real probes — calibrated before they may speak.
+
+### Added
+- **Grounding probes ㉑㉒㉓** (`design` group; design doc
+  `docs/GROUNDING_PROBES_DESIGN.md`):
+  - `anchor_basis_check` (㉑) — a positive-control anchor resting on a static
+    "structurally guaranteed" argument instead of measured dynamics.
+  - `threshold_provenance_check` (㉒) — a pass/kill threshold re-derived from
+    the observed distribution (self-calibrating, attacker-draggable) instead
+    of externally fixed.
+  - `content_delta_check` (㉓) — judgment on agreement/match alone
+    (rubber-stampable by near-identity claims) without a content-delta check.
+
+  Structure only — no numbers ported from the source experiment (scope
+  sentence in each docstring). Wired into `verify(data)` via
+  `anchor_basis` / `threshold_source` / `judgment_basis` keys, exposed as
+  MCP tools, vocab classifiers that **fail closed** (unrecognized → WARN).
+- **Self FP/FN calibration for ㉑㉒㉓** (`eval/self_fpfn/`): 27 core labeled
+  cases (ground truth from the sealed laws, not probe code) + 3 disclosed
+  fail-closed vocab traps. Result: core 0 FN / 0 FP (whole suite: 60 core
+  cases, still 0/0); traps fired exactly as pre-registered. Pre-registered
+  and sealed before running — this is the qualification gate the design doc
+  requires before reports may say "mm flagged" for these probes (ledgers are
+  local provenance, not in this repo).
+- **SPEC amendment A1** (visible append, §11 — v1.0 normative text
+  unchanged): optional `preregister` fields `anchor_basis` and
+  `threshold_source`, declared at seal time. `preregister()` seals them,
+  `audit()` reads them back and runs ㉑/㉒ automatically; `mm_register`
+  (MCP) exposes both. ㉓ stays on the `verify(data)` path (its input
+  describes the analysis, not the prereg).
+
+---
+
 ## [0.23.0] — 2026-07-03
 
 ### Fixed

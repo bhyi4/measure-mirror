@@ -94,7 +94,9 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
                 kill_threshold: dict | None = None,
                 depends_on: list[str] | None = None,
                 metric_range: list | str | None = None,
-                chance: float | None = None) -> dict:
+                chance: float | None = None,
+                anchor_basis: str | None = None,
+                threshold_source: str | None = None) -> dict:
     """Seal evaluation criteria BEFORE seeing results.
 
     Each entry is cryptographically linked to the previous one (chain hash).
@@ -111,6 +113,12 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
         "unfalsifiable" by falsifiability_check() at audit time.
     depends_on: list of claim_ids this claim builds on. If any of those claims
         is later retracted, this claim is flagged STALE by cascade_check().
+    anchor_basis / threshold_source: optional grounding declarations (SPEC
+        amendment A1). Declare the positive-control anchor's basis
+        ("dynamics-measured" | "structural-argument") and the pass/kill
+        threshold's provenance ("external-fixed" | "observed-distribution")
+        at seal time; audit() reads them back and runs the ㉑/㉒ grounding
+        probes automatically.
 
     Chain link: deleting or inserting entries breaks the chain and is
     detected by verify_chain(). Complete ledger replacement is NOT caught
@@ -158,6 +166,10 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
         entry["metric_range"] = metric_range
     if chance is not None:
         entry["chance"] = chance
+    if anchor_basis is not None:
+        entry["anchor_basis"] = anchor_basis
+    if threshold_source is not None:
+        entry["threshold_source"] = threshold_source
     entry["seal"] = hashlib.sha256(
         json.dumps(entry, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()[:16]
@@ -1897,6 +1909,12 @@ def audit(ledger_path: str, claim_id: str, *,
                     f"{pre['pass_threshold']:.3f}. (seal={pre['seal']})"))
             # ⑪ falsifiability — only when seal is valid (no double-load)
             findings.append(_falsifiability_eval(pre, reported_acc))
+            # ㉑㉒ grounding declarations sealed at preregistration time
+            # (SPEC amendment A1) are audited automatically.
+            if "anchor_basis" in pre:
+                findings.append(anchor_basis_check(pre["anchor_basis"]))
+            if "threshold_source" in pre:
+                findings.append(threshold_provenance_check(pre["threshold_source"]))
 
     # ⑫ cascade — retraction check (runs regardless of pre-registration)
     casc = cascade_check(ledger_path, claim_id)

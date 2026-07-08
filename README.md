@@ -237,6 +237,8 @@ extra keys fire extra probes. The `data` keys are identical to the JSON file for
 | `content_delta_check` | ㉓ | Judgment on agreement/match alone (rubber-stampable) without a content-delta check |
 
 > ㉑㉒㉓ are **grounding probes** — the mutual-grounding arc's sealed defense laws (anchors need measured dynamics · thresholds externally fixed · judgment needs a content check). Analogy from a micro-substrate experiment; structure only. See `docs/GROUNDING_PROBES_DESIGN.md`.
+>
+> ㉑㉒ can also be **declared at seal time**: `preregister(..., anchor_basis="dynamics-measured", threshold_source="external-fixed")` stores the declarations in the sealed entry and `audit()` runs the probes on them automatically (SPEC amendment A1). ㉓ stays on the `verify(data)` path (`judgment_basis` describes the analysis, not the preregistration). Calibrated: FP/FN labeled set in `eval/self_fpfn/` (core 27/27, 0 FN / 0 FP; disclosed fail-closed vocab limitation → see `eval/self_fpfn/RESULTS.md`).
 
 ### `negative` — Resolved-Negative closure gate
 

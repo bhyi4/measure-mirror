@@ -67,6 +67,16 @@ async def list_tools() -> list[types.Tool]:
                                        "Claim IDs this claim depends on. If any are retracted, "
                                        "this claim becomes STALE (⑫ cascade).",
                                        "default": None},
+                    "anchor_basis":   {"type": "string",  "description":
+                                       "Positive-control anchor basis, declared at seal time: "
+                                       "'dynamics-measured' | 'structural-argument'. "
+                                       "mm_audit reads it back and runs ㉑ automatically (SPEC amendment A1).",
+                                       "default": None},
+                    "threshold_source": {"type": "string", "description":
+                                       "Pass/kill threshold provenance, declared at seal time: "
+                                       "'external-fixed' | 'observed-distribution'. "
+                                       "mm_audit reads it back and runs ㉒ automatically (SPEC amendment A1).",
+                                       "default": None},
                 },
                 "required": ["ledger_path", "claim_id", "metric"],
             },
@@ -773,6 +783,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 kill_condition=arguments.get("kill_condition"),
                 kill_threshold=arguments.get("kill_threshold"),
                 depends_on=arguments.get("depends_on"),
+                anchor_basis=arguments.get("anchor_basis"),
+                threshold_source=arguments.get("threshold_source"),
             )
             kill_line = ""
             if entry.get("kill_threshold"):

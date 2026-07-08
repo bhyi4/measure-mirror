@@ -47,6 +47,24 @@ def test_traps_match_documented_behaviour(result):
     assert by_id["sc_trap01"] == "FP"  # out of patch scope: scope exact-match
 
 
+def test_grounding_traps_fail_closed(result):
+    """Grounding probes ㉑㉒㉓ are vocab classifiers that fail CLOSED: a clean
+    paraphrase outside the declared vocab false-alarms (disclosed limitation,
+    mm_grounding_probes_selfcal_v1 seal 033ff84b966ca561). If a fix later adds
+    fuzzy/embedding vocab matching, these flip to TN — record it here."""
+    by_id = {t["id"]: t["outcome"] for t in result["trap_detail"]}
+    assert by_id["ab_trap01"] == "FP"  # anchor_basis: paraphrased dynamics basis
+    assert by_id["th_trap01"] == "FP"  # threshold_provenance: paraphrased fixed
+    assert by_id["cd_trap01"] == "FP"  # content_delta: paraphrased content term
+
+
+def test_grounding_core_cases_present(result):
+    """The calibration set actually exercises all three grounding probes in the
+    core bucket (guards against silently dropping the labeled cases)."""
+    core_probes = {r["probe"] for r in result["rows"] if r["bucket"] == "core"}
+    assert {"anchor_basis", "threshold_provenance", "content_delta"} <= core_probes
+
+
 def test_v2_grim_shortcut_is_complete():
     """v2 kill-condition guard: the GRIM 2-candidate shortcut must agree with a
     full brute-force k-sweep on every case (any disagreement = a real bug)."""

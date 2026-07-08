@@ -341,6 +341,29 @@ v1.0은 비준되면 **동결(frozen)**된다: 여기의 규범 문장은 변경
 3. 아무 대소문자로나 쓰인 `genesis` (§5.1).
 4. 이질적인 `kill_threshold`/`payload` 형태 (예약 키 밖은 불투명).
 
+## 11. 개정(Amendments) (§9에 따라 덧붙임; 위의 v1.0 규범 본문은 불변)
+
+### A1 — `preregister` 접지 선언 선택 필드 (2026-07-08)
+
+`preregister` 타입(§7.1)에 **선택(optional)** 생산자 필드 두 개를 추가한다:
+
+- `anchor_basis` (문자열, 선택) — 주장의 양성대조(positive-control) 앵커의 근거.
+  권장 어휘: `"dynamics-measured"` | `"structural-argument"`.
+- `threshold_source` (문자열, 선택) — 통과/킬 문턱의 출처.
+  권장 어휘: `"external-fixed"` | `"observed-distribution"`.
+
+근거: 상호 접지(mutual-grounding) 아크가 봉인한 두 실패 법칙 — 정적 "구조적으로
+보장됨" 논증에 앵커된 양성대조는 기질 자신의 동역학에 의해 반증될 수 있고,
+관측 분포에서 재유도되는 문턱은 자기캘리브레이션(공격자가 끌어내릴 수 있음)이다.
+둘을 봉인 시점에 선언하면 연산을 쓰기 전에 검사 가능해진다; 감사 도구
+(measure-mirror 프로브 ㉑/㉒)가 필드를 되읽어 자동으로 평가한다.
+
+호환성: 비파괴적. 검증기는 이미 알 수 없는 추가 필드를 무시해야 한다(MUST, §7);
+L1/L1+ 의미론은 건드리지 않는다(필드는 다른 엔트리 바이트처럼 봉인된다).
+소비는 감사 계층의 관심사다. 생산자는 두 필드 모두 생략할 수 있다(MAY);
+포맷 수준에서 어휘를 강제하지 않는다(감사 도구는 미인식 값을 fail-closed
+권고로 다룬다).
+
 ---
 
 *참조 구현:* `measure-mirror`(정본 `linkage_check`), `action-mirror`,

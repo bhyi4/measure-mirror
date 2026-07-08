@@ -77,3 +77,30 @@ def test_verify_group_restrict_excludes_grounding():
     data = {"anchor_basis": "structural-argument"}
     findings = verify(led, data, groups=["judge"])
     assert not any(f.probe.startswith("㉑") for f in findings)
+
+
+# preregister → audit round-trip (SPEC amendment A1) ----------------------
+def test_preregister_grounding_fields_flow_to_audit():
+    import os
+    from measure_mirror import preregister, audit
+    led = os.path.join(tempfile.mkdtemp(), "led.jsonl")
+    preregister(led, "c1", metric="acc", min_n=10, baseline=0.5,
+                pass_threshold=0.6, kill_condition="acc < 0.5 on held-out",
+                anchor_basis="structural-argument",
+                threshold_source="observed-distribution")
+    findings = audit(led, "c1", reported_metric="acc", reported_acc=0.9, n=50,
+                     db_dir=tempfile.mkdtemp())
+    by_symbol = {f.probe[:1]: f.level for f in findings}
+    assert by_symbol.get("㉑") == "WARN"
+    assert by_symbol.get("㉒") == "WARN"
+
+
+def test_audit_without_grounding_fields_stays_silent():
+    import os
+    from measure_mirror import preregister, audit
+    led = os.path.join(tempfile.mkdtemp(), "led.jsonl")
+    preregister(led, "c2", metric="acc", min_n=10, baseline=0.5,
+                pass_threshold=0.6, kill_condition="acc < 0.5 on held-out")
+    findings = audit(led, "c2", reported_metric="acc", reported_acc=0.9, n=50,
+                     db_dir=tempfile.mkdtemp())
+    assert not any(f.probe[:1] in {"㉑", "㉒"} for f in findings)
