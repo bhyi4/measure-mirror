@@ -1555,7 +1555,24 @@ def test_verify_ranking_keys(tmp_path):
 def test_groups_registry_covers_all_symbols():
     """Every probe symbol ①–⑳ maps to a group (no orphan probes)."""
     symbols = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩",
-               "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳"]
+               "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳",
+               "㉑", "㉒", "㉓"]
     for s in symbols:
         assert s in mm._SYMBOL_GROUP, f"symbol {s} has no group"
         assert mm._SYMBOL_GROUP[s] in mm.GROUPS
+
+
+# ─── Grounding probes (㉑㉒㉓) — smoke; full behavior in test_grounding_probes ─
+def test_anchor_basis_check_smoke():
+    assert mm.anchor_basis_check("structural-argument").level == "WARN"
+    assert mm.anchor_basis_check("dynamics-measured").level == "OK"
+
+
+def test_threshold_provenance_check_smoke():
+    assert mm.threshold_provenance_check("observed-distribution").level == "WARN"
+    assert mm.threshold_provenance_check("external-fixed").level == "OK"
+
+
+def test_content_delta_check_smoke():
+    assert mm.content_delta_check(["match"]).level == "WARN"
+    assert mm.content_delta_check(["match", "incompressibility"]).level == "OK"

@@ -36,3 +36,34 @@
 {"id":"pw01","probe":"power","label":"defective","bucket":"core","args":{"n":20,"baseline":0.5},"note":"n=20 far below n_required(~782) for mde=0.05 -> underpowered WARN"}
 {"id":"pw02","probe":"power","label":"clean","bucket":"core","args":{"n":1000,"baseline":0.5},"note":"n=1000 >= n_required -> adequately powered"}
 {"id":"pw03","probe":"power","label":"defective","bucket":"core","args":{"n":100,"baseline":0.5},"note":"n=100 below n_required(~782) -> underpowered WARN"}
+{"_doc":"grounding probes ㉑㉒㉓ (mm_grounding_probes_selfcal_v1). Ground truth from mutual-grounding arc sealed laws (M11b ef5fdb20 / M9b c79e541a·M10b eb64d325 / M5 1990c34c), NOT from probe code. Probes are vocab classifiers, fail-closed (unrecognized -> WARN): unknown-vocab defectives land in core (unambiguous ground truth), unknown-vocab CLEAN paraphrases are the disclosed limitation -> trap bucket (expected FP). Numbers from the source experiment are NOT ported; structure only."}
+{"id":"ab01","probe":"anchor_basis","label":"defective","bucket":"core","args":{"anchor_basis":"structural-argument"},"note":"canonical M11b: 'structurally guaranteed' anchor refuted by consumption dynamics"}
+{"id":"ab02","probe":"anchor_basis","label":"defective","bucket":"core","args":{"anchor_basis":"by-construction"},"note":"guarantee-by-construction is a static argument, not a measured anchor"}
+{"id":"ab03","probe":"anchor_basis","label":"defective","bucket":"core","args":{"anchor_basis":"guaranteed"},"note":"bare 'guaranteed' = static structural claim"}
+{"id":"ab04","probe":"anchor_basis","label":"defective","bucket":"core","args":{"anchor_basis":"static"},"note":"declared static basis"}
+{"id":"ab05","probe":"anchor_basis","label":"clean","bucket":"core","args":{"anchor_basis":"dynamics-measured"},"note":"canonical clean: anchor validated by a measured dynamics smoke test"}
+{"id":"ab06","probe":"anchor_basis","label":"clean","bucket":"core","args":{"anchor_basis":"measured"},"note":"measured basis, short form"}
+{"id":"ab07","probe":"anchor_basis","label":"clean","bucket":"core","args":{"anchor_basis":"empirical"},"note":"empirical basis"}
+{"id":"ab08","probe":"anchor_basis","label":"clean","bucket":"core","args":{"anchor_basis":" Dynamics-Measured "},"note":"normalization: case/whitespace must not flip the verdict"}
+{"id":"ab09","probe":"anchor_basis","label":"defective","bucket":"core","args":{"anchor_basis":"assumed-by-design"},"note":"undeclared/unrecognized basis that is NOT measured dynamics -> must flag (fail-closed catches it)"}
+{"id":"ab_trap01","probe":"anchor_basis","label":"clean","bucket":"known_limitation_trap","args":{"anchor_basis":"validated-by-live-run"},"note":"semantically dynamics-measured but outside the declared vocab -> WARN (FP). Disclosed limitation: exact-vocab fail-closed, analog of sc_trap01"}
+{"id":"th01","probe":"threshold_provenance","label":"defective","bucket":"core","args":{"threshold_source":"observed-distribution"},"note":"canonical M9b: threshold re-derived from observed submissions = self-calibrating"}
+{"id":"th02","probe":"threshold_provenance","label":"defective","bucket":"core","args":{"threshold_source":"self-calibrated"},"note":"M10b: even uncontaminable-source self-calibration failed"}
+{"id":"th03","probe":"threshold_provenance","label":"defective","bucket":"core","args":{"threshold_source":"adaptive"},"note":"adaptive threshold = attacker can drag it by flooding"}
+{"id":"th04","probe":"threshold_provenance","label":"defective","bucket":"core","args":{"threshold_source":"data-driven"},"note":"data-driven threshold derives from the observed distribution"}
+{"id":"th05","probe":"threshold_provenance","label":"clean","bucket":"core","args":{"threshold_source":"external-fixed"},"note":"canonical clean: externally fixed"}
+{"id":"th06","probe":"threshold_provenance","label":"clean","bucket":"core","args":{"threshold_source":"preregistered"},"note":"threshold fixed at preregistration time"}
+{"id":"th07","probe":"threshold_provenance","label":"clean","bucket":"core","args":{"threshold_source":"human-fixed"},"note":"human-fixed external threshold"}
+{"id":"th08","probe":"threshold_provenance","label":"clean","bucket":"core","args":{"threshold_source":"FIXED "},"note":"normalization: case/whitespace must not flip the verdict"}
+{"id":"th09","probe":"threshold_provenance","label":"defective","bucket":"core","args":{"threshold_source":"recomputed-each-round"},"note":"unrecognized but unambiguously observation-derived -> must flag (fail-closed catches it)"}
+{"id":"th_trap01","probe":"threshold_provenance","label":"clean","bucket":"known_limitation_trap","args":{"threshold_source":"frozen-at-design-time"},"note":"semantically external-fixed but outside the declared vocab -> WARN (FP). Disclosed limitation: exact-vocab fail-closed"}
+{"id":"cd01","probe":"content_delta","label":"defective","bucket":"core","args":{"judgment_basis":["match"]},"note":"canonical M5: match-only gate is rubber-stamped by near-identity claims"}
+{"id":"cd02","probe":"content_delta","label":"defective","bucket":"core","args":{"judgment_basis":["agreement","consistency"]},"note":"multiple agreement-type terms, still no content check"}
+{"id":"cd03","probe":"content_delta","label":"defective","bucket":"core","args":{"judgment_basis":"accuracy"},"note":"str form, match-type only"}
+{"id":"cd04","probe":"content_delta","label":"defective","bucket":"core","args":{"judgment_basis":["similarity","overlap"]},"note":"similarity/overlap are agreement-type, contentless"}
+{"id":"cd05","probe":"content_delta","label":"clean","bucket":"core","args":{"judgment_basis":["match","incompressibility"]},"note":"canonical clean: match + incompressibility content check"}
+{"id":"cd06","probe":"content_delta","label":"clean","bucket":"core","args":{"judgment_basis":["cxpl"]},"note":"cxpl-type content check alone"}
+{"id":"cd07","probe":"content_delta","label":"clean","bucket":"core","args":{"judgment_basis":["agreement","change-magnitude"]},"note":"agreement + change-magnitude content check"}
+{"id":"cd08","probe":"content_delta","label":"clean","bucket":"core","args":{"judgment_basis":["MATCH"," Content-Delta "]},"note":"normalization: case/whitespace must not flip the verdict"}
+{"id":"cd09","probe":"content_delta","label":"defective","bucket":"core","args":{"judgment_basis":["gut-feeling"]},"note":"unrecognized basis with no content check -> must flag (fail-closed catches it)"}
+{"id":"cd_trap01","probe":"content_delta","label":"clean","bucket":"known_limitation_trap","args":{"judgment_basis":["match","entropy-of-diff"]},"note":"semantically a content-delta check but outside the declared vocab -> WARN as match-only (FP). Disclosed limitation: exact-vocab fail-closed"}

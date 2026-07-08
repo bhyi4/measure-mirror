@@ -13,6 +13,7 @@ from .mm import (
     baseline_fairness, gaming_check, leakage_check, multiseed_check,
     scope_check, too_good_check, power_check, multiple_comparisons_check,
     grim_check, falsifiability_check, cascade_check, negative_audit,
+    anchor_basis_check, threshold_provenance_check, content_delta_check,
     judge_consistency_check, judge_bias_check, inter_rater_agreement,
     judge_score_sanity, judge_swap_check, judge_transitivity_check,
     ranking_stability_check,
@@ -28,10 +29,11 @@ __all__ = [
     "baseline_fairness", "gaming_check", "leakage_check", "multiseed_check",
     "scope_check", "too_good_check", "power_check", "multiple_comparisons_check",
     "grim_check", "falsifiability_check", "cascade_check", "negative_audit",
+    "anchor_basis_check", "threshold_provenance_check", "content_delta_check",
     "judge_consistency_check", "judge_bias_check", "inter_rater_agreement",
     "judge_score_sanity", "judge_swap_check", "judge_transitivity_check",
     "ranking_stability_check",
     "wilson_ci", "lookup_baseline", "lookup_reproduction", "record_reproduction",
     "catch_history", "report", "Finding",
 ]
-__version__ = "0.23.0"
+__version__ = "0.24.0"

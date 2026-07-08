@@ -54,6 +54,9 @@ def probe_level(probe, a):
     if probe == "scope":            return mm.scope_check(a["claimed_scope"], a["tested_scope"]).level
     if probe == "too_good":         return mm.too_good_check("case", a["claimed"], a["baseline"]).level
     if probe == "power":            return mm.power_check(a["n"], a["baseline"]).level
+    if probe == "anchor_basis":     return mm.anchor_basis_check(a["anchor_basis"]).level
+    if probe == "threshold_provenance": return mm.threshold_provenance_check(a["threshold_source"]).level
+    if probe == "content_delta":    return mm.content_delta_check(a["judgment_basis"]).level
     raise ValueError(f"unknown probe {probe}")
 
 

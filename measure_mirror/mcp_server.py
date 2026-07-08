@@ -67,6 +67,16 @@ async def list_tools() -> list[types.Tool]:
                                        "Claim IDs this claim depends on. If any are retracted, "
                                        "this claim becomes STALE (⑫ cascade).",
                                        "default": None},
+                    "anchor_basis":   {"type": "string",  "description":
+                                       "Positive-control anchor basis, declared at seal time: "
+                                       "'dynamics-measured' | 'structural-argument'. "
+                                       "mm_audit reads it back and runs ㉑ automatically (SPEC amendment A1).",
+                                       "default": None},
+                    "threshold_source": {"type": "string", "description":
+                                       "Pass/kill threshold provenance, declared at seal time: "
+                                       "'external-fixed' | 'observed-distribution'. "
+                                       "mm_audit reads it back and runs ㉒ automatically (SPEC amendment A1).",
+                                       "default": None},
                 },
                 "required": ["ledger_path", "claim_id", "metric"],
             },
@@ -320,6 +330,42 @@ async def list_tools() -> list[types.Tool]:
                     "tested_scope":  {"type": "array", "items": {"type": "string"}},
                 },
                 "required": ["claimed_scope", "tested_scope"],
+            },
+        ),
+        types.Tool(
+            name="mm_anchor_basis_check",
+            description="㉑ PC anchor must rest on measured dynamics, not a static 'structurally guaranteed' argument (grounding: M11b).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "anchor_basis": {"type": "string",
+                                     "description": "'dynamics-measured' or 'structural-argument'"},
+                },
+                "required": ["anchor_basis"],
+            },
+        ),
+        types.Tool(
+            name="mm_threshold_provenance_check",
+            description="㉒ Pass/kill threshold must be externally fixed, not re-derived from the observed distribution (grounding: M9b/M10b).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "threshold_source": {"type": "string",
+                                         "description": "'external-fixed' or 'observed-distribution'"},
+                },
+                "required": ["threshold_source"],
+            },
+        ),
+        types.Tool(
+            name="mm_content_delta_check",
+            description="㉓ Judgment on agreement/match alone is rubber-stampable by near-identity claims — needs a content-delta check (grounding: M5).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "judgment_basis": {"type": "array", "items": {"type": "string"},
+                                       "description": "judgment bases, e.g. ['match'] or ['match','incompressibility']"},
+                },
+                "required": ["judgment_basis"],
             },
         ),
         types.Tool(
@@ -737,6 +783,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 kill_condition=arguments.get("kill_condition"),
                 kill_threshold=arguments.get("kill_threshold"),
                 depends_on=arguments.get("depends_on"),
+                anchor_basis=arguments.get("anchor_basis"),
+                threshold_source=arguments.get("threshold_source"),
             )
             kill_line = ""
             if entry.get("kill_threshold"):
@@ -878,6 +926,15 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 arguments["claimed_scope"],
                 arguments["tested_scope"],
             ))
+
+        elif name == "mm_anchor_basis_check":
+            result = _single(mm.anchor_basis_check(arguments["anchor_basis"]))
+
+        elif name == "mm_threshold_provenance_check":
+            result = _single(mm.threshold_provenance_check(arguments["threshold_source"]))
+
+        elif name == "mm_content_delta_check":
+            result = _single(mm.content_delta_check(arguments["judgment_basis"]))
 
         elif name == "mm_too_good_check":
             result = _single(mm.too_good_check(

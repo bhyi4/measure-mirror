@@ -55,3 +55,45 @@ sealed, core stayed 0/0, no pre-existing test regression):
 
 Honest partial fix: lexical near-dups closed, semantic paraphrase explicitly
 left to a future embedding-based pass rather than papered over.
+
+## Update — grounding probes ㉑㉒㉓ calibrated (mm_grounding_probes_selfcal_v1)
+
+The three grounding probes (`anchor_basis_check`, `threshold_provenance_check`,
+`content_delta_check` — mutual-grounding arc sealed defense laws, see
+`docs/GROUNDING_PROBES_DESIGN.md`) got their own labeled set, extending this
+eval. This is the qualification gate the design doc requires before reports may
+say "mm flagged" for these probes.
+
+### Provenance (sealed before running)
+- Pre-registration seal: `033ff84b966ca561` (ledger `mm_self_eval.jsonl`);
+  kill = core FN rate **or** core FP rate > 0.10.
+- `cases.jsonl` sha256: `1f3595fa40515b7222303aa8bb38909f2b7266a8cf6729aea05be63517dbbd7b`
+- `run_eval.py` sha256: `3edcaa6a9716f152fd20c0acf64a2680195091645f765124743aabcc0100b579`
+- Result seal: `a3b1af02f833d668` (am ledger `seara.jsonl`, target=claim).
+
+### Core (27 grounding cases; ground truth from the sealed laws, not probe code)
+| | value |
+|---|---|
+| TP / FN | 15 / **0** |
+| TN / FP | 12 / **0** |
+| kill (either rate > 0.10) | **NOT triggered** |
+| whole-suite core after extension | 60 cases, still 0 FN / 0 FP (no regression) |
+
+### Known-limitation traps (3, pre-registered, EXCLUDED from core rate)
+The probes are vocab classifiers and **fail closed** (unrecognized → WARN).
+That direction is asymmetric by design: unknown-vocab *defectives* still get
+flagged (ab09/th09/cd09 are core TPs), but unknown-vocab *clean paraphrases*
+false-alarm — the disclosed limitation, analog of `sc_trap01`:
+
+| id | probe | clean paraphrase outside vocab | outcome |
+|---|---|---|---|
+| ab_trap01 | anchor_basis | "validated-by-live-run" | **FP** (as designed) |
+| th_trap01 | threshold_provenance | "frozen-at-design-time" | **FP** (as designed) |
+| cd_trap01 | content_delta | ["match","entropy-of-diff"] | **FP** (as designed) |
+
+### Scope / honesty
+- Same caveats as v1: hand-built calibration by an author who knew the probe
+  logic → **not field FP/FN**; n=27 with 0 errors still leaves a rule-of-three
+  ~11% upper bound → smoke test for gross miscalibration.
+- Source-experiment numbers (ε/T*/N) were **not ported** into the probes or the
+  cases — structure only (micro-substrate analogy scope).
