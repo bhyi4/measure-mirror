@@ -1,0 +1,9 @@
+# provenance-not-in-the-value — 값이 데이터 통계와 일치한다고 "데이터에서 유도됐다"고 판정
+
+> Reading a threshold's *provenance* off its *value*: because an honest convention and a data-derived number can be the identical number, no function of the value alone can tell them apart.
+
+- **증상(시그니처)**: `pass_threshold`·`baseline` 같은 봉인된 스칼라가 평가 데이터의 통계(평균·중앙값·분위수)와 일치하는 것을 보고 "이 문턱은 데이터를 보고 정했다(자기참조 캘리브·double-dipping)"고 코드로 판정하려는 충동. 값 하나로 출처를 역추론하려 함.
+- **기전**: 판별하려는 비트 — "이 값이 *이 데이터의 함수*인가" — 는 값을 만든 **생성 과정(process)의 속성**이지 값 자체에 없다. 봉인된 스칼라는 many-to-one collapse라 그 비트를 버린다. 정직-우연 세계(관례로 0.95를 골랐는데 데이터 p95도 우연히 0.95)와 부정직-유도 세계(데이터 p95=0.95를 읽어 0.95로 설정)는 탐지기 `D(값, 데이터)`에 **같은 바이트를 입력**한다 → 같은 출력 → 두 세계를 가르는 ROC = 우연(chance) by construction. 게이밍도 비대칭: 정직한 자는 우연 일치를 숨길 수 없어 FP가 높게 고정되고, 부정직한 자는 `0.5473→0.55` 반올림이나 held-out 슬라이스 유도로 흔적을 지워 TP→0. FP ≥ TP.
+- **실사례**: 여울 `threshold-provenance-detect` 아크(2026-07-09) — measure-mirror에 "임계값이 데이터 유도됐는지 실측 탐지"하는 프로브 A(㉖)를 넣으려다, NACC 3역할(분석·구현·재현)×2라운드 교차검증이 위 collapse로 **KILL 수렴**. 결정 케이스: 정직한 신뢰수준 관례 `0.95`가 데이터 p95와 일치(clean)하는데, 데이터에서 p95=0.95를 읽어 설정한 것(defective)과 **완전히 같은 0.95** → 값 계층 분리 불가. 구현 역할은 자기 라운드1 "실측 프로브 GO"를 절반 철회("disclosure ≠ detection"). 출처: yeoul arc `20260709_145857_threshold-provenance-detect`(설계/arcs/_archive), nacc-close am seal `1c6a66a26fae506f`(content-hash `5baa90f61faa05c3`).
+- **탐지법**: provenance는 **값이 아니라 순서/봉인**으로 잡는다. ㉒ `threshold_provenance_check`(선언 검사) + 해시 체인(threshold가 결과보다 먼저 봉인됐는지 = `verify_chain`/pre-registration). 값 계층 실측이 정말 필요하면 유일한 결정적 길은 **데이터 도착 이벤트를 봉인**(평가셋 해시를 수집 시점에 원장에 넣어 threshold-vs-data 순서를 증명 가능하게) — primitive 1개 신설이지 값 기반 탐지기가 아니다.
+- **오적용 주의**: 뒤집으면 "값이 데이터 통계와 일치 = 항상 무해"도 착시다. 관측 분포에서 문턱을 **재유도**하는 자기참조 캘리브는 실제 공격이다(자기참조 임계값은 공격자가 저품질 제출로 끌어내릴 수 있음 — mutual-grounding M9b). 다만 그건 **선언(㉒)·순서·외부 고정 기준**으로 방어하지, "값이 통계와 같다"로 유죄 판정하는 게 아니다. 그리고 `baseline 0.5 = 이진 chance = 균형 데이터 평균`처럼 canonical한 값(선언된 chance·`1/k`)의 일치는 정당한 우연이니 억제해야 한다.
