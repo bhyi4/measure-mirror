@@ -364,6 +364,29 @@ other entry bytes). Consumption is an audit-layer concern. Producers MAY omit
 both fields; no vocabulary is enforced at the format level (audit tooling
 treats unrecognized values as fail-closed advisories).
 
+### A2 — optional `preregister` anchor-discipline + confound fields (2026-07-09)
+
+Adds three more **optional** producer fields to the `preregister` type (§7.1):
+
+- `anchor_cell` (string, opt) — placement of the positive-control anchor cell.
+  Recommended vocabulary: `"deep-regime"` | `"threshold-cell"`.
+- `anchor_line_source` (string, opt) — source of the anchor line.
+  Recommended vocabulary: `"separator-aligned"` | `"copied-from-other-cell"`.
+- `known_confounds` (array of strings, opt) — confounds declared BEFORE results.
+
+Rationale: `anchor_cell` and `anchor_line_source` complete the anchor-discipline
+trio with A1's `anchor_basis` — the three sealed `anchor-reproduction-failure`
+subtypes (an anchor line copied from another cell, an anchor cell sitting on the
+threshold, and a static structural guarantee all fail to reproduce). Audit
+tooling (probes ㉔/㉕) evaluates the first two automatically. `known_confounds`
+records confounds pre-declared before results — a pre-declared confound
+legitimizes later attribution cycles, whereas one found post-hoc does not; audit
+surfaces it as an INFO (a declaration, not a verdict).
+
+Compatibility: identical to A1 — non-breaking, verifiers ignore unknown fields
+(§7), L1/L1+ untouched, consumption is audit-layer, producers MAY omit, no
+format-level vocabulary enforcement.
+
 ---
 
 *Reference implementations:* `measure-mirror` (canonical `linkage_check`),

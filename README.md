@@ -15,7 +15,7 @@ Zero training · Deterministic · Zero-dep core (Python 3.10+ stdlib; `judge` mo
 > Built while honestly killing our own project.  
 > The makers ran it on themselves first. → [🦋 Origin Story](docs/CHRONICLE.md)
 
-**[📖 Full Probe Guide →](docs/GUIDE.md)** — detailed explanations, worked examples, and workflows for all 23 probes
+**[📖 Full Probe Guide →](docs/GUIDE.md)** — detailed explanations, worked examples, and workflows for all 25 probes
 **[📜 MIRROR-SPEC v1.0 →](docs/SPEC.md)** — the normative ledger format & verification protocol (ratified & frozen 2026-07-02; this package is its reference implementation)
 **[🦋 Catalog of Measurement Illusions →](catalog/README.md)** — 38 real sealed cases of measurement deceiving its own authors (gaming · self-catch · false-negative guards · contamination)
 
@@ -170,7 +170,7 @@ def test_my_model_is_real():
 
 ## Three Verification Tiers
 
-You don't need to memorize 23 probes — there are exactly three ways to use the mirror:
+You don't need to memorize 25 probes — there are exactly three ways to use the mirror:
 
 ```bash
 # FULL — one shot, everything applicable runs automatically
@@ -235,10 +235,12 @@ extra keys fire extra probes. The `data` keys are identical to the JSON file for
 | `anchor_basis_check` | ㉑ | Positive-control anchor rests on a static "structurally guaranteed" argument instead of measured dynamics |
 | `threshold_provenance_check` | ㉒ | Pass/kill threshold re-derived from the observed distribution (self-calibrating) instead of externally fixed |
 | `content_delta_check` | ㉓ | Judgment on agreement/match alone (rubber-stampable) without a content-delta check |
+| `anchor_line_source_check` | ㉔ | Positive-control anchor **line** copied from a stronger/other cell instead of aligned to this cell's sealed separatrix |
+| `anchor_cell_check` | ㉕ | Positive-control anchor **cell** sits on the threshold/boundary (straddles it seed-to-seed) instead of a deep regime |
 
-> ㉑㉒㉓ are **grounding probes** — the mutual-grounding arc's sealed defense laws (anchors need measured dynamics · thresholds externally fixed · judgment needs a content check). Analogy from a micro-substrate experiment; structure only. See `docs/GROUNDING_PROBES_DESIGN.md`.
+> ㉑–㉕ are **grounding probes** — the mutual-grounding arc's sealed defense laws (anchors need measured dynamics · thresholds externally fixed · judgment needs a content check · anchor line aligned to this cell · anchor cell in a deep regime). ㉔㉕ are the other two anchor-reproduction-failure subtypes (catalog: 3 real cases), completing the anchor-discipline trio with ㉑. Analogy from a micro-substrate experiment; structure only. See `docs/GROUNDING_PROBES_DESIGN.md`.
 >
-> ㉑㉒ can also be **declared at seal time**: `preregister(..., anchor_basis="dynamics-measured", threshold_source="external-fixed")` stores the declarations in the sealed entry and `audit()` runs the probes on them automatically (SPEC amendment A1). ㉓ stays on the `verify(data)` path (`judgment_basis` describes the analysis, not the preregistration). Calibrated: FP/FN labeled set in `eval/self_fpfn/` (grounding core 27/27, 0 FN / 0 FP; disclosed fail-closed vocab limitation → see `eval/self_fpfn/RESULTS.md`).
+> ㉑㉒㉔㉕ can also be **declared at seal time**: `preregister(..., anchor_basis="dynamics-measured", threshold_source="external-fixed", anchor_cell="deep-regime", anchor_line_source="separator-aligned", known_confounds=[...])` stores the declarations in the sealed entry and `audit()` runs the probes on them automatically (㉑㉒ = SPEC amendment A1; ㉔㉕ + `known_confounds` INFO = A2). ㉓ stays on the `verify(data)` path (`judgment_basis` describes the analysis, not the preregistration). Calibrated: FP/FN labeled set in `eval/self_fpfn/` (grounding core 0 FN / 0 FP; disclosed fail-closed vocab limitation → see `eval/self_fpfn/RESULTS.md`).
 
 ### `negative` — Resolved-Negative closure gate
 
@@ -676,7 +678,7 @@ pip install "measure-mirror[mcp]"
 
 **Other MCP clients** — run `mm-mcp` as the stdio server command.
 
-All 23 probes + 6 utilities + the `mm_verify` umbrella are exposed as MCP tools:  
+All 25 probes + 6 utilities + the `mm_verify` umbrella are exposed as MCP tools:  
 `mm_verify` (full / group-filtered) ·  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·

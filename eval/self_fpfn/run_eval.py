@@ -57,6 +57,8 @@ def probe_level(probe, a):
     if probe == "anchor_basis":     return mm.anchor_basis_check(a["anchor_basis"]).level
     if probe == "threshold_provenance": return mm.threshold_provenance_check(a["threshold_source"]).level
     if probe == "content_delta":    return mm.content_delta_check(a["judgment_basis"]).level
+    if probe == "anchor_line_source": return mm.anchor_line_source_check(a["anchor_line_source"]).level
+    if probe == "anchor_cell":      return mm.anchor_cell_check(a["anchor_cell"]).level
     raise ValueError(f"unknown probe {probe}")
 
 

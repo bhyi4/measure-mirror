@@ -96,7 +96,10 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
                 metric_range: list | str | None = None,
                 chance: float | None = None,
                 anchor_basis: str | None = None,
-                threshold_source: str | None = None) -> dict:
+                threshold_source: str | None = None,
+                anchor_cell: str | None = None,
+                anchor_line_source: str | None = None,
+                known_confounds: list[str] | None = None) -> dict:
     """Seal evaluation criteria BEFORE seeing results.
 
     Each entry is cryptographically linked to the previous one (chain hash).
@@ -119,6 +122,14 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
         threshold's provenance ("external-fixed" | "observed-distribution")
         at seal time; audit() reads them back and runs the ㉑/㉒ grounding
         probes automatically.
+    anchor_cell / anchor_line_source / known_confounds: optional grounding
+        declarations (SPEC amendment A2). anchor_cell ("deep-regime" |
+        "threshold-cell") and anchor_line_source ("separator-aligned" |
+        "copied-from-other-cell") complete the anchor-discipline trio with
+        anchor_basis; audit() reads them back and runs ㉔/㉕. known_confounds
+        (list of strings) records confounds declared BEFORE results — a
+        pre-declared confound legitimizes later attribution cycles; audit()
+        surfaces them as an INFO finding (declaration, not a verdict).
 
     Chain link: deleting or inserting entries breaks the chain and is
     detected by verify_chain(). Complete ledger replacement is NOT caught
@@ -170,6 +181,12 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
         entry["anchor_basis"] = anchor_basis
     if threshold_source is not None:
         entry["threshold_source"] = threshold_source
+    if anchor_cell is not None:
+        entry["anchor_cell"] = anchor_cell
+    if anchor_line_source is not None:
+        entry["anchor_line_source"] = anchor_line_source
+    if known_confounds:
+        entry["known_confounds"] = list(known_confounds)
     entry["seal"] = hashlib.sha256(
         json.dumps(entry, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()[:16]
@@ -926,6 +943,77 @@ def content_delta_check(judgment_basis) -> Finding:
     return Finding("㉓ content-delta", "WARN",
                    f"Unrecognized judgment_basis {judgment_basis!r} — declare "
                    "match-type and/or content-delta terms.")
+
+
+# ㉔㉕ Anchor-discipline probes — the other two anchor-reproduction-failure
+# subtypes (㉑ already covers 'measured dynamics, not static guarantee').
+# Catalog: catalog/fn-guard/anchor-reproduction-failure.md (3 real cases).
+# Analogy from a micro-substrate experiment; STRUCTURE only, no ported numbers.
+_ANCHOR_LINE_ALIGNED = {"separator-aligned", "sealed-separator", "aligned",
+                        "sealed"}
+_ANCHOR_LINE_COPIED = {"copied-from-strong", "copied-from-other-cell", "copied",
+                       "borrowed"}
+
+
+def anchor_line_source_check(anchor_line_source: str) -> Finding:
+    """㉔ A positive-control anchor LINE must be aligned with the sealed
+    separatrix of THIS cell, not copied from a stronger/other cell.
+
+    Grounds: anchor-reproduction-failure 'anchor-line copy' subtype (M7b, am
+    seal 50537aa6) — a PC1 anchor line 0.6 copied from a strong-pathology cell
+    (SOLO8 bg~0.97) onto a mild cell (MUT8, prior 0.61~0.68) made a fresh-seed
+    median 0.593 (inside the collapse zone) read as anchor failure, blocking the
+    whole grid. The anchor line must be set to match the sealed separatrix.
+    Scope: micro-substrate analogy — structure only, no ported numbers.
+    """
+    src = str(anchor_line_source).strip().lower()
+    if src in _ANCHOR_LINE_ALIGNED:
+        return Finding("㉔ anchor-line", "OK",
+                       "Anchor line is aligned with this cell's sealed separatrix.")
+    if src in _ANCHOR_LINE_COPIED:
+        return Finding("㉔ anchor-line", "WARN",
+                       "Anchor line copied from a stronger/other cell — a line "
+                       "fit to a strong-pathology cell misjudges a mild cell "
+                       "(fresh-seed median inside the collapse zone read as "
+                       "anchor failure, blocking the grid). Align the anchor line "
+                       "to THIS cell's sealed separatrix (illusion: "
+                       "anchor-reproduction-failure, anchor-line-copy subtype).")
+    return Finding("㉔ anchor-line", "WARN",
+                   f"Unrecognized anchor_line_source {anchor_line_source!r} — "
+                   "declare 'separator-aligned' or 'copied-from-other-cell'.")
+
+
+_ANCHOR_CELL_DEEP = {"deep-regime", "deep", "interior"}
+_ANCHOR_CELL_EDGE = {"threshold-cell", "boundary-cell", "threshold", "boundary",
+                     "edge"}
+
+
+def anchor_cell_check(anchor_cell: str) -> Finding:
+    """㉕ A positive-control anchor CELL must sit in a deep regime, away from the
+    threshold — a cell sitting on the threshold itself straddles the boundary
+    seed-to-seed and cannot reproduce stably.
+
+    Grounds: anchor-reproduction-failure 'threshold-cell' subtype (M8, am seal
+    4a839158) — even with a separatrix-aligned line, a PC cell placed at the
+    grounding threshold itself (N2T16, T*=16) crossed the boundary per seed
+    group (bg 0.37→0.46→0.53) and failed to reproduce. A separatrix-aligned
+    line is not enough; the anchor cell must be a deep-regime cell.
+    Scope: micro-substrate analogy — structure only, no ported numbers.
+    """
+    cell = str(anchor_cell).strip().lower()
+    if cell in _ANCHOR_CELL_DEEP:
+        return Finding("㉕ anchor-cell", "OK",
+                       "Anchor cell sits in a deep regime, away from the threshold.")
+    if cell in _ANCHOR_CELL_EDGE:
+        return Finding("㉕ anchor-cell", "WARN",
+                       "Anchor cell sits on the threshold/boundary — it straddles "
+                       "the boundary seed-to-seed and cannot reproduce stably "
+                       "(even with a separatrix-aligned line). Move the anchor to "
+                       "a deep-regime cell (illusion: anchor-reproduction-failure, "
+                       "threshold-cell subtype).")
+    return Finding("㉕ anchor-cell", "WARN",
+                   f"Unrecognized anchor_cell {anchor_cell!r} — declare "
+                   "'deep-regime' or 'threshold-cell'.")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1915,6 +2003,17 @@ def audit(ledger_path: str, claim_id: str, *,
                 findings.append(anchor_basis_check(pre["anchor_basis"]))
             if "threshold_source" in pre:
                 findings.append(threshold_provenance_check(pre["threshold_source"]))
+            # ㉔㉕ anchor-discipline + known_confounds (SPEC amendment A2).
+            if "anchor_line_source" in pre:
+                findings.append(anchor_line_source_check(pre["anchor_line_source"]))
+            if "anchor_cell" in pre:
+                findings.append(anchor_cell_check(pre["anchor_cell"]))
+            if pre.get("known_confounds"):
+                findings.append(Finding("㉖ known-confounds", "INFO",
+                    f"{len(pre['known_confounds'])} confound(s) declared before "
+                    f"results: {pre['known_confounds']}. A pre-declared confound "
+                    "legitimizes later attribution cycles; an undeclared one found "
+                    "post-hoc does not."))
 
     # ⑫ cascade — retraction check (runs regardless of pre-registration)
     casc = cascade_check(ledger_path, claim_id)
@@ -2051,7 +2150,8 @@ GROUPS: dict[str, list[str]] = {
     "design":   ["baseline_fairness", "gaming_check", "leakage_check",
                  "scope_check", "falsifiability_check",
                  "anchor_basis_check", "threshold_provenance_check",
-                 "content_delta_check"],
+                 "content_delta_check", "anchor_line_source_check",
+                 "anchor_cell_check"],
     "negative": ["negative_audit"],
     "judge":    ["judge_consistency_check", "judge_bias_check",
                  "inter_rater_agreement", "judge_score_sanity",
@@ -2066,6 +2166,7 @@ _SYMBOL_GROUP = {
     "⑨": "stats", "⑩": "stats",
     "②": "design", "③": "design", "⑥": "design", "⑪": "design",
     "㉑": "design", "㉒": "design", "㉓": "design",
+    "㉔": "design", "㉕": "design", "㉖": "design",
     "⑬": "negative",
     "⑭": "judge", "⑮": "judge", "⑯": "judge", "⑰": "judge", "⑱": "judge",
     "⑲": "ranking", "⑳": "ranking",
@@ -2098,6 +2199,8 @@ def verify(ledger_path: str, data: dict, *,
       anchor_basis                                → ㉑ anchor basis
       threshold_source                            → ㉒ threshold provenance
       judgment_basis                              → ㉓ content delta
+      anchor_line_source                          → ㉔ anchor line
+      anchor_cell                                 → ㉕ anchor cell
       min_detectable_effect                       → ⑧ power
       check_multiplicity (bool)                   → ⑨ multiple comparisons
       angles [, min_angles, conclusion_scope]     → ⑬ negative audit
@@ -2166,6 +2269,10 @@ def verify(ledger_path: str, data: dict, *,
             findings.append(threshold_provenance_check(data["threshold_source"]))
         if data.get("judgment_basis") is not None:
             findings.append(content_delta_check(data["judgment_basis"]))
+        if data.get("anchor_line_source") is not None:
+            findings.append(anchor_line_source_check(data["anchor_line_source"]))
+        if data.get("anchor_cell") is not None:
+            findings.append(anchor_cell_check(data["anchor_cell"]))
 
     # Judge group
     if "judge" in wanted:

@@ -5,6 +5,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.25.0] — 2026-07-09
+
+Anchor-discipline probes — completing the anchor trio, calibrated before use.
+
+### Added
+- **Anchor-discipline probes ㉔㉕** (`design` group; design doc
+  `docs/GROUNDING_PROBES_DESIGN.md`) — the other two
+  `anchor-reproduction-failure` catalog subtypes, completing the trio with ㉑:
+  - `anchor_line_source_check` (㉔) — a positive-control anchor **line** copied
+    from a stronger/other cell instead of aligned to this cell's sealed
+    separatrix (grounds: M7b anchor-line-copy).
+  - `anchor_cell_check` (㉕) — a positive-control anchor **cell** sitting on the
+    threshold/boundary (straddles it seed-to-seed) instead of a deep regime
+    (grounds: M8 threshold-cell).
+
+  Structure only — no numbers ported. Vocab classifiers, fail-closed
+  (unrecognized → WARN). Wired into `verify(data)` via `anchor_line_source` /
+  `anchor_cell` keys and exposed as MCP tools.
+- **Self FP/FN calibration for ㉔㉕** (`eval/self_fpfn/`): 14 core labeled
+  cases (ground truth from the catalog subtypes, not probe code) + 2 disclosed
+  fail-closed vocab traps. Core 0 FN / 0 FP (whole suite core: 74, still 0/0);
+  traps fired as pre-registered. Sealed before running — the "mm flagged"
+  qualification gate for these probes.
+- **SPEC amendment A2** (§11, visible append — v1.0 normative text unchanged):
+  optional `preregister` fields `anchor_cell`, `anchor_line_source`, and
+  `known_confounds`. `preregister()` seals them; `audit()` auto-runs ㉔/㉕ and
+  surfaces `known_confounds` as an INFO (a pre-declared confound legitimizes
+  later attribution cycles); `mm_register` (MCP) exposes all three.
+
+---
+
 ## [0.24.0] — 2026-07-08
 
 Grounding probes: the mutual-grounding arc's sealed defense laws land as

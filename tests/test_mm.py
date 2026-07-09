@@ -1576,3 +1576,13 @@ def test_threshold_provenance_check_smoke():
 def test_content_delta_check_smoke():
     assert mm.content_delta_check(["match"]).level == "WARN"
     assert mm.content_delta_check(["match", "incompressibility"]).level == "OK"
+
+
+def test_anchor_line_source_check_smoke():
+    assert mm.anchor_line_source_check("copied-from-other-cell").level == "WARN"
+    assert mm.anchor_line_source_check("separator-aligned").level == "OK"
+
+
+def test_anchor_cell_check_smoke():
+    assert mm.anchor_cell_check("threshold-cell").level == "WARN"
+    assert mm.anchor_cell_check("deep-regime").level == "OK"
