@@ -97,3 +97,36 @@ false-alarm — the disclosed limitation, analog of `sc_trap01`:
   ~11% upper bound → smoke test for gross miscalibration.
 - Source-experiment numbers (ε/T*/N) were **not ported** into the probes or the
   cases — structure only (micro-substrate analogy scope).
+
+## Update — anchor-discipline probes ㉔㉕ calibrated (mm_a2_anchor_probes_selfcal_v1)
+
+SPEC amendment A2 adds the other two `anchor-reproduction-failure` subtypes
+(`anchor_line_source_check` ㉔ = M7b anchor-line-copy; `anchor_cell_check` ㉕ =
+M8 threshold-cell), completing the anchor-discipline trio with ㉑. Same
+qualification gate.
+
+### Provenance (sealed before running)
+- Pre-registration seal: `c4684d9f485cd0f5`; kill = core FN **or** FP rate > 0.10.
+- `cases.jsonl` sha256: `24ce855a58e87d3012cc0dd7f1620c1b43efd87b167d0f59cbbd809c5469bf0f`
+- Result seal: `9254145ee260df09` (am ledger `seara.jsonl`, target=claim).
+
+### Core (14 anchor-discipline cases; ground truth from the catalog subtypes)
+| | value |
+|---|---|
+| TP / FN | 8 / **0** |
+| TN / FP | 6 / **0** |
+| kill (either rate > 0.10) | **NOT triggered** |
+| whole-suite core after extension | 74 cases, still 0 FN / 0 FP (no regression) |
+
+### Known-limitation traps (2, pre-registered, EXCLUDED from core rate)
+Same fail-closed vocab limitation as the A1 grounding probes:
+
+| id | probe | clean paraphrase outside vocab | outcome |
+|---|---|---|---|
+| al_trap01 | anchor_line_source | "fit-to-this-cell" | **FP** (as designed) |
+| ac_trap01 | anchor_cell | "far-from-boundary" | **FP** (as designed) |
+
+### Scope / honesty
+- Same caveats: hand-built calibration → **not field FP/FN**; n=14 with 0
+  errors leaves a rule-of-three ~19% upper bound → smoke test only.
+- Source-experiment numbers **not ported** — structure only.

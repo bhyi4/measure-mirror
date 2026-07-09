@@ -77,6 +77,20 @@ async def list_tools() -> list[types.Tool]:
                                        "'external-fixed' | 'observed-distribution'. "
                                        "mm_audit reads it back and runs ㉒ automatically (SPEC amendment A1).",
                                        "default": None},
+                    "anchor_cell":    {"type": "string",  "description":
+                                       "PC anchor cell placement: 'deep-regime' | 'threshold-cell'. "
+                                       "mm_audit runs ㉕ automatically (SPEC amendment A2).",
+                                       "default": None},
+                    "anchor_line_source": {"type": "string", "description":
+                                       "PC anchor line source: 'separator-aligned' | 'copied-from-other-cell'. "
+                                       "mm_audit runs ㉔ automatically (SPEC amendment A2).",
+                                       "default": None},
+                    "known_confounds": {"type": "array", "items": {"type": "string"},
+                                       "description":
+                                       "Confounds declared BEFORE results — a pre-declared confound "
+                                       "legitimizes later attribution cycles; audit surfaces them as INFO "
+                                       "(SPEC amendment A2).",
+                                       "default": None},
                 },
                 "required": ["ledger_path", "claim_id", "metric"],
             },
@@ -366,6 +380,30 @@ async def list_tools() -> list[types.Tool]:
                                        "description": "judgment bases, e.g. ['match'] or ['match','incompressibility']"},
                 },
                 "required": ["judgment_basis"],
+            },
+        ),
+        types.Tool(
+            name="mm_anchor_line_source_check",
+            description="㉔ PC anchor LINE must be aligned with this cell's sealed separatrix, not copied from a stronger/other cell (grounding: M7b anchor-line-copy).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "anchor_line_source": {"type": "string",
+                                           "description": "'separator-aligned' or 'copied-from-other-cell'"},
+                },
+                "required": ["anchor_line_source"],
+            },
+        ),
+        types.Tool(
+            name="mm_anchor_cell_check",
+            description="㉕ PC anchor CELL must sit in a deep regime, away from the threshold — a threshold cell straddles the boundary seed-to-seed (grounding: M8 threshold-cell).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "anchor_cell": {"type": "string",
+                                    "description": "'deep-regime' or 'threshold-cell'"},
+                },
+                "required": ["anchor_cell"],
             },
         ),
         types.Tool(
@@ -785,6 +823,9 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 depends_on=arguments.get("depends_on"),
                 anchor_basis=arguments.get("anchor_basis"),
                 threshold_source=arguments.get("threshold_source"),
+                anchor_cell=arguments.get("anchor_cell"),
+                anchor_line_source=arguments.get("anchor_line_source"),
+                known_confounds=arguments.get("known_confounds"),
             )
             kill_line = ""
             if entry.get("kill_threshold"):
@@ -935,6 +976,12 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
         elif name == "mm_content_delta_check":
             result = _single(mm.content_delta_check(arguments["judgment_basis"]))
+
+        elif name == "mm_anchor_line_source_check":
+            result = _single(mm.anchor_line_source_check(arguments["anchor_line_source"]))
+
+        elif name == "mm_anchor_cell_check":
+            result = _single(mm.anchor_cell_check(arguments["anchor_cell"]))
 
         elif name == "mm_too_good_check":
             result = _single(mm.too_good_check(

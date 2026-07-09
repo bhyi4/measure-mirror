@@ -67,3 +67,20 @@
 {"id":"cd08","probe":"content_delta","label":"clean","bucket":"core","args":{"judgment_basis":["MATCH"," Content-Delta "]},"note":"normalization: case/whitespace must not flip the verdict"}
 {"id":"cd09","probe":"content_delta","label":"defective","bucket":"core","args":{"judgment_basis":["gut-feeling"]},"note":"unrecognized basis with no content check -> must flag (fail-closed catches it)"}
 {"id":"cd_trap01","probe":"content_delta","label":"clean","bucket":"known_limitation_trap","args":{"judgment_basis":["match","entropy-of-diff"]},"note":"semantically a content-delta check but outside the declared vocab -> WARN as match-only (FP). Disclosed limitation: exact-vocab fail-closed"}
+{"_doc":"anchor-discipline probes ㉔㉕ (mm_a2_anchor_probes_selfcal_v1). Ground truth from catalog anchor-reproduction-failure subtypes (M7b 50537aa6 anchor-line-copy / M8 4a839158 threshold-cell), NOT probe code. Vocab classifiers, fail-closed (unrecognized→WARN): unknown-vocab defectives land in core (unambiguous), unknown-vocab CLEAN paraphrases are the disclosed limitation→trap (expected FP). Source-experiment numbers NOT ported; structure only."}
+{"id":"al01","probe":"anchor_line_source","label":"defective","bucket":"core","args":{"anchor_line_source":"copied-from-other-cell"},"note":"canonical M7b: anchor line copied from another cell"}
+{"id":"al02","probe":"anchor_line_source","label":"defective","bucket":"core","args":{"anchor_line_source":"copied-from-strong"},"note":"copied from a strong-pathology cell onto a mild cell"}
+{"id":"al03","probe":"anchor_line_source","label":"defective","bucket":"core","args":{"anchor_line_source":"borrowed"},"note":"borrowed line = not fit to this cell"}
+{"id":"al04","probe":"anchor_line_source","label":"clean","bucket":"core","args":{"anchor_line_source":"separator-aligned"},"note":"canonical clean: aligned to this cell's sealed separatrix"}
+{"id":"al05","probe":"anchor_line_source","label":"clean","bucket":"core","args":{"anchor_line_source":"sealed-separator"},"note":"sealed separatrix line"}
+{"id":"al06","probe":"anchor_line_source","label":"clean","bucket":"core","args":{"anchor_line_source":" Separator-Aligned "},"note":"normalization: case/whitespace must not flip verdict"}
+{"id":"al07","probe":"anchor_line_source","label":"defective","bucket":"core","args":{"anchor_line_source":"reused-from-prior-grid"},"note":"unrecognized but unambiguously reused/not-aligned -> must flag (fail-closed)"}
+{"id":"al_trap01","probe":"anchor_line_source","label":"clean","bucket":"known_limitation_trap","args":{"anchor_line_source":"fit-to-this-cell"},"note":"semantically separator-aligned but outside vocab -> WARN (FP). Disclosed exact-vocab fail-closed limitation"}
+{"id":"ac01","probe":"anchor_cell","label":"defective","bucket":"core","args":{"anchor_cell":"threshold-cell"},"note":"canonical M8: anchor cell on the grounding threshold itself"}
+{"id":"ac02","probe":"anchor_cell","label":"defective","bucket":"core","args":{"anchor_cell":"boundary-cell"},"note":"boundary cell straddles seed-to-seed"}
+{"id":"ac03","probe":"anchor_cell","label":"defective","bucket":"core","args":{"anchor_cell":"edge"},"note":"edge cell = not deep regime"}
+{"id":"ac04","probe":"anchor_cell","label":"clean","bucket":"core","args":{"anchor_cell":"deep-regime"},"note":"canonical clean: deep-regime cell away from threshold"}
+{"id":"ac05","probe":"anchor_cell","label":"clean","bucket":"core","args":{"anchor_cell":"interior"},"note":"interior cell"}
+{"id":"ac06","probe":"anchor_cell","label":"clean","bucket":"core","args":{"anchor_cell":" Deep-Regime "},"note":"normalization: case/whitespace must not flip verdict"}
+{"id":"ac07","probe":"anchor_cell","label":"defective","bucket":"core","args":{"anchor_cell":"right-at-the-transition"},"note":"unrecognized but unambiguously on-threshold -> must flag (fail-closed)"}
+{"id":"ac_trap01","probe":"anchor_cell","label":"clean","bucket":"known_limitation_trap","args":{"anchor_cell":"far-from-boundary"},"note":"semantically deep-regime but outside vocab -> WARN (FP). Disclosed exact-vocab fail-closed limitation"}

@@ -65,6 +65,21 @@ def test_grounding_core_cases_present(result):
     assert {"anchor_basis", "threshold_provenance", "content_delta"} <= core_probes
 
 
+def test_a2_anchor_traps_fail_closed(result):
+    """A2 anchor-discipline probes ㉔㉕ are vocab classifiers that fail CLOSED:
+    a clean paraphrase outside the declared vocab false-alarms (disclosed
+    limitation, mm_a2_anchor_probes_selfcal_v1 seal c4684d9f485cd0f5)."""
+    by_id = {t["id"]: t["outcome"] for t in result["trap_detail"]}
+    assert by_id["al_trap01"] == "FP"  # anchor_line_source paraphrase
+    assert by_id["ac_trap01"] == "FP"  # anchor_cell paraphrase
+
+
+def test_a2_core_cases_present(result):
+    """The calibration set exercises both A2 anchor-discipline probes in core."""
+    core_probes = {r["probe"] for r in result["rows"] if r["bucket"] == "core"}
+    assert {"anchor_line_source", "anchor_cell"} <= core_probes
+
+
 def test_v2_grim_shortcut_is_complete():
     """v2 kill-condition guard: the GRIM 2-candidate shortcut must agree with a
     full brute-force k-sweep on every case (any disagreement = a real bug)."""
