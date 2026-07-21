@@ -36,9 +36,9 @@ catch with no Finding and no ledger entry is reasoning, not measurement.
 | 6 | **Scope honesty** | over- and under-claiming — state what you closed and did **not** close | `mm_verify(claimed_scope, tested_scope)` |
 | 7 | **Self-catch** | "too good to be true" — suspect your own result first | `mm_too_good_check` |
 
-## The 4 augmentations the stack adds
+## The 5 augmentations the stack adds
 
-The 7 are the mental anchors. The stack adds four checks the original checklist did not name:
+The 7 are the mental anchors. The stack adds five checks the original checklist did not name:
 
 - **A. Falsifiability (kill-condition).** Strengthens #1: don't just seal the bar — seal *what
   would kill the claim*. A claim with no kill-condition is unfalsifiable. → `mm_falsifiability_check`
@@ -51,6 +51,13 @@ The 7 are the mental anchors. The stack adds four checks the original checklist 
 - **D. Judge reliability** *(conditional — only when an LLM judge is used).* Is the judge itself
   trustworthy? Consistency, position bias, AB→BA swap, A>B>C>A transitivity, degenerate scores.
   → `mm_judge_*` / `mm_inter_rater_agreement` / `mm_ranking_stability_check`.
+- **E. Seal quality (pre-compute lint).** Strengthens #1 and A from the other side: a
+  kill-condition that *exists but can't be parsed* (leaked into the wrong field by a malformed
+  call), or a bar at/below chance, silently defeats every downstream check. Lint the seal right
+  after sealing, before spending compute; the compute gate BLOCKs on a lint FAIL. Declare the
+  cheap machine-checks you ran (`pre_seal_checks=`: reachability-smoke, mass-balance-audit,
+  neutral-control, manipulation-check, positive-control). → `mm_prereg_lint` (auto inside
+  `mm_register`).
 
 ## The record layer (your discipline, made tamper-evident)
 

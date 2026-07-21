@@ -15,7 +15,7 @@ Zero training · Deterministic · Zero-dep core (Python 3.10+ stdlib; `judge` mo
 > Built while honestly killing our own project.  
 > The makers ran it on themselves first. → [🦋 Origin Story](docs/CHRONICLE.md)
 
-**[📖 Full Probe Guide →](docs/GUIDE.md)** — detailed explanations, worked examples, and workflows for all 25 probes
+**[📖 Full Probe Guide →](docs/GUIDE.md)** — detailed explanations, worked examples, and workflows for all 26 probes
 **[📜 MIRROR-SPEC v1.0 →](docs/SPEC.md)** — the normative ledger format & verification protocol (ratified & frozen 2026-07-02; this package is its reference implementation)
 **[🦋 Catalog of Measurement Illusions →](catalog/README.md)** — 45 real sealed cases of measurement deceiving its own authors (gaming · self-catch · false-negative guards · contamination)
 
@@ -170,7 +170,7 @@ def test_my_model_is_real():
 
 ## Three Verification Tiers
 
-You don't need to memorize 25 probes — there are exactly three ways to use the mirror:
+You don't need to memorize 26 probes — there are exactly three ways to use the mirror:
 
 ```bash
 # FULL — one shot, everything applicable runs automatically
@@ -241,6 +241,21 @@ extra keys fire extra probes. The `data` keys are identical to the JSON file for
 > ㉑–㉕ are **grounding probes** — the mutual-grounding arc's sealed defense laws (anchors need measured dynamics · thresholds externally fixed · judgment needs a content check · anchor line aligned to this cell · anchor cell in a deep regime). ㉔㉕ are the other two anchor-reproduction-failure subtypes (catalog: 3 real cases), completing the anchor-discipline trio with ㉑. Analogy from a micro-substrate experiment; structure only. See `docs/GROUNDING_PROBES_DESIGN.md`.
 >
 > ㉑㉒㉔㉕ can also be **declared at seal time**: `preregister(..., anchor_basis="dynamics-measured", threshold_source="external-fixed", anchor_cell="deep-regime", anchor_line_source="separator-aligned", known_confounds=[...])` stores the declarations in the sealed entry and `audit()` runs the probes on them automatically (㉑㉒ = SPEC amendment A1; ㉔㉕ + `known_confounds` INFO = A2). ㉓ stays on the `verify(data)` path (`judgment_basis` describes the analysis, not the preregistration). Calibrated: FP/FN labeled set in `eval/self_fpfn/` (grounding core 0 FN / 0 FP; disclosed fail-closed vocab limitation → see `eval/self_fpfn/RESULTS.md`).
+
+### Pre-compute seal lint ㉗ — standalone, runs *before* compute
+
+| Probe | # | Catches |
+|---|---|---|
+| `prereg_lint` | ㉗ | Seal *quality*, not just presence: kill-condition leaked into the `metric` field (malformed call — the human eye sees a criterion, the parser sees none), a quantified kill written as free text with no structured `kill_threshold`, a pass bar at/below chance, `min_n` below the small-sample floor, or no pre-seal machine-checks declared |
+
+> ㉗ is deliberately **not** part of the `verify()` umbrella or any group: it is a *pre-compute*
+> check (run it right after sealing, before spending compute), while `verify()`/`audit()` run at
+> report time. It fires automatically inside `mm_register` (the response carries the lint), and
+> the mirror-stack compute gate BLOCKs on a ㉗ FAIL. Declare the cheap checks you ran before
+> sealing with `preregister(..., pre_seal_checks=["reachability-smoke", "mass-balance-audit",
+> "neutral-control", "manipulation-check", "positive-control"])` — declaring none draws an INFO
+> nudge. Grounds: a real arc lost silent compute to exactly these defect classes
+> (semantic-fuel cell arc, 2026-07; 3 self-catches sealed in the catalog).
 
 ### `negative` — Resolved-Negative closure gate
 
@@ -678,13 +693,14 @@ pip install "measure-mirror[mcp]"
 
 **Other MCP clients** — run `mm-mcp` as the stdio server command.
 
-All 25 probes + 6 utilities + the `mm_verify` umbrella are exposed as MCP tools:  
+All 26 probes + 6 utilities + the `mm_verify` umbrella are exposed as MCP tools (37 total):  
 `mm_verify` (full / group-filtered) ·  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
-`mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·
+`mm_baseline_fairness` · `mm_gaming_check` · `mm_leakage_check` · `mm_multiseed_check` · `mm_scope_check` ·
 `mm_anchor_basis_check` · `mm_threshold_provenance_check` · `mm_content_delta_check` ·  
+`mm_anchor_line_source_check` · `mm_anchor_cell_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
-`mm_falsifiability_check` · `mm_cascade_check` · `mm_negative_audit` ·  
+`mm_falsifiability_check` · `mm_prereg_lint` · `mm_cascade_check` · `mm_negative_audit` ·  
 `mm_judge_consistency_check` · `mm_judge_bias_check` · `mm_inter_rater_agreement` ·  
 `mm_judge_score_sanity` · `mm_judge_swap_check` · `mm_judge_transitivity_check` ·  
 `mm_ranking_stability_check` ·  
@@ -725,8 +741,8 @@ python examples/demo_field.py    # Field candidate false positives
 ```
 measure-mirror/
 ├── measure_mirror/
-│   ├── mm.py              # verify() + 20 probes + CLI + DB lookup (zero deps)
-│   ├── mcp_server.py      # MCP server — 30 tools (pip install .[mcp])
+│   ├── mm.py              # verify() + probes ①~㉗ + CLI + DB lookup (zero deps)
+│   ├── mcp_server.py      # MCP server — 37 tools (pip install .[mcp])
 │   ├── judge.py           # LLM-as-a-Judge runner (pip install .[judge])
 │   └── pytest_plugin.py   # assert_clean() for CI gates
 ├── docs/

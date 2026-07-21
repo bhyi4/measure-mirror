@@ -5,6 +5,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.26.0] — 2026-07-21
+
+Pre-seal lint — a machine-check for seal *quality*, run before spending compute.
+
+### Added
+- **`prereg_lint` (㉗)** — lints a sealed pre-registration for defects that let
+  silent compute leak past `falsifiability_check` (which only asks *whether* a
+  kill-condition exists). Catches the failure classes a real experiment arc lost
+  compute to (semantic-fuel cell arc, 2026-07-20~21):
+  - a kill-condition that **leaked into the `metric` field** from a malformed
+    call — the human eye sees a criterion, the parser sees none (FAIL);
+  - a quantified kill written as **free text with no structured `kill_threshold`**
+    → cannot be auto-evaluated (WARN);
+  - a **pass bar at or below chance** (FAIL);
+  - `min_n` below the small-sample floor (WARN);
+  - **no pre-seal machine-checks declared** (INFO nudge).
+  Ledger-level entry point; `_preseal_lint()` is the pure per-record core.
+- **`preregister(pre_seal_checks=[...])`** — declare the cheap checks run before
+  sealing (`reachability-smoke`, `mass-balance-audit`, `neutral-control`,
+  `manipulation-check`, `positive-control`); `prereg_lint` reads them back.
+- **`mm_prereg_lint` MCP tool** exposing the above.
+
 ## [0.25.0] — 2026-07-09
 
 Anchor-discipline probes — completing the anchor trio, calibrated before use.

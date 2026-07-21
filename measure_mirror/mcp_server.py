@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — MCP server
 
-Exposes 23 probes + 6 utilities + the verify() umbrella (full / group-filtered) as MCP tools via stdio transport so any
+Exposes 26 probes + 6 utilities (37 tools) + the verify() umbrella (full / group-filtered) as MCP tools via stdio transport so any
 MCP-compatible AI (Claude Code, Cursor, Windsurf, …) can call them
 directly mid-conversation.
 
@@ -90,6 +90,13 @@ async def list_tools() -> list[types.Tool]:
                                        "Confounds declared BEFORE results — a pre-declared confound "
                                        "legitimizes later attribution cycles; audit surfaces them as INFO "
                                        "(SPEC amendment A2).",
+                                       "default": None},
+                    "pre_seal_checks": {"type": "array", "items": {"type": "string"},
+                                       "description":
+                                       "Cheap machine-checks run BEFORE sealing: reachability-smoke | "
+                                       "mass-balance-audit | neutral-control | manipulation-check | "
+                                       "positive-control. mm_prereg_lint (㉗) reads them back; declaring "
+                                       "none draws an INFO nudge.",
                                        "default": None},
                 },
                 "required": ["ledger_path", "claim_id", "metric"],
@@ -185,6 +192,32 @@ async def list_tools() -> list[types.Tool]:
                                      "default": None},
                 },
                 "required": ["ledger_path", "claim_id"],
+            },
+        ),
+        types.Tool(
+            name="mm_prereg_lint",
+            description=(
+                "㉗ Lint a sealed preregistration for QUALITY defects — the cheap machine-check "
+                "to run right before spending compute. Unlike mm_falsifiability_check (which asks "
+                "'does a kill-condition exist?'), this asks 'is the seal well-formed enough that "
+                "the automated checks can fire, and is the bar meaningful?'. "
+                "FAIL: kill-condition prose leaked into the `metric` field (malformed call), or a "
+                "pass bar at/below chance. "
+                "WARN: quantified kill written as free text with no structured kill_threshold, or "
+                "min_n below the small-sample floor. "
+                "INFO: no pre-seal machine-checks declared (reachability / accounting / neutral-"
+                "control / manipulation / positive-control). "
+                "claim_id omitted → lint every preregistration in the ledger."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "ledger_path": {"type": "string", "description": "Path to the JSONL ledger file"},
+                    "claim_id":    {"type": "string", "description":
+                                    "Claim identifier to lint (optional; omit to lint all)",
+                                    "default": None},
+                },
+                "required": ["ledger_path"],
             },
         ),
         types.Tool(
@@ -826,6 +859,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 anchor_cell=arguments.get("anchor_cell"),
                 anchor_line_source=arguments.get("anchor_line_source"),
                 known_confounds=arguments.get("known_confounds"),
+                pre_seal_checks=arguments.get("pre_seal_checks"),
             )
             kill_line = ""
             if entry.get("kill_threshold"):
@@ -834,6 +868,15 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                              f"{kt.get('direction','below')} {kt['threshold']}")
             elif entry.get("kill_condition"):
                 kill_line = f"\nkill_condition: {entry['kill_condition']}"
+            # Automatic seal-quality lint (㉗) — a FAIL here means the seal is
+            # malformed or its bar is meaningless; fix and re-seal under a NEW
+            # claim_id (first-write-wins makes this one uncorrectable).
+            lint_notes = [f for f in mm._preseal_lint(entry) if f.level != "OK"]
+            lint_block = ""
+            if lint_notes:
+                lint_block = "\n" + "\n".join(
+                    f"{'🔴' if f.level == 'FAIL' else '⚠️' if f.level == 'WARN' else 'ℹ️'} "
+                    f"[{f.probe}] {f.msg}" for f in lint_notes)
             result = (
                 f"🔒 Sealed\n"
                 f"claim_id: {entry['claim_id']}\n"
@@ -844,6 +887,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 f"{kill_line}\n"
                 f"prev_seal: {entry['prev_seal']}\n"
                 f"seal: {entry['seal']}"
+                f"{lint_block}"
             )
 
         elif name == "mm_cascade_check":
@@ -880,6 +924,13 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 arguments["claim_id"],
                 reported_acc=arguments.get("reported_acc"),
             ))
+
+        elif name == "mm_prereg_lint":
+            findings = mm.prereg_lint(
+                arguments["ledger_path"],
+                arguments.get("claim_id"),
+            )
+            result = _findings_to_text(findings)
 
         elif name == "mm_verify_chain":
             findings = mm.verify_chain(arguments["ledger_path"])

@@ -34,9 +34,9 @@
 | 6 | **scope 정직** | 과대·과소 해석 — 무엇을 닫고 무엇을 **안** 닫았나 명시 | `mm_verify(claimed_scope, tested_scope)` |
 | 7 | **자가 적발** | "너무 좋다" — 내 결과를 먼저 의심 | `mm_too_good_check` |
 
-## 스택이 더하는 4종 보강
+## 스택이 더하는 5종 보강
 
-7원칙은 멘탈 앵커다. 스택은 원래 체크리스트에 *없던* 4가지를 더한다:
+7원칙은 멘탈 앵커다. 스택은 원래 체크리스트에 *없던* 5가지를 더한다:
 
 - **A. 반증조건(kill-condition).** #1 강화: 기준만 봉인하지 말고 *무엇이 이 주장을 죽이나*를
   봉인하라. kill 없는 주장은 반증불가. → `mm_falsifiability_check`(`mm_preregister`에 등록한
@@ -47,6 +47,11 @@
   Bonferroni)와 **GRIM**(보고 acc × n이 정수와 맞나 — 날조·오타 적발). → `mm_verify`(multiplicity, grim).
 - **D. 판정자 신뢰성** *(조건부 — LLM 판정자 쓸 때만).* 판정자 자체가 믿을 만한가? 일관성·위치편향·
   AB→BA swap·A>B>C>A 순환·점수퇴화. → `mm_judge_*` / `mm_inter_rater_agreement` / `mm_ranking_stability_check`.
+- **E. 봉인 품질(연산 전 린트).** #1과 A를 반대편에서 강화: kill-condition이 *존재하지만 파싱
+  불가*(잘못된 호출로 엉뚱한 필드에 누수)거나 바가 우연 이하면, 하류의 모든 검사가 조용히
+  무력화된다. 봉인 직후·연산 쓰기 전에 봉인을 린트하라; compute 게이트는 린트 FAIL에 BLOCK.
+  돌린 값싼 기계 체크는 선언하라(`pre_seal_checks=`: reachability-smoke·mass-balance-audit·
+  neutral-control·manipulation-check·positive-control). → `mm_prereg_lint`(`mm_register` 안에서 자동).
 
 ## 기록 레이어 (당신의 규율을, 변조방지로)
 
