@@ -463,6 +463,34 @@ def test_power_required_n_in_message():
     assert "n≥" in f.msg
 
 
+def _required_n(**kw):
+    """Extract the required n the probe computed (WARN path prints 'need n≥N')."""
+    import re
+    f = mm.power_check(1, 0.5, min_detectable_effect=0.05, **kw)
+    m = re.search(r"n≥(\d+)", f.msg)
+    assert m, f.msg
+    return int(m.group(1))
+
+
+def test_power_higher_target_power_needs_more_n():
+    """Regression: target_power must change the computed n, not just the text.
+
+    Before the fix z_beta was hardcoded to 0.842 (80%), so 0.99 printed
+    'at 99% power' while still returning the 80% n — text and number lied."""
+    n80 = _required_n(target_power=0.80)
+    n99 = _required_n(target_power=0.99)
+    assert n99 > n80, f"0.99 power ({n99}) must exceed 0.80 power ({n80})"
+    assert n80 == 781 and n99 == 1829, (n80, n99)
+
+
+def test_power_stricter_alpha_needs_more_n():
+    """Regression: alpha must change the computed n (z_alpha2 was hardcoded)."""
+    n05 = _required_n(alpha=0.05)
+    n0001 = _required_n(alpha=0.0001)
+    assert n0001 > n05, f"α=0.0001 ({n0001}) must exceed α=0.05 ({n05})"
+    assert n0001 == 2229, n0001
+
+
 # ─── ⑨ Multiple comparisons tests ────────────────────────────
 
 def test_multicomp_single_experiment(tmp_path):

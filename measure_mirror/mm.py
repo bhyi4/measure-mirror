@@ -1286,8 +1286,12 @@ def power_check(n: int, baseline: float, *,
     Uses a two-sample z-test approximation for binary proportion metrics.
     Defaults: alpha=0.05 (two-sided 95% CI), target_power=0.80.
     """
-    z_alpha2 = 1.96   # two-sided alpha = 0.05
-    z_beta = 0.842    # 80% power
+    # Derive critical values from the actual alpha/target_power arguments.
+    # (Previously hardcoded to 1.96/0.842 — the message printed the requested
+    #  power while n was always computed at 80%: the text and the number lied
+    #  to each other. statistics.NormalDist is stdlib, so this stays zero-dep.)
+    z_alpha2 = statistics.NormalDist().inv_cdf(1 - alpha / 2)
+    z_beta = statistics.NormalDist().inv_cdf(target_power)
     p1 = min(1.0, baseline + min_detectable_effect)
     var = (baseline * (1 - baseline) + p1 * (1 - p1)) / 2  # pooled under H1
     n_required = math.ceil(
