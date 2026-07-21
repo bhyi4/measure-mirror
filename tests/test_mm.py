@@ -398,24 +398,29 @@ def test_chain_break_first_entry_deleted(tmp_path):
     assert any(f.level == "FAIL" and "chain-integrity" in f.probe for f in findings)
 
 
-def test_chain_legacy_entry_no_prev_seal(tmp_path):
-    """Legacy entry without prev_seal: seal check passes, no chain check (graceful)."""
+def test_chain_entry_missing_prev_seal_is_caught(tmp_path):
+    """Entry without prev_seal FAILS the chain check (SPEC §4 rule 3: a missing
+    prev_seal is treated as the empty string, so the §5 linkage comparison fails
+    naturally). Previously this was silently skipped — that let an attacker strip
+    prev_seal to downgrade a chained ledger and hide deletions. The seal itself
+    still recomputes fine; it is the *linkage* that must not be waived."""
     ledger = str(tmp_path / "l.jsonl")
-    legacy = {
+    entry = {
         "ts": "2025-01-01T00:00:00",
-        "claim_id": "legacy",
+        "claim_id": "no_prev",
         "metric": "acc",
         "min_n": 100,
         "baseline": 0.5,
         "pass_threshold": 0.6,
     }
-    legacy["seal"] = hashlib.sha256(
-        json.dumps(legacy, sort_keys=True, ensure_ascii=False).encode()
-    ).hexdigest()[:16]
+    entry["seal"] = hashlib.sha256(
+        json.dumps(entry, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
     with open(ledger, "w") as f:
-        f.write(json.dumps(legacy) + "\n")
+        f.write(json.dumps(entry) + "\n")
     findings = mm.verify_chain(ledger)
-    assert all(f.level == "OK" for f in findings), findings
+    assert any(f.level == "FAIL" for f in findings), findings
+    assert mm._verify_seal(entry), "seal recomputation itself is unaffected"
 
 
 def test_chain_empty_ledger_no_file(tmp_path):

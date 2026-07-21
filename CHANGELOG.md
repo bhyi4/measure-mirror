@@ -5,6 +5,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.28.0] — 2026-07-17
+
+### Security
+- **verify_chain no longer waives the chain link for entries missing prev_seal.**
+  SPEC §4 rule 3 mandates prev_seal and says a missing value is treated as the
+  empty string so the §5 linkage comparison fails naturally — but verify_chain
+  had an `if prev_seal is not None` guard that *silently skipped* the link,
+  returning "Chain intact" for a ledger whose entries carry no chain at all.
+  An attacker could strip prev_seal from every entry, reseal each one
+  standalone, then delete/reorder freely and still get a green verdict.
+  verify_chain now follows the SPEC (and matches the already-compliant
+  `linkage_check` and action/provenance mirrors): a missing prev_seal fails
+  the link. Seal recomputation is unchanged; legacy 16-hex seals still verify.
+  Reported by external review; attack reproduced, fixed, regression-tested.
+
+### Added
+- `tests/test_chain_attacks.py` — strip-prev_seal downgrade, single/first
+  missing link, tamper+reseal; `test_mm` legacy case flipped to assert the fix.
+
+---
+
 ## [0.27.1] — 2026-07-21
 
 ### Added

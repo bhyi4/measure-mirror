@@ -503,7 +503,10 @@ def _seal_matches(stored: str, full_hex: str) -> bool:
 
 
 def _verify_seal(entry: dict) -> bool:
-    """Recompute SHA-256 seal. Accepts full (current) and legacy-truncated seals."""
+    """Recompute SHA-256 seal. Accepts full (current) and legacy-truncated seals.
+
+    Seal recomputation only — chain linkage (incl. the mandatory prev_seal per
+    SPEC §4 rule 3) is enforced separately in verify_chain / linkage_check."""
     stored = entry.get("seal", "")
     check = {k: v for k, v in entry.items() if k != "seal"}
     full = hashlib.sha256(
@@ -553,19 +556,20 @@ def verify_chain(ledger_path: str) -> list[Finding]:
             prev_seal = entry.get("seal", "")
             continue
 
-        # Chain link — only for entries that carry prev_seal (new format).
-        # Legacy entries without prev_seal are skipped gracefully.
-        entry_prev = entry.get("prev_seal")
-        if entry_prev is not None:
-            # SPEC §5.1: the genesis marker is case-insensitive — action-mirror
-            # ledgers write "GENESIS" where measure-mirror writes "genesis".
-            link_ok = (str(entry_prev).lower() == "genesis" if i == 0
-                       else entry_prev == prev_seal)
-            if not link_ok:
-                findings.append(Finding("① chain-integrity", "FAIL",
-                    f"Chain break before entry {i + 1} (claim_id={cid}). "
-                    f"Expected prev={prev_seal[:8]}…, got {entry_prev[:8]}…. "
-                    f"An entry was deleted or inserted before this point."))
+        # Chain link — SPEC §4 rule 3: a missing prev_seal is treated as the
+        # empty string, so the §5 comparison fails naturally. An entry without
+        # prev_seal is NOT trusted silently — stripping prev_seal to hide a
+        # deletion/reorder is a downgrade attack, not a legacy pass.
+        # (SPEC §5.1: the genesis marker is case-insensitive — action-mirror
+        # ledgers write "GENESIS" where measure-mirror writes "genesis".)
+        entry_prev = str(entry.get("prev_seal", ""))
+        link_ok = (entry_prev.lower() == "genesis" if i == 0
+                   else entry_prev == prev_seal)
+        if not link_ok:
+            findings.append(Finding("① chain-integrity", "FAIL",
+                f"Chain break before entry {i + 1} (claim_id={cid}). "
+                f"Expected prev={prev_seal[:8]}…, got {entry_prev[:8] or '(missing)'}…. "
+                f"An entry was deleted/inserted, or prev_seal was stripped."))
 
         prev_seal = entry.get("seal", "")
 
