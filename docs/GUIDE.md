@@ -32,6 +32,9 @@ illusions that waste research resources and mislead the field.
 ① preregister               ← seal criteria BEFORE seeing results
         │
         ▼
+㉗ prereg_lint               ← lint the seal's QUALITY before spending compute
+        │                       (leaked kill-condition · bar at/below chance ·
+        ▼                        unstructured kill · low n · undeclared checks)
     experiment runs
         │
         ▼
@@ -163,6 +166,36 @@ mm anchor --pretty                          # human-readable
 
 **Best practice**: run `mm anchor` immediately before publishing a result. The
 external timestamp proves what the ledger contained at publication time.
+
+#### ㉗ `prereg_lint` — seal quality, before compute
+
+`falsifiability_check` (⑪) asks *whether* a kill-condition exists. `prereg_lint`
+asks whether the seal is **well-formed enough for the automated checks to fire,
+and whether its bar is meaningful** — the defect classes that leak silent compute:
+
+| Level | Defect |
+|---|---|
+| FAIL | kill-condition prose leaked into the `metric` field (malformed call — a human sees a criterion, the parser sees none) |
+| FAIL | pass bar at or below chance (clearing it proves nothing) |
+| WARN | quantified kill written as free text, no structured `kill_threshold` → can never auto-evaluate |
+| WARN | `min_n` below the small-sample floor (20) |
+| INFO | no `pre_seal_checks` declared (reachability-smoke · mass-balance-audit · neutral-control · manipulation-check · positive-control) |
+
+```python
+mm.preregister("ledger.jsonl", "my_model",
+               metric="acc", min_n=240, baseline=0.5, pass_threshold=0.60,
+               kill_threshold={"metric": "acc", "threshold": 0.55, "direction": "below"},
+               pre_seal_checks=["reachability-smoke", "neutral-control"])
+
+for f in mm.prereg_lint("ledger.jsonl", "my_model"):   # claim_id=None → lint ALL claims
+    print(f)
+```
+
+Deliberately **not** in the `verify()` umbrella or any group: it is a
+*pre-compute* check, while `verify()`/`audit()` run at report time. It fires
+automatically inside the MCP `mm_register` (the response carries the lint), and
+the mirror-stack compute gate BLOCKs on a ㉗ FAIL. A FAIL means **fix and re-seal
+under a NEW claim_id** — first-write-wins makes the sealed one uncorrectable.
 
 ---
 
@@ -1295,6 +1328,7 @@ Agent: [calls mm_register, then mm_audit]
 | ⑨ | `multiple_comparisons_check` | Bonferroni alarm for k>1 experiments | via `full_audit` |
 | ⑩ | `grim_check` | arithmetic impossibility | ✅ (FAIL only) |
 | ⑪ | `falsifiability_check` | no kill-condition; triggered kill threshold | ✅ (when prereg valid) |
+| ㉗ | `prereg_lint` | malformed seal: leaked kill-condition, bar at/below chance, unstructured kill, low n, undeclared pre-seal checks | standalone (pre-compute; auto in MCP `mm_register`) |
 | ⑫ | `cascade_check` | retracted claim or stale dependency | ✅ (WARN/FAIL only) |
 | ⑬ | `negative_audit` | premature negative closure; scope overshoot | via `full_audit(angles=...)` |
 | ⑭ | `judge_consistency_check` | LLM judge flip-rate too high (unreliable judge) | standalone |

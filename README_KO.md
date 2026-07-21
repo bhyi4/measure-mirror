@@ -15,7 +15,7 @@
 > 스스로의 연구를 정직하게 죽이는 과정에서 만들어진 도구입니다.  
 > 만든 사람들이 자신에게 먼저 실행해봤습니다. → [🦋 탄생 배경](docs/CHRONICLE.md)
 
-**[📖 프로브 완전 가이드 →](docs/GUIDE_KO.md)** — 25개 프로브 전체 설명·예제·워크플로우
+**[📖 프로브 완전 가이드 →](docs/GUIDE_KO.md)** — 26개 프로브 전체 설명·예제·워크플로우
 **[📜 MIRROR-SPEC v1.0 →](docs/SPEC_KO.md)** — 원장 포맷·검증 프로토콜의 규범 명세(2026-07-02 비준·동결; 이 패키지는 그 참조구현. 규범 정본은 [영어판](docs/SPEC.md))
 **[🦋 측정착시 도감 →](catalog/README_KO.md)** — 측정이 만든 이를 속인 실제 봉인 사례 45표본(게이밍·자가적발·거짓음성 가드·오염)
 
@@ -163,7 +163,7 @@ def test_my_model_is_real():
 
 ## 검증 3단계
 
-25개 프로브를 외울 필요 없습니다 — 사용법은 정확히 세 가지입니다:
+26개 프로브를 외울 필요 없습니다 — 사용법은 정확히 세 가지입니다:
 
 ```bash
 # 풀 검증 — 한 번에, 적용 가능한 모든 프로브 자동 실행
@@ -225,6 +225,14 @@ findings = mm.verify("ledger.jsonl", data, groups=["judge"])
 | `leakage_check` | ④a | 훈련∩테스트 데이터 오염 |
 | `scope_check` | ⑥ | 주장 범위 > 검증 범위 (과대 일반화) |
 | `falsifiability_check` | ⑪ | kill-condition 없음→반증불가; kill_threshold 발화→주장 사망 |
+
+### 봉인 품질 린트 ㉗ — 독립 실행, 연산 *전*에
+
+| Probe | # | 잡아내는 것 |
+|---|---|---|
+| `prereg_lint` | ㉗ | 봉인의 *품질*(존재 여부가 아니라): kill-condition이 `metric` 필드로 누수(잘못된 호출 — 사람 눈엔 기준이 보이나 파서엔 없음), 정량 kill을 구조화된 `kill_threshold` 없이 자유텍스트로만 기재, pass 바가 우연 수준 이하, `min_n`이 소표본 바닥 미만, 봉인 전 기계 체크 미선언 |
+
+> ㉗은 의도적으로 `verify()` 우산·그룹에 **넣지 않았습니다**: 이것은 *연산 전* 체크(봉인 직후, 연산을 쓰기 전에 실행)이고, `verify()`/`audit()`은 보고 시점에 돕니다. `mm_register` 안에서 자동 발화하며(응답에 lint 동봉), mirror-stack compute 게이트는 ㉗ FAIL에 BLOCK합니다. 봉인 전에 돌린 값싼 체크는 `preregister(..., pre_seal_checks=["reachability-smoke", "mass-balance-audit", "neutral-control", "manipulation-check", "positive-control"])`로 선언하세요 — 미선언이면 INFO 넛지. 근거: 실제 실험 아크가 정확히 이 결함 클래스들로 무의미 연산을 잃었습니다(semantic-fuel 세포 아크, 2026-07; 자가적발 3건 도감 봉인).
 
 ### `negative` — 음성 종결 게이트
 
@@ -623,12 +631,14 @@ pip install "measure-mirror[mcp]"
 
 **기타 MCP 클라이언트** — stdio 서버 명령으로 `mm-mcp`를 실행하세요.
 
-23종 probe + 6 유틸리티 + `mm_verify` 우산까지 전부 MCP 도구로 노출됩니다:  
+26종 probe + 6 유틸리티 + `mm_verify` 우산까지 전부 MCP 도구로 노출됩니다(총 37개):  
 `mm_verify` (풀 / 그룹 필터) ·  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
-`mm_baseline_fairness` · `mm_gaming_check` · `mm_multiseed_check` · `mm_scope_check` ·  
+`mm_baseline_fairness` · `mm_gaming_check` · `mm_leakage_check` · `mm_multiseed_check` · `mm_scope_check` ·  
+`mm_anchor_basis_check` · `mm_threshold_provenance_check` · `mm_content_delta_check` ·  
+`mm_anchor_line_source_check` · `mm_anchor_cell_check` ·  
 `mm_too_good_check` · `mm_power_check` · `mm_multiple_comparisons_check` · `mm_grim_check` ·  
-`mm_falsifiability_check` · `mm_cascade_check` · `mm_negative_audit` ·  
+`mm_falsifiability_check` · `mm_prereg_lint` · `mm_cascade_check` · `mm_negative_audit` ·  
 `mm_judge_consistency_check` · `mm_judge_bias_check` · `mm_inter_rater_agreement` ·  
 `mm_judge_score_sanity` · `mm_judge_swap_check` · `mm_judge_transitivity_check` ·  
 `mm_ranking_stability_check` ·  
@@ -669,8 +679,8 @@ python examples/demo_field.py    # Field 후보 거짓양성
 ```
 measure-mirror/
 ├── measure_mirror/
-│   ├── mm.py              # verify() + 20종 probe + CLI + DB 조회 (의존성 없음)
-│   ├── mcp_server.py      # MCP 서버 — 30개 도구 (pip install .[mcp])
+│   ├── mm.py              # verify() + probe ①~㉗ + CLI + DB 조회 (의존성 없음)
+│   ├── mcp_server.py      # MCP 서버 — 37개 도구 (pip install .[mcp])
 │   ├── judge.py           # LLM-as-a-Judge 러너 (pip install .[judge])
 │   └── pytest_plugin.py   # assert_clean() — CI 게이트
 ├── docs/

@@ -1,7 +1,7 @@
 """
 🪞 Measurement Mirror — probe engine (no training, pure rule+stat).
 
-20 probes:
+Probes ①~㉗:
   ① Pre-registration ledger — append-only chain-hash, first-write wins,
       metric-swap detection, tamper detection, re-registration detection
   ② Fair baseline — crippled / tied / reversed baseline
@@ -24,6 +24,15 @@
   ⑱ Judge position-swap — AB/BA cross-validation (content vs position lock)
   ⑲ Judge transitivity — A>B>C>A cycle detection in pairwise tournaments
   ⑳ Ranking stability — bootstrap resampling guard against ranking mirages
+  ㉑ Anchor basis — positive-control anchor rests on structure, not measured dynamics
+  ㉒ Threshold provenance — pass/kill bar re-derived from the observed distribution
+  ㉓ Content delta — judgment on agreement alone, rubber-stampable
+  ㉔ Anchor line source — anchor line copied from another cell
+  ㉕ Anchor cell — anchor cell sits on the threshold boundary
+  ㉖ Known confounds — confounds declared before results (INFO declaration)
+  ㉗ Prereg lint — seal QUALITY before compute: kill-condition leaked into the
+      metric field, quantified kill with no structured threshold, pass bar
+      at/below chance, min_n below floor, no pre-seal machine-checks declared
 
 Three verification tiers (사용 3단계):
   verify(ledger, data)                — FULL: every probe whose inputs are present
@@ -99,7 +108,8 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
                 threshold_source: str | None = None,
                 anchor_cell: str | None = None,
                 anchor_line_source: str | None = None,
-                known_confounds: list[str] | None = None) -> dict:
+                known_confounds: list[str] | None = None,
+                pre_seal_checks: list[str] | None = None) -> dict:
     """Seal evaluation criteria BEFORE seeing results.
 
     Each entry is cryptographically linked to the previous one (chain hash).
@@ -130,6 +140,11 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
         (list of strings) records confounds declared BEFORE results — a
         pre-declared confound legitimizes later attribution cycles; audit()
         surfaces them as an INFO finding (declaration, not a verdict).
+    pre_seal_checks: list of cheap machine-checks run BEFORE sealing (e.g.
+        "reachability-smoke", "mass-balance-audit", "neutral-control",
+        "manipulation-check", "positive-control"). _preseal_lint()/prereg_lint()
+        read them back; declaring none draws an INFO nudge. These are the
+        checks that catch a KILL before compute is spent.
 
     Chain link: deleting or inserting entries breaks the chain and is
     detected by verify_chain(). Complete ledger replacement is NOT caught
@@ -187,6 +202,8 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
         entry["anchor_line_source"] = anchor_line_source
     if known_confounds:
         entry["known_confounds"] = list(known_confounds)
+    if pre_seal_checks:
+        entry["pre_seal_checks"] = list(pre_seal_checks)
     entry["seal"] = hashlib.sha256(
         json.dumps(entry, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()[:16]
@@ -263,6 +280,181 @@ def _falsifiability_eval(pre: dict, reported_acc: float | None) -> Finding:
     return Finding("⑪ falsifiability", "OK",
                    f"Falsifiable (text-only): '{kill_cond}'. "
                    "Add kill_threshold= for automatic evaluation.")
+
+
+# ─────────────────────────────────────────────────────────────
+# ㉗ Pre-seal lint — QUALITY of the seal, not just its presence.
+#
+# falsifiability_check(⑪) and the compute gate ask "does a kill-condition
+# exist?". This asks "is the seal well-formed enough that the automated
+# checks can actually fire, and is the bar meaningful?" — the failure
+# classes a real arc lost silent compute to:
+#   ⑫a  kill-condition prose leaked into the `metric` field (a malformed
+#       tool call) → the human eye sees a criterion, the parser sees none.
+#   ⑫b  quantified kill written as free text with no structured threshold
+#       → falsifiability_check can never auto-evaluate it.
+#   ⑫c  the pass bar sits at or below chance → nothing to clear.
+#   ⑫d  min_n below a small-sample floor.
+#   ⑫e  no cheap pre-seal machine-checks declared (reachability / accounting
+#       / neutral-control / manipulation) — the checks that catch a KILL
+#       before compute is spent.
+# Pure over a single pre-registration dict; no I/O.
+# ─────────────────────────────────────────────────────────────
+
+# Tokens that signal a falsification criterion has been written as prose.
+_KILL_WORDS = (
+    "kill", "falsif", "reject", "fail if", "fail when", "reject_if", "reject if",
+    "철회", "죽", "사망", "기각", "미만", "이상", "이하", "초과", "떨어지", "넘으면",
+    "below", "above", "drops", "exceeds", "less than", "greater than",
+)
+_CMP_CHARS = ("<", ">", "≤", "≥", "=")
+
+# A well-formed metric is a short identifier ("acc", "separation_d", "bpb_ko").
+# A leaked kill-condition is a sentence: it has spaces AND kill-language.
+_METRIC_LEAK_RE = re.compile(r"\s")
+
+
+def _looks_like_kill_prose(text: str) -> bool:
+    """True if `text` reads like a falsification criterion rather than a metric name."""
+    if not text or not _METRIC_LEAK_RE.search(text):
+        return False  # single token → a real metric name, not a leaked sentence
+    low = text.lower()
+    has_word = any(w in low for w in _KILL_WORDS)
+    has_cmp = any(c in text for c in _CMP_CHARS)
+    has_num = any(ch.isdigit() for ch in text)
+    return has_word or (has_cmp and has_num)
+
+
+# Recognised pre-seal machine-checks (declared via preregister(pre_seal_checks=...)).
+KNOWN_PRESEAL_CHECKS = (
+    "reachability-smoke",     # is the answer already determined in the code?
+    "mass-balance-audit",     # does the accounting balance?
+    "neutral-control",        # does a should-do-nothing arm do nothing?
+    "manipulation-check",     # does the intended lever actually move its proxy?
+    "positive-control",       # does a known-true anchor reproduce?
+)
+
+
+def _preseal_lint(pre: dict) -> list["Finding"]:
+    """㉗ Lint a pre-registration for seal-quality defects. Returns a list of Findings
+    (may be empty). Complements falsifiability_check: that asks *whether* a kill-
+    condition exists; this asks whether the seal is well-formed and its bar meaningful.
+    """
+    findings: list[Finding] = []
+    P = "㉗ prereg-lint"
+    cid = pre.get("claim_id", "?")
+    metric = pre.get("metric") or ""
+    kill_cond = pre.get("kill_condition")
+    kill_thr = pre.get("kill_threshold")
+
+    # ⑫a — kill-condition leaked into the metric field.
+    if kill_cond is None and kill_thr is None and _looks_like_kill_prose(metric):
+        findings.append(Finding(
+            P, "FAIL",
+            f"'{cid}': the metric field reads like a kill-condition "
+            f"({metric[:60]!r}...) but kill_condition/kill_threshold are empty. "
+            "The criterion likely leaked into `metric` from a malformed call — "
+            "re-seal under a new claim_id with the text in kill_condition= "
+            "(and a structured kill_threshold= if it is numeric)."))
+
+    # ⑫f — genuinely unfalsifiable (neither field, and not a detectable leak).
+    elif kill_cond is None and kill_thr is None:
+        findings.append(Finding(
+            P, "WARN",
+            f"'{cid}' has no kill-condition (unfalsifiable). "
+            "Add kill_condition= or kill_threshold=."))
+
+    # ⑫b — quantified kill written as free text with no structured threshold.
+    if kill_thr is None and kill_cond and any(ch.isdigit() for ch in kill_cond):
+        findings.append(Finding(
+            P, "WARN",
+            f"'{cid}' kill_condition names a number ({kill_cond[:50]!r}) but has no "
+            "structured kill_threshold= — falsifiability_check cannot auto-evaluate it. "
+            "Add kill_threshold={'metric','threshold','direction'}."))
+
+    # ⑫c — pass bar at or below chance.
+    pass_thr = pre.get("pass_threshold")
+    baseline = pre.get("baseline")
+    chance = pre.get("chance")
+    metric_range = pre.get("metric_range")
+    # Determine a usable chance floor. Default [0,1] metric → baseline is the floor.
+    # Non-[0,1] (declared range list or "unbounded") → require an explicit chance.
+    floor = None
+    if chance is not None:
+        floor = chance
+    elif metric_range is None and baseline is not None:
+        floor = baseline
+    if pass_thr is not None and floor is not None:
+        try:
+            if float(pass_thr) <= float(floor):
+                findings.append(Finding(
+                    P, "FAIL",
+                    f"'{cid}' pass_threshold={pass_thr} is at or below chance "
+                    f"({floor}) — a claim clearing this bar has cleared nothing."))
+        except (TypeError, ValueError):
+            pass
+
+    # ⑫d — underpowered small-sample floor.
+    min_n = pre.get("min_n")
+    if isinstance(min_n, (int, float)) and min_n < 20:
+        findings.append(Finding(
+            P, "WARN",
+            f"'{cid}' min_n={min_n} is below the small-sample floor (20). "
+            "A signal at this n is easily a lucky draw — raise min_n or run mm_power_check."))
+
+    # ⑫e — no cheap pre-seal machine-checks declared.
+    checks = pre.get("pre_seal_checks")
+    if not checks:
+        findings.append(Finding(
+            P, "INFO",
+            f"'{cid}' declares no pre-seal machine-checks. Before spending compute, "
+            "run and declare the cheap ones (pre_seal_checks=[...]): "
+            + ", ".join(KNOWN_PRESEAL_CHECKS) + "."))
+    else:
+        unknown = [c for c in checks if c not in KNOWN_PRESEAL_CHECKS]
+        note = f" (unrecognised: {unknown})" if unknown else ""
+        findings.append(Finding(
+            P, "OK",
+            f"'{cid}' declared pre-seal checks: {', '.join(checks)}{note}."))
+
+    return findings
+
+
+def prereg_lint(ledger_path: str, claim_id: str | None = None) -> list["Finding"]:
+    """㉗ Lint pre-registration(s) in a ledger for seal-quality defects.
+
+    claim_id=None lints every pre-registration in the ledger. Returns a flat list of
+    Findings (empty means clean). This is the ledger-level entry point behind the
+    mm_prereg_lint MCP tool; _preseal_lint() is the pure per-record core.
+    """
+    findings: list[Finding] = []
+    if not os.path.exists(ledger_path):
+        return [Finding("㉗ prereg-lint", "WARN",
+                        f"No ledger at '{ledger_path}'.")]
+    if claim_id is not None:
+        pre = _load_prereg(ledger_path, claim_id)
+        if pre is None:
+            return [Finding("㉗ prereg-lint", "WARN",
+                            f"No pre-registration for '{claim_id}'.")]
+        return _preseal_lint(pre)
+    seen: set = set()
+    with open(ledger_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                e = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if e.get("_type") is not None:
+                continue  # witness / anchor / retraction
+            cid = e.get("claim_id")
+            if cid is None or cid in seen:
+                continue  # first-write-wins, matches _load_prereg
+            seen.add(cid)
+            findings.extend(_preseal_lint(e))
+    return findings
 
 
 def _verify_seal(entry: dict) -> bool:

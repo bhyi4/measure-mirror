@@ -12,7 +12,7 @@ from .mm import (
     # probes
     baseline_fairness, gaming_check, leakage_check, multiseed_check,
     scope_check, too_good_check, power_check, multiple_comparisons_check,
-    grim_check, falsifiability_check, cascade_check, negative_audit,
+    grim_check, falsifiability_check, prereg_lint, cascade_check, negative_audit,
     anchor_basis_check, threshold_provenance_check, content_delta_check,
     anchor_line_source_check, anchor_cell_check,
     judge_consistency_check, judge_bias_check, inter_rater_agreement,
@@ -29,7 +29,7 @@ __all__ = [
     "verify", "audit", "continuous_audit", "full_audit", "GROUPS", "group_of",
     "baseline_fairness", "gaming_check", "leakage_check", "multiseed_check",
     "scope_check", "too_good_check", "power_check", "multiple_comparisons_check",
-    "grim_check", "falsifiability_check", "cascade_check", "negative_audit",
+    "grim_check", "falsifiability_check", "prereg_lint", "cascade_check", "negative_audit",
     "anchor_basis_check", "threshold_provenance_check", "content_delta_check",
     "anchor_line_source_check", "anchor_cell_check",
     "judge_consistency_check", "judge_bias_check", "inter_rater_agreement",
@@ -38,4 +38,4 @@ __all__ = [
     "wilson_ci", "lookup_baseline", "lookup_reproduction", "record_reproduction",
     "catch_history", "report", "Finding",
 ]
-__version__ = "0.25.0"
+__version__ = "0.26.0"

@@ -864,6 +864,30 @@ def test_falsifiability_threshold_above_direction(tmp_path):
     assert f.level == "FAIL"
 
 
+# ─── ⑫ prereg_lint tests (full coverage in tests/test_preseal_lint.py) ────────
+
+def test_prereg_lint_flags_leaked_kill_condition(tmp_path):
+    """A kill-condition sealed into the `metric` field (malformed call) is FAILed
+    by the lint even though falsifiability_check would only say 'unfalsifiable'."""
+    ledger = str(tmp_path / "l.jsonl")
+    # Simulate the malformed seal: criterion text in `metric`, no kill fields.
+    mm.preregister(ledger, "gate0",
+                   metric="gene1 eq; KILL if delta < 0.03 across all arms",
+                   min_n=200, baseline=0.5, pass_threshold=0.6)
+    fs = mm.prereg_lint(ledger, "gate0")
+    assert any(f.level == "FAIL" and "leaked into `metric`" in f.msg for f in fs)
+
+
+def test_prereg_lint_clean_on_healthy_seal(tmp_path):
+    ledger = str(tmp_path / "l.jsonl")
+    mm.preregister(ledger, "good", metric="acc", min_n=200, baseline=0.5,
+                   pass_threshold=0.6,
+                   kill_threshold={"metric": "acc", "threshold": 0.55, "direction": "below"},
+                   pre_seal_checks=["reachability-smoke", "neutral-control"])
+    fs = mm.prereg_lint(ledger, "good")
+    assert not [f for f in fs if f.level in ("WARN", "FAIL")]
+
+
 def test_falsifiability_threshold_no_result_warns(tmp_path):
     """kill_threshold registered but no reported_acc → WARN (unevaluated)."""
     ledger = str(tmp_path / "l.jsonl")
