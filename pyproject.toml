@@ -40,9 +40,9 @@ mm     = "measure_mirror.mm:_cli"
 mm-mcp = "measure_mirror.mcp_server:main"
 
 [project.urls]
-Homepage   = "https://github.com/bhyi4/measure-mirror"
-Repository = "https://github.com/bhyi4/measure-mirror"
-Issues     = "https://github.com/bhyi4/measure-mirror/issues"
+Homepage   = "https://github.com/mirror-stack/measure-mirror"
+Repository = "https://github.com/mirror-stack/measure-mirror"
+Issues     = "https://github.com/mirror-stack/measure-mirror/issues"
 
 [tool.setuptools]
 packages = ["measure_mirror"]

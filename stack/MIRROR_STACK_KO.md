@@ -14,12 +14,12 @@
 | 거울 | 답하는 질문 | 원장 단위 |
 |---|---|---|
 | **측정거울** (이 레포) | 이 **주장**이 정직한가? (사전등록·반증조건·통계/게이밍 프로브) | claim |
-| **[행동거울](https://github.com/bhyi4/action-mirror)** | 실제로 그 **행동**을 했는가? (체인 행동기록 + 상호증인) | action |
-| **[출처거울](https://github.com/bhyi4/provenance-mirror)** | 이 **산출물**이 어디서 왔는가? (배포 지문·추적) | artifact |
+| **[행동거울](https://github.com/mirror-stack/action-mirror)** | 실제로 그 **행동**을 했는가? (체인 행동기록 + 상호증인) | action |
+| **[출처거울](https://github.com/mirror-stack/provenance-mirror)** | 이 **산출물**이 어디서 왔는가? (배포 지문·추적) | artifact |
 
 세 거울 모두 공개(Apache 2.0)라, 아래 사례연구의 *모든 층*이 주장층뿐 아니라 독립적으로 검증 가능하다.
 
-여기에 공용 **[증인 허브](https://github.com/bhyi4/mirror-witness)** — 운영자들이 자기 장부 머리를
+여기에 공용 **[증인 허브](https://github.com/mirror-stack/mirror-witness)** — 운영자들이 자기 장부 머리를
 선언하는 공개·CI검증 GitHub 게시판. 증인(J3)을 한 에이전트 가족 너머로 확장한다. 서버 없음:
 GitHub이 시점증명·불변이력을, CI가 일관성 검사를 맡는다.
 

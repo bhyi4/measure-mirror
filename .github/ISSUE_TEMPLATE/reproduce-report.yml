@@ -13,7 +13,7 @@ body:
 
         **Step 1 — get the code** *(2 min)*
         ```bash
-        git clone --depth 1 https://github.com/bhyi4/measure-mirror
+        git clone --depth 1 https://github.com/mirror-stack/measure-mirror
         cd measure-mirror
         ```
 
@@ -32,7 +32,7 @@ body:
         (Undo your edit: `git checkout stack/evidence/compute_governor.jsonl`)
 
         **Step 4 — optional** *(5 min)*: seal a claim of your own — see the
-        [Quick Start](https://github.com/bhyi4/measure-mirror#quick-start)
+        [Quick Start](https://github.com/mirror-stack/measure-mirror#quick-start)
         (`mm register` before, `mm audit` after — the kill-condition is the point).
 
         Now fill in the three boxes below. Done — thank you. 🙇
@@ -74,6 +74,6 @@ body:
       value: |
         ---
         **Want your reproduction to count as a public witness record?**
-        Declare what you verified on the 👁 [mirror-witness board](https://github.com/bhyi4/mirror-witness) —
+        Declare what you verified on the 👁 [mirror-witness board](https://github.com/mirror-stack/mirror-witness) —
         an append-only, CI-checked witness ledger. Your declaration becomes something
         no one (including the authors) can rewind.

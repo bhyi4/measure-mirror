@@ -4,7 +4,7 @@
   <img src="docs/measure_mirror_og.png" alt="Measurement Mirror" width="500">
 </p>
 
-[![CI](https://github.com/bhyi4/measure-mirror/actions/workflows/ci.yml/badge.svg)](https://github.com/bhyi4/measure-mirror/actions/workflows/ci.yml)
+[![CI](https://github.com/mirror-stack/measure-mirror/actions/workflows/ci.yml/badge.svg)](https://github.com/mirror-stack/measure-mirror/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![deps: zero](https://img.shields.io/badge/deps-zero-brightgreen.svg)](pyproject.toml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
@@ -32,12 +32,12 @@ Zero training · Deterministic · Zero-dep core (Python 3.10+ stdlib; `judge` mo
 | Tool | Audits | Question |
 |---|---|---|
 | 🪞 **measure-mirror** (you are here) | AI evaluation claims | **Is the claim honest?** |
-| 🪪 [action-mirror](https://github.com/bhyi4/action-mirror) | Agent behaviour | Who did what, **provably**? |
-| 🔎 [provenance-mirror](https://github.com/bhyi4/provenance-mirror) | Content authenticity | Is the **origin** proven? |
-| 👁 [mirror-witness](https://github.com/bhyi4/mirror-witness) | Cross-operator witness board | Who else **witnessed** it? |
+| 🪪 [action-mirror](https://github.com/mirror-stack/action-mirror) | Agent behaviour | Who did what, **provably**? |
+| 🔎 [provenance-mirror](https://github.com/mirror-stack/provenance-mirror) | Content authenticity | Is the **origin** proven? |
+| 👁 [mirror-witness](https://github.com/mirror-stack/mirror-witness) | Cross-operator witness board | Who else **witnessed** it? |
 
 💬 **[Discussions](https://github.com/orgs/mirror-stack/discussions)** — questions · ideas · independent reproductions welcome.
-🔁 **[Reproduce this in 15 minutes →](https://github.com/bhyi4/measure-mirror/issues/new?template=reproduce-report.yml)** — verify a sealed ledger, tamper with it, watch it break. Failures are as welcome as successes.
+🔁 **[Reproduce this in 15 minutes →](https://github.com/mirror-stack/measure-mirror/issues/new?template=reproduce-report.yml)** — verify a sealed ledger, tamper with it, watch it break. Failures are as welcome as successes.
 
 ---
 
@@ -60,7 +60,7 @@ Measurement Mirror catches these **structurally**, not by opinion.
 > (small-sample CI, GRIM, power, multiple-comparisons) are fully deterministic. But design-flaw
 > probes (crippled baseline, gaming, scope) only fire on the baseline / reward terms / scopes you
 > *declare* — the tool cannot discover a flaw you hide, and many real catches are still **your
-> judgment**, guided by the [discipline](https://github.com/bhyi4/measure-mirror/tree/main/stack/DISCIPLINE.md).
+> judgment**, guided by the [discipline](https://github.com/mirror-stack/measure-mirror/tree/main/stack/DISCIPLINE.md).
 > It makes honesty *provable*; it does not *force* it.
 
 ---
