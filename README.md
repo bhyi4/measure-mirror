@@ -37,6 +37,7 @@ Zero training · Deterministic · Zero-dep core (Python 3.10+ stdlib; `judge` mo
 | 👁 [mirror-witness](https://github.com/bhyi4/mirror-witness) | Cross-operator witness board | Who else **witnessed** it? |
 
 💬 **[Discussions](https://github.com/orgs/mirror-stack/discussions)** — questions · ideas · independent reproductions welcome.
+🔁 **[Reproduce this in 15 minutes →](https://github.com/bhyi4/measure-mirror/issues/new?template=reproduce-report.yml)** — verify a sealed ledger, tamper with it, watch it break. Failures are as welcome as successes.
 
 ---
 
