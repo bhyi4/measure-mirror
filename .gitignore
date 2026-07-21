@@ -18,3 +18,7 @@ my_model.json
 # 홍보 초안은 절대 공개 금지 (로컬 전용)
 *promo*
 *PROMO*
+
+# 도감 표본 초안 (catalog/draft_specimen.py 산출) — 사람이 완성·검증 전엔 커밋 금지.
+# 완성되면 .DRAFT.md → .md 로 승격해 정식 항목이 된다.
+*.DRAFT.md

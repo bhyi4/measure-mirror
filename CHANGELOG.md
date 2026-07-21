@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.27.1] — 2026-07-21
+
+### Added
+- **🦋 `catalog/draft_specimen.py`** — auto-draft a catalog specimen from a **sealed
+  retraction**, closing the "forgot to collect" gap without breaking the catalog's
+  no-fabrication rule. It **transcribes only the provable parts** — claim_id, seal,
+  retraction reason, ledger — into the specimen's 실사례 line, and leaves every
+  interpretive field (증상 / 기전 / 탐지법 / 오적용) as an explicit TODO for a human to
+  complete from the actual arc. It never invents a case and never writes the mechanism
+  story. Suggests a category from keywords, writes `<slug>.DRAFT.md` (gitignored until a
+  human completes it and promotes `.DRAFT.md → .md`). Regression suite:
+  `tests/test_draft_specimen.py`.
+
 ## [0.27.0] — 2026-07-17
 
 ### Security
