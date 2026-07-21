@@ -117,7 +117,7 @@ def _seal_judge_run(ledger_path: str, entry: dict) -> dict:
     entry["prev_seal"] = prev_seal
     entry["seal"] = hashlib.sha256(
         json.dumps(entry, sort_keys=True, ensure_ascii=False).encode()
-    ).hexdigest()[:16]
+    ).hexdigest()
     with open(ledger_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     return entry

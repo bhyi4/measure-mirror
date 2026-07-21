@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.27.0] — 2026-07-17
+
+### Security
+- **Seal width: 16-hex (64-bit) truncation → full 64-hex SHA-256 digest**
+  (SPEC v1.1 §4). 64-bit truncated seals allowed a dishonest sealer to
+  birthday-search (~2^32 hashes) two entries sharing one seal and swap them
+  after sealing. New entries (preregister / retract / witness runs / judge
+  runs / verification certificates, and `output_hash`) now carry the full
+  digest. **Legacy 16-hex seals keep verifying** via prefix match — mixed
+  chains are supported; no ledger migration needed. Reported by external
+  review; verified and fixed the same day.
+
+### Added
+- Conformance vector `valid_05_legacy16.jsonl` (legacy-acceptance) and
+  `tests/test_seal_upgrade.py` regression suite.
+
+---
+
 ## [0.26.1] — 2026-07-21
 
 Dogfooding fix — ㉗ `prereg_lint` false-positive classes, found by auditing it

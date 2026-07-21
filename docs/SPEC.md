@@ -1,6 +1,6 @@
-# MIRROR-SPEC v1.0 — Mirror Stack Ledger Format & Verification Protocol
+# MIRROR-SPEC v1.1 — Mirror Stack Ledger Format & Verification Protocol
 
-**Status: v1.0, ratified 2026-07-02.** Frozen per §9 — normative statements
+**Status: v1.1, amended 2026-07-17** (v1.0 ratified 2026-07-02; see Amendment log). Frozen per §9 — normative statements
 will not change; clarifications append as errata. Ratification criterion:
 two clean-room interoperability rounds (an agent given only this document
 achieved byte-exact seal reproduction, 5/5 blind-vector verdicts, and valid
@@ -124,20 +124,27 @@ Rules:
 1. The keys `seal` and `sig` MUST be excluded from the sealed body. All other
    keys, including `prev_seal`, MUST be included.
 2. Serialization MUST follow §4.1 byte-exactly.
-3. The digest MUST be truncated to 16 lowercase hex characters.
+3. The seal MUST be the full 64-lowercase-hex digest. *(v1.1 — v1.0 truncated
+   to 16 hex chars. Verifiers MUST accept an exactly-16-hex seal by comparing
+   it against the first 16 characters of the recomputed digest: legacy
+   acceptance. No other lengths are valid.)*
 4. An entry MAY additionally carry an Ed25519 signature. `sig` is the
-   lowercase-hex Ed25519 signature over the **UTF-8 bytes of the 16-char
-   lowercase hex seal string** (not the raw digest); `pubkey` is the
+   lowercase-hex Ed25519 signature over the **UTF-8 bytes of the seal string
+   as stored** (64-hex; 16-hex in v1.0 ledgers — not the raw digest); `pubkey` is the
    lowercase-hex 32-byte raw public key. `pubkey` IS part of the sealed body;
    `sig` is not.
-5. Seals do not guarantee uniqueness: 64-bit truncation admits collisions in
-   principle, and identical entries produce identical seals. Verifiers do not
+5. Seals do not guarantee uniqueness: identical entries produce identical
+   seals (and v1.0 legacy 64-bit truncation admits collisions in principle). Verifiers do not
    check for duplicate seals; chain position (§5), not the seal value, is an
    entry's identity.
 
-*Truncation note:* 16 hex chars (64 bits) is a tamper-evidence checksum, not a
-collision-resistant commitment against adversarial preimage search. Whole-file
-SHA-256 (§6.4, §6.5) provides the full-strength commitment.
+*Seal-width note (v1.1):* v1.0's 16-hex (64-bit) truncation was a
+tamper-evidence checksum only: a **dishonest sealer** can birthday-search
+(~2^32 hashes, GPU-minutes) two different entries sharing one truncated seal
+and swap them after sealing. v1.1 therefore seals with the full 256-bit
+digest, closing that gap at the chain layer; whole-file SHA-256 (§6.4, §6.5)
+remains the file-level commitment. Legacy 16-hex seals verify by prefix —
+their original (weaker) strength is unchanged.
 
 ## 5. Chain rules
 
@@ -267,12 +274,12 @@ Whether `claim_id` matches a prior preregistration is an audit-layer concern
 
 **witness** (command execution) — `_type: "witness"`, `ts_start, ts_end,
 claim_id, command` (argv list), `returncode`, `run_status`:"ok"|"timeout"|
-"error", `output_hash` = first 16 hex chars of SHA-256 over
+"error", `output_hash` = full 64-hex SHA-256 over *(v1.0: first 16 hex chars — legacy accepted)*
 `"{returncode}\n{stdout}\n{stderr}"`.
 
 **action** — `_type: "action"`, `ts, agent, action` + (opt) `target` (path,
 claim_id, ticket…; set `target = <claim_id>` to bind an action to a claim),
-`content_hash` (16-hex SHA-256 of artifact bytes), `payload` (free JSON —
+`content_hash` (64-hex SHA-256 of artifact bytes; v1.0: 16-hex — legacy accepted), `payload` (free JSON —
 **opaque to verifiers**), `pubkey` + `sig` (§4 rule 4).
 
 **peer_witness** — `_type: "peer_witness"`, `ts, peer, peer_entries,
@@ -386,6 +393,18 @@ surfaces it as an INFO (a declaration, not a verdict).
 Compatibility: identical to A1 — non-breaking, verifiers ignore unknown fields
 (§7), L1/L1+ untouched, consumption is audit-layer, producers MAY omit, no
 format-level vocabulary enforcement.
+
+---
+
+## Amendment log
+
+- **v1.1 (2026-07-17)** — §4: seal widened from 16-hex (64-bit) truncation to the
+  full 64-hex SHA-256 digest; verifiers MUST accept legacy exactly-16-hex seals by
+  prefix. Rationale: 64-bit truncation permits a dishonest sealer to prepare
+  colliding entry pairs (birthday ≈2^32) and swap them post-seal — reported by
+  external review, verified, fixed. `output_hash`/`content_hash` widened likewise.
+  Conformance vector `valid_05_legacy16.jsonl` added (legacy acceptance).
+- **v1.0 (2026-07-02)** — initial ratification.
 
 ---
 

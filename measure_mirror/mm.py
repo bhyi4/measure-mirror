@@ -206,7 +206,7 @@ def preregister(ledger_path: str, claim_id: str, *, metric: str,
         entry["pre_seal_checks"] = list(pre_seal_checks)
     entry["seal"] = hashlib.sha256(
         json.dumps(entry, sort_keys=True, ensure_ascii=False).encode()
-    ).hexdigest()[:16]
+    ).hexdigest()
     with open(ledger_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     return entry
@@ -485,14 +485,31 @@ def prereg_lint(ledger_path: str, claim_id: str | None = None) -> list["Finding"
     return findings
 
 
+_LEGACY_SEAL_LEN = 16   # pre-v0.19 truncated seals — see _seal_matches
+
+
+def _seal_matches(stored: str, full_hex: str) -> bool:
+    """Match a stored seal against the full SHA-256 hex digest.
+
+    Entries are now sealed with the FULL 64-hex digest: the old 16-hex (64-bit)
+    truncation lets a dishonest sealer birthday-search (~2^32 hashes) a pair of
+    different entries sharing one seal, undermining tamper evidence. Legacy
+    16-hex seals remain verifiable via prefix match — their (weaker) proof
+    strength is unchanged; the upgrade protects entries sealed from now on.
+    """
+    if stored == full_hex:
+        return True
+    return len(stored) == _LEGACY_SEAL_LEN and stored == full_hex[:_LEGACY_SEAL_LEN]
+
+
 def _verify_seal(entry: dict) -> bool:
-    """Recompute SHA-256 seal. Works for legacy (no prev_seal) and chained entries."""
+    """Recompute SHA-256 seal. Accepts full (current) and legacy-truncated seals."""
     stored = entry.get("seal", "")
     check = {k: v for k, v in entry.items() if k != "seal"}
-    expected = hashlib.sha256(
+    full = hashlib.sha256(
         json.dumps(check, sort_keys=True, ensure_ascii=False).encode()
-    ).hexdigest()[:16]
-    return stored == expected
+    ).hexdigest()
+    return _seal_matches(stored, full)
 
 
 def verify_chain(ledger_path: str) -> list[Finding]:
@@ -1489,7 +1506,7 @@ def retract(ledger_path: str, claim_id: str, reason: str) -> dict:
     entry["prev_seal"] = prev_seal
     entry["seal"] = hashlib.sha256(
         json.dumps(entry, sort_keys=True, ensure_ascii=False).encode()
-    ).hexdigest()[:16]
+    ).hexdigest()
 
     with open(ledger_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -2708,7 +2725,7 @@ def certificate(ledger_path: str, claim_id: str, *,
     }
     cert["seal"] = hashlib.sha256(
         json.dumps(cert, sort_keys=True, ensure_ascii=False).encode()
-    ).hexdigest()[:16]
+    ).hexdigest()
     return cert
 
 
@@ -2803,7 +2820,7 @@ def witness(ledger_path: str, claim_id: str, command: list[str], *,
     ts_end = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     output_hash = hashlib.sha256(
         f"{returncode}\n{stdout}\n{stderr}".encode()
-    ).hexdigest()[:16]
+    ).hexdigest()
 
     entry: dict = {
         "_type":       "witness",
@@ -2819,7 +2836,7 @@ def witness(ledger_path: str, claim_id: str, command: list[str], *,
     entry["prev_seal"] = prev_seal
     entry["seal"] = hashlib.sha256(
         json.dumps(entry, sort_keys=True, ensure_ascii=False).encode()
-    ).hexdigest()[:16]
+    ).hexdigest()
 
     with open(ledger_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")

@@ -1011,7 +1011,7 @@ def test_retract_returns_entry_with_seal(tmp_path):
     assert e["_type"] == "retraction"
     assert e["claim_id"] == "e1"
     assert e["reason"] == "wrong baseline used"
-    assert len(e["seal"]) == 16
+    assert len(e["seal"]) == 64   # full digest since seal upgrade
 
 
 def test_cascade_in_audit_fail_appended(tmp_path):
@@ -1302,7 +1302,7 @@ def test_certificate_certified(tmp_path):
     assert c["verdict"] == "CERTIFIED"
     assert c["prereg_seal_ok"] is True
     assert c["chain_ok"] is True
-    assert len(c["seal"]) == 16
+    assert len(c["seal"]) == 64   # full digest since seal upgrade
 
 
 def test_certificate_unverified_no_prereg(tmp_path):

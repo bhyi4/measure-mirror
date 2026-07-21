@@ -7,12 +7,17 @@ Invalid vectors are deliberate corruptions of valid ones.
 """
 import hashlib, json, os, shutil, sys
 
-OUT = "/data/seara/measure_mirror_poc/spec/vectors"
+OUT = os.environ.get("SPEC_VECTORS_OUT", "/data/seara/measure_mirror_poc/spec/vectors")
 
 def seal_of(entry: dict) -> str:
     body = {k: v for k, v in entry.items() if k not in ("seal", "sig")}
     s = json.dumps(body, sort_keys=True, ensure_ascii=False)
-    return hashlib.sha256(s.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+
+def legacy_seal_of(entry: dict) -> str:
+    """SPEC v1.0 truncated seal — used only to generate the legacy-acceptance vector."""
+    return seal_of(entry)[:16]
 
 def chain(entries):
     prev = "genesis"
@@ -79,7 +84,7 @@ peer_bytes = open(os.path.join(OUT, "valid_03_peer.jsonl"), "rb").read()
 v03_wit = chain([
     {"_type": "peer_witness", "ts": "2026-07-02T02:20:00Z", "peer": "demo_agent",
      "peer_entries": 2, "peer_head_seal": v03_peer[-1]["seal"],
-     "peer_anchor": hashlib.sha256(peer_bytes).hexdigest()[:16]},
+     "peer_anchor": hashlib.sha256(peer_bytes).hexdigest()},
 ])
 write("valid_03_witness.jsonl", v03_wit)
 expected["valid_03_peer.jsonl"] = {"L1": "OK", "L1_seal_recompute": "OK"}
@@ -101,6 +106,23 @@ v04 = chain([
 ])
 write("valid_04_numbers.jsonl", v04)
 expected["valid_04_numbers.jsonl"] = {"L1": "OK", "L1_seal_recompute": "OK"}
+
+# v05: SPEC v1.0 legacy ledger — 16-hex truncated seals MUST still verify (v1.1 §4)
+v05 = []
+_prev = "genesis"
+for _e in [
+    {"ts": "2026-06-01T00:00:00Z", "claim_id": "legacy16_claim", "metric": "acc",
+     "min_n": 30, "baseline": 0.5, "pass_threshold": 0.7,
+     "kill_condition": "acc below 0.55"},
+    {"_type": "retraction", "ts": "2026-06-01T01:00:00Z",
+     "claim_id": "legacy16_claim", "reason": "demo retraction (legacy seals)"},
+]:
+    _e = dict(_e); _e["prev_seal"] = _prev
+    _e["seal"] = legacy_seal_of(_e)
+    _prev = _e["seal"]
+    v05.append(_e)
+write("valid_05_legacy16.jsonl", v05)
+expected["valid_05_legacy16.jsonl"] = {"L1": "OK", "L1_seal_recompute": "OK"}
 
 # ---------- invalid ----------
 # i01: linkage broken (middle entry's prev_seal wrong)

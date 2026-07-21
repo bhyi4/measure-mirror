@@ -20,6 +20,10 @@
     "L1": "OK",
     "L1_seal_recompute": "OK"
   },
+  "valid_05_legacy16.jsonl": {
+    "L1": "OK",
+    "L1_seal_recompute": "OK"
+  },
   "invalid_01_linkage_broken.jsonl": {
     "L1": "FAIL",
     "reason": "linkage broken at entry 1"

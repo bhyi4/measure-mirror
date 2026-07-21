@@ -1,2 +1,2 @@
-{"ts": "2026-07-02T00:00:00Z", "claim_id": "demo_claim", "metric": "acc", "min_n": 30, "baseline": 0.5, "pass_threshold": 0.7, "kill_condition": "acc below 0.55 on held-out set", "kill_threshold": {"metric": "acc", "threshold": 0.55, "direction": "below"}, "prev_seal": "genesis", "seal": "c0d0963bf2ee2bba"}
+{"ts": "2026-07-02T00:00:00Z", "claim_id": "demo_claim", "metric": "acc", "min_n": 30, "baseline": 0.5, "pass_threshold": 0.7, "kill_condition": "acc below 0.55 on held-out set", "kill_threshold": {"metric": "acc", "threshold": 0.55, "direction": "below"}, "prev_seal": "genesis", "seal": "c0d0963bf2ee2bbab38428dc88c287916cf024740332f4bbddc3357bd8b83b2d"}
 {this is not json}

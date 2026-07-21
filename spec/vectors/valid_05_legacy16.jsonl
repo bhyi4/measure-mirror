@@ -1,0 +1,2 @@
+{"ts": "2026-06-01T00:00:00Z", "claim_id": "legacy16_claim", "metric": "acc", "min_n": 30, "baseline": 0.5, "pass_threshold": 0.7, "kill_condition": "acc below 0.55", "prev_seal": "genesis", "seal": "24d58980d38f2a18"}
+{"_type": "retraction", "ts": "2026-06-01T01:00:00Z", "claim_id": "legacy16_claim", "reason": "demo retraction (legacy seals)", "prev_seal": "24d58980d38f2a18", "seal": "1d8f33aaafbf251a"}

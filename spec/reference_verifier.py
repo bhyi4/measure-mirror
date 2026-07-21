@@ -19,11 +19,22 @@ import json
 import sys
 
 
+LEGACY_SEAL_LEN = 16   # SPEC v1.0 truncated seals — accepted by prefix (SPEC v1.1 §4)
+
+
 def compute_seal(entry):
-    """SPEC §4: SHA-256 over sorted-key, non-ASCII-preserving JSON, 16 hex chars."""
+    """SPEC v1.1 §4: SHA-256 over sorted-key, non-ASCII-preserving JSON, full 64 hex."""
     body = {k: v for k, v in entry.items() if k not in ("seal", "sig")}
     serialized = json.dumps(body, sort_keys=True, ensure_ascii=False)
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def seal_matches(stored, full_hex):
+    """SPEC v1.1 §4: full match, or v1.0 legacy 16-hex prefix match."""
+    stored = str(stored)
+    if stored == full_hex:
+        return True
+    return len(stored) == LEGACY_SEAL_LEN and stored == full_hex[:LEGACY_SEAL_LEN]
 
 
 def l1_linkage(path):
@@ -62,7 +73,7 @@ def l1_recompute(entries):
     """SPEC §6.2. Returns (ok, message)."""
     for i, entry in enumerate(entries):
         expected = compute_seal(entry)
-        if entry.get("seal") != expected:
+        if not seal_matches(entry.get("seal"), expected):
             return False, f"seal mismatch at entry {i}: declared {entry.get('seal')}, recomputed {expected}"
     return True, f"all {len(entries)} seals recompute correctly"
 

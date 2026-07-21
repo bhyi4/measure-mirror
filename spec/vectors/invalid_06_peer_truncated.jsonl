@@ -1,1 +1,1 @@
-{"_type": "action", "ts": "2026-07-02T02:00:00Z", "agent": "demo_agent", "action": "measure", "target": "demo_claim", "payload": {"n": 30, "acc": 0.51}, "prev_seal": "genesis", "seal": "7f72791440022623"}
+{"_type": "action", "ts": "2026-07-02T02:00:00Z", "agent": "demo_agent", "action": "measure", "target": "demo_claim", "payload": {"n": 30, "acc": 0.51}, "prev_seal": "genesis", "seal": "7f72791440022623d62467c839554489ec235995e4d4e0f0d731e425279f2968"}
