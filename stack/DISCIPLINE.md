@@ -53,7 +53,7 @@ The 7 are the mental anchors. The stack adds five checks the original checklist 
   → `mm_judge_*` / `mm_inter_rater_agreement` / `mm_ranking_stability_check`.
 - **E. Seal quality (pre-compute lint).** Strengthens #1 and A from the other side: a
   kill-condition that *exists but can't be parsed* (leaked into the wrong field by a malformed
-  call), or a bar at/below chance, silently defeats every downstream check. Lint the seal right
+  call), or a bar at/below declared chance, silently defeats every downstream check. Lint the seal right
   after sealing, before spending compute; the compute gate BLOCKs on a lint FAIL. Declare the
   cheap machine-checks you ran (`pre_seal_checks=`: reachability-smoke, mass-balance-audit,
   neutral-control, manipulation-check, positive-control). → `mm_prereg_lint` (auto inside

@@ -5,6 +5,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.26.1] — 2026-07-21
+
+Dogfooding fix — ㉗ `prereg_lint` false-positive classes, found by auditing it
+against 64 real ledgers (373 preregistrations).
+
+### Fixed
+- **㉗ pass-bar-below-chance (⑫c) no longer uses `baseline` as the chance floor.**
+  In practice `baseline` is a comparison-arm score (e.g. 0.92, or the other arm of a
+  two-arm compare), not the random floor — treating `pass ≤ baseline` as "below chance"
+  produced **44 false FAILs** across the audited ledgers (each a wrong compute-gate
+  BLOCK). ㉗ now uses an **explicitly declared `chance`** only, and additionally skips:
+  a `pass_threshold` of 0/absent (a placeholder for a claim whose real bar is the
+  `kill_threshold`), and non-[0,1]/unbounded metrics (where `pass` is a delta/margin,
+  not an absolute score). After the fix the audit flags **4 FAILs, all genuine**
+  kill-condition-leaked-into-`metric` seals — and zero false positives.
+- **㉗ quantified-text-only-kill (⑫b) now requires a number in a *comparison* context**
+  (`below 0.5`, `acc < 0.55`, `0.3 미만`), so an incidental digit — a sha256, a date,
+  `n=600`, a filename `v2`, a section `§6` — no longer reads as a missing threshold.
+
+Behaviour change: a below-chance FAIL now requires `chance=` to be declared. Callers
+that relied on `baseline` being read as the floor should declare `chance` explicitly.
+
 ## [0.26.0] — 2026-07-21
 
 Pre-seal lint — a machine-check for seal *quality*, run before spending compute.
