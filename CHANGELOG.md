@@ -5,6 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.28.1] — 2026-07-21
+
+### Fixed
+- **`power_check` now honors its `alpha` and `target_power` arguments.**
+  The critical values were hardcoded (`z_alpha2 = 1.96`, `z_beta = 0.842`),
+  so the message interpolated the requested power (e.g. "at 99% power") while
+  the required-n was *always* computed at 80% power / α=0.05. The printed text
+  and the printed number contradicted each other — a text-vs-number lie, the
+  worst class of defect for an honesty-audit tool. Both z-values are now
+  derived from the arguments via `statistics.NormalDist().inv_cdf` (stdlib,
+  still zero-dependency). Now `target_power=0.99` → n≥1829 (was 781) and
+  `alpha=0.0001` → n≥2229. Default behavior (α=0.05, power=0.80) is unchanged.
+  Reported by external review.
+
+### Added
+- `test_mm.py` regression tests asserting the computed n tracks both
+  `target_power` and `alpha` (not just the message text).
+
+---
+
 ## [0.28.0] — 2026-07-17
 
 ### Security
