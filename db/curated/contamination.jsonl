@@ -1,2 +1,3 @@
 {"type":"target_leak","where":"ZERO DCC 사전훈련","detail":"미래 정보 20.6배 누설 (복사 모델)","fix":"인과 구동신호 dx_t=dX[t]-dX[t-1]"}
 {"type":"label_encoding_loss","where":"코돈 종성 인코딩","detail":"받침 4비트 절삭 ~30% 손상","fix":"5비트 확장 + w_single 가중치 마스크"}
+{"type": "augmentation_reinjects_holdout", "where": "옹알이 A1 관계 게이트", "detail": "역할반전 증강이 held 조합 재주입 — 거울닫힘 재측정 74.5%→62.6% ~12%p 부풀림 (인스턴스거울 24% acc93.1%·조합거울 39% 76.2%·clean 37% 60.4%)", "fix": "홀드아웃을 변환-닫힘(orbit)으로 정의 + 증강상∩held=0 assert (인스턴스키에 클래스 포함)"}
