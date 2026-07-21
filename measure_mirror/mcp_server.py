@@ -202,7 +202,7 @@ async def list_tools() -> list[types.Tool]:
                 "'does a kill-condition exist?'), this asks 'is the seal well-formed enough that "
                 "the automated checks can fire, and is the bar meaningful?'. "
                 "FAIL: kill-condition prose leaked into the `metric` field (malformed call), or a "
-                "pass bar at/below chance. "
+                "pass bar at/below declared chance. "
                 "WARN: quantified kill written as free text with no structured kill_threshold, or "
                 "min_n below the small-sample floor. "
                 "INFO: no pre-seal machine-checks declared (reachability / accounting / neutral-"

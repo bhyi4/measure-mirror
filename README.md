@@ -246,7 +246,7 @@ extra keys fire extra probes. The `data` keys are identical to the JSON file for
 
 | Probe | # | Catches |
 |---|---|---|
-| `prereg_lint` | ㉗ | Seal *quality*, not just presence: kill-condition leaked into the `metric` field (malformed call — the human eye sees a criterion, the parser sees none), a quantified kill written as free text with no structured `kill_threshold`, a pass bar at/below chance, `min_n` below the small-sample floor, or no pre-seal machine-checks declared |
+| `prereg_lint` | ㉗ | Seal *quality*, not just presence: kill-condition leaked into the `metric` field (malformed call — the human eye sees a criterion, the parser sees none), a quantified kill written as free text with no structured `kill_threshold`, a pass bar at/below declared chance, `min_n` below the small-sample floor, or no pre-seal machine-checks declared |
 
 > ㉗ is deliberately **not** part of the `verify()` umbrella or any group: it is a *pre-compute*
 > check (run it right after sealing, before spending compute), while `verify()`/`audit()` run at

@@ -33,7 +33,7 @@ illusions that waste research resources and mislead the field.
         │
         ▼
 ㉗ prereg_lint               ← lint the seal's QUALITY before spending compute
-        │                       (leaked kill-condition · bar at/below chance ·
+        │                       (leaked kill-condition · bar at/below declared chance ·
         ▼                        unstructured kill · low n · undeclared checks)
     experiment runs
         │
@@ -176,7 +176,7 @@ and whether its bar is meaningful** — the defect classes that leak silent comp
 | Level | Defect |
 |---|---|
 | FAIL | kill-condition prose leaked into the `metric` field (malformed call — a human sees a criterion, the parser sees none) |
-| FAIL | pass bar at or below chance (clearing it proves nothing) |
+| FAIL | pass bar at or below the DECLARED chance (clearing it proves nothing; needs `chance=` — `baseline` alone is not the floor) |
 | WARN | quantified kill written as free text, no structured `kill_threshold` → can never auto-evaluate |
 | WARN | `min_n` below the small-sample floor (20) |
 | INFO | no `pre_seal_checks` declared (reachability-smoke · mass-balance-audit · neutral-control · manipulation-check · positive-control) |
@@ -1328,7 +1328,7 @@ Agent: [calls mm_register, then mm_audit]
 | ⑨ | `multiple_comparisons_check` | Bonferroni alarm for k>1 experiments | via `full_audit` |
 | ⑩ | `grim_check` | arithmetic impossibility | ✅ (FAIL only) |
 | ⑪ | `falsifiability_check` | no kill-condition; triggered kill threshold | ✅ (when prereg valid) |
-| ㉗ | `prereg_lint` | malformed seal: leaked kill-condition, bar at/below chance, unstructured kill, low n, undeclared pre-seal checks | standalone (pre-compute; auto in MCP `mm_register`) |
+| ㉗ | `prereg_lint` | malformed seal: leaked kill-condition, bar at/below declared chance, unstructured kill, low n, undeclared pre-seal checks | standalone (pre-compute; auto in MCP `mm_register`) |
 | ⑫ | `cascade_check` | retracted claim or stale dependency | ✅ (WARN/FAIL only) |
 | ⑬ | `negative_audit` | premature negative closure; scope overshoot | via `full_audit(angles=...)` |
 | ⑭ | `judge_consistency_check` | LLM judge flip-rate too high (unreliable judge) | standalone |

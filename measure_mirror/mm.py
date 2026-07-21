@@ -325,6 +325,30 @@ def _looks_like_kill_prose(text: str) -> bool:
     return has_word or (has_cmp and has_num)
 
 
+# A number written in a *comparison* context — "below 0.55", "acc < 0.5", "0.3 미만".
+# Requires a comparison word/operator adjacent to a digit, so incidental numbers
+# (sha256 hashes, dates like 20260720, "n=600", filenames "v2", "§6", "protocol=0002")
+# do NOT read as a quantified threshold. Validated against 64 real ledgers (A3 audit).
+_QUANT_CMP_WORDS = (
+    "below", "above", "drops", "exceeds", "less than", "greater than",
+    "미만", "이상", "이하", "초과",
+)
+_QUANT_WORD_NUM = re.compile(
+    "(?:" + "|".join(_QUANT_CMP_WORDS) + r")\D{0,8}\d", re.IGNORECASE)
+_QUANT_NUM_WORD = re.compile(r"\d\s*(?:" + "|".join(_QUANT_CMP_WORDS) + ")")
+_QUANT_OP_NUM = re.compile(r"[<>≤≥]\s*=?\s*\d")
+
+
+def _has_quantified_comparison(text: str) -> bool:
+    """True if `text` states a numeric threshold in a comparison context (not an
+    incidental number). Basis for ⑫b — 'you wrote a number you could structure'."""
+    if not text:
+        return False
+    return bool(_QUANT_WORD_NUM.search(text)
+                or _QUANT_NUM_WORD.search(text)
+                or _QUANT_OP_NUM.search(text))
+
+
 # Recognised pre-seal machine-checks (declared via preregister(pre_seal_checks=...)).
 KNOWN_PRESEAL_CHECKS = (
     "reachability-smoke",     # is the answer already determined in the code?
@@ -365,32 +389,36 @@ def _preseal_lint(pre: dict) -> list["Finding"]:
             "Add kill_condition= or kill_threshold=."))
 
     # ⑫b — quantified kill written as free text with no structured threshold.
-    if kill_thr is None and kill_cond and any(ch.isdigit() for ch in kill_cond):
+    # Fire only on a number in a COMPARISON context: an incidental digit (a sha256,
+    # a date, "n=600", a filename "v2", "§6") is not a threshold you could structure.
+    if kill_thr is None and kill_cond and _has_quantified_comparison(kill_cond):
         findings.append(Finding(
             P, "WARN",
-            f"'{cid}' kill_condition names a number ({kill_cond[:50]!r}) but has no "
+            f"'{cid}' kill_condition names a threshold ({kill_cond[:50]!r}) but has no "
             "structured kill_threshold= — falsifiability_check cannot auto-evaluate it. "
             "Add kill_threshold={'metric','threshold','direction'}."))
 
     # ⑫c — pass bar at or below chance.
+    # Floor = an EXPLICITLY declared `chance` only. In practice `baseline` is a
+    # comparison-arm score (e.g. 0.92, or the other arm in a two-arm compare), not the
+    # random floor — using it here produced 44 false FAILs across 64 real ledgers (A3
+    # audit). Also skip: pass_threshold that is 0/absent (a placeholder for a claim whose
+    # real bar is the kill_threshold), and non-[0,1]/unbounded metrics (pass is then a
+    # delta/margin, not an absolute score comparable to an absolute chance).
     pass_thr = pre.get("pass_threshold")
-    baseline = pre.get("baseline")
     chance = pre.get("chance")
     metric_range = pre.get("metric_range")
-    # Determine a usable chance floor. Default [0,1] metric → baseline is the floor.
-    # Non-[0,1] (declared range list or "unbounded") → require an explicit chance.
-    floor = None
-    if chance is not None:
-        floor = chance
-    elif metric_range is None and baseline is not None:
-        floor = baseline
-    if pass_thr is not None and floor is not None:
+    bounded_accuracy = metric_range is None or metric_range == [0, 1]
+    if (chance is not None and bounded_accuracy
+            and pass_thr not in (None, 0, 0.0)):
         try:
-            if float(pass_thr) <= float(floor):
+            if 0 < float(pass_thr) <= float(chance):
                 findings.append(Finding(
                     P, "FAIL",
-                    f"'{cid}' pass_threshold={pass_thr} is at or below chance "
-                    f"({floor}) — a claim clearing this bar has cleared nothing."))
+                    f"'{cid}' pass_threshold={pass_thr} is at or below the declared "
+                    f"chance level ({chance}) — a claim clearing this bar has cleared "
+                    "nothing. (If this is a delta/improvement target, declare an "
+                    "unbounded metric_range so the bar isn't read as an absolute score.)"))
         except (TypeError, ValueError):
             pass
 

@@ -230,7 +230,7 @@ findings = mm.verify("ledger.jsonl", data, groups=["judge"])
 
 | Probe | # | 잡아내는 것 |
 |---|---|---|
-| `prereg_lint` | ㉗ | 봉인의 *품질*(존재 여부가 아니라): kill-condition이 `metric` 필드로 누수(잘못된 호출 — 사람 눈엔 기준이 보이나 파서엔 없음), 정량 kill을 구조화된 `kill_threshold` 없이 자유텍스트로만 기재, pass 바가 우연 수준 이하, `min_n`이 소표본 바닥 미만, 봉인 전 기계 체크 미선언 |
+| `prereg_lint` | ㉗ | 봉인의 *품질*(존재 여부가 아니라): kill-condition이 `metric` 필드로 누수(잘못된 호출 — 사람 눈엔 기준이 보이나 파서엔 없음), 정량 kill을 구조화된 `kill_threshold` 없이 자유텍스트로만 기재, pass 바가 선언된 우연(chance) 이하, `min_n`이 소표본 바닥 미만, 봉인 전 기계 체크 미선언 |
 
 > ㉗은 의도적으로 `verify()` 우산·그룹에 **넣지 않았습니다**: 이것은 *연산 전* 체크(봉인 직후, 연산을 쓰기 전에 실행)이고, `verify()`/`audit()`은 보고 시점에 돕니다. `mm_register` 안에서 자동 발화하며(응답에 lint 동봉), mirror-stack compute 게이트는 ㉗ FAIL에 BLOCK합니다. 봉인 전에 돌린 값싼 체크는 `preregister(..., pre_seal_checks=["reachability-smoke", "mass-balance-audit", "neutral-control", "manipulation-check", "positive-control"])`로 선언하세요 — 미선언이면 INFO 넛지. 근거: 실제 실험 아크가 정확히 이 결함 클래스들로 무의미 연산을 잃었습니다(semantic-fuel 세포 아크, 2026-07; 자가적발 3건 도감 봉인).
 

@@ -60,30 +60,70 @@ def test_structured_threshold_suppresses_the_quantified_warning():
     assert "no structured kill_threshold" not in _msgs(mm._preseal_lint(pre))
 
 
+def test_incidental_numbers_do_not_trigger_quantified_warning():
+    # Regression for the A3 false-positive class: a kill_condition full of incidental
+    # digits (sha, date, filename, section, sample size) is NOT a quantified threshold.
+    for kc in (
+        "protocol=0002_수렴설계_smoke; 봉인 설계대로",
+        "H: 엘리트 너울(neoul_grounded.pt)의 Vault 붕괴",
+        "coupling을 selection 게이트에 배선 (for v2)",
+        "평가셋 n=600, 3시드에서 R-특이 서명이 사라지면 기각",
+        "프로토콜 sha256=a1b2c3d4 위반 시 기각",
+    ):
+        pre = {"claim_id": "c", "metric": "acc", "min_n": 200,
+               "pass_threshold": 0.6, "kill_condition": kc}
+        assert "no structured kill_threshold" not in _msgs(mm._preseal_lint(pre)), kc
+
+
+def test_operator_and_korean_comparison_trigger_quantified_warning():
+    for kc in ("acc < 0.5 이면 기각", "정확도 0.55 미만이면 사망", "drops below 0.4"):
+        pre = {"claim_id": "c", "metric": "acc", "min_n": 200,
+               "pass_threshold": 0.6, "kill_condition": kc}
+        assert "no structured kill_threshold" in _msgs(mm._preseal_lint(pre)), kc
+
+
 # ── ⑫c bar at/below chance ───────────────────────────────────────────────────
-def test_pass_bar_at_or_below_chance_is_FAIL():
+def test_pass_bar_at_or_below_declared_chance_is_FAIL():
+    # An absolute bounded-accuracy claim whose pass bar sits at/below declared chance.
+    pre = {"claim_id": "c", "metric": "acc", "min_n": 200, "chance": 0.5,
+           "pass_threshold": 0.45, "metric_range": [0, 1],
+           "kill_threshold": {"threshold": 0.4, "direction": "below"}}
+    assert "at or below the declared chance" in _msgs(mm._preseal_lint(pre))
+
+
+def test_baseline_alone_is_NOT_treated_as_chance_floor():
+    # Regression for the A3 false-positive class: `baseline` is a comparison-arm
+    # score, not the random floor. pass=0.85 < baseline=0.92 must NOT FAIL.
+    pre = {"claim_id": "c", "metric": "synth_acc", "min_n": 200, "baseline": 0.92,
+           "pass_threshold": 0.85,
+           "kill_condition": "fuzzy-key diagnostic; pilot 0.92 vs real 0.265"}
+    assert "at or below" not in _msgs(mm._preseal_lint(pre))
+
+
+def test_placeholder_pass_zero_on_kill_gated_claim_does_not_FAIL():
+    # pass_threshold=0 with the real bar in kill_threshold (a delta gate) — placeholder,
+    # not a crippled bar. A3 audit: dozens of oee_* claims were false-FAILed by this.
+    pre = {"claim_id": "c", "metric": "sel_minus_granted", "min_n": 200,
+           "baseline": 0.0, "pass_threshold": 0.0, "chance": 0.0,
+           "kill_threshold": {"threshold": 0, "direction": "below_or_equal"}}
+    assert "at or below" not in _msgs(mm._preseal_lint(pre))
+
+
+def test_unbounded_metric_with_declared_chance_skips_bar_check():
+    # A margin/delta metric (unbounded) whose pass=0.02 sits below an ABSOLUTE task
+    # chance=0.28 — mixing scales. Must NOT FAIL (A3: babbler margin claims).
+    pre = {"claim_id": "c", "metric": "margin_M_both_minus_B_lab", "min_n": 200,
+           "pass_threshold": 0.02, "chance": 0.2816, "metric_range": "unbounded",
+           "kill_threshold": {"threshold": 0.02, "direction": "below"}}
+    assert "at or below" not in _msgs(mm._preseal_lint(pre))
+
+
+def test_bounded_metric_without_declared_chance_skips_bar_check():
+    # No declared chance → we don't know the floor → don't guess from baseline.
     pre = {"claim_id": "c", "metric": "acc", "min_n": 200, "baseline": 0.5,
            "pass_threshold": 0.45,
            "kill_threshold": {"threshold": 0.4, "direction": "below"}}
-    msgs = _msgs(mm._preseal_lint(pre))
-    assert "at or below chance" in msgs
-
-
-def test_declared_chance_overrides_baseline_for_the_bar_check():
-    # A 1/24 chance metric with a healthy-looking baseline=0.5 but pass=0.04.
-    pre = {"claim_id": "c", "metric": "rank_acc", "min_n": 200, "baseline": 0.5,
-           "pass_threshold": 0.04, "chance": 1 / 24, "metric_range": [0, 1],
-           "kill_threshold": {"threshold": 0.02, "direction": "below"}}
-    # 0.04 > 1/24 (0.0417)?  1/24 ≈ 0.04167 so 0.04 < chance → FAIL
-    assert "at or below chance" in _msgs(mm._preseal_lint(pre))
-
-
-def test_unbounded_metric_without_chance_skips_bar_check():
-    # No usable chance floor → do not false-FAIL a delta/span metric.
-    pre = {"claim_id": "c", "metric": "separation_delta", "min_n": 200,
-           "baseline": 0.5, "pass_threshold": 0.1, "metric_range": "unbounded",
-           "kill_threshold": {"threshold": 0.0, "direction": "below"}}
-    assert "at or below chance" not in _msgs(mm._preseal_lint(pre))
+    assert "at or below" not in _msgs(mm._preseal_lint(pre))
 
 
 # ── ⑫d underpowered ──────────────────────────────────────────────────────────
