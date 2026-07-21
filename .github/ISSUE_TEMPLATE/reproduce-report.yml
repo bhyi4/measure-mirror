@@ -1,0 +1,79 @@
+name: "🔁 Reproduction Report"
+description: "Verify a sealed ledger yourself — ~15 minutes, copy & paste. 한국어로 쓰셔도 됩니다."
+title: "[repro] "
+labels: ["reproduction"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## The 15-minute tutorial (copy & paste)
+
+        Independent reproduction is **the one thing the authors cannot do for themselves.**
+        Whether it works or breaks — your report is equally valuable.
+
+        **Step 1 — get the code** *(2 min)*
+        ```bash
+        git clone --depth 1 https://github.com/bhyi4/measure-mirror
+        cd measure-mirror
+        ```
+
+        **Step 2 — verify a real sealed ledger** *(1 min, no install needed)*
+        ```bash
+        python3 stack/verify_self.py stack/evidence/compute_governor.jsonl
+        ```
+        You should see the last line: `=== verdict: ALL OK (6/6) ===`
+
+        **Step 3 — now try to cheat** *(2 min — the whole point)*
+        Open `stack/evidence/compute_governor.jsonl` in any editor.
+        On the first line, find `"baseline": 0.5` and change it to `0.9`. Save. Re-run Step 2.
+
+        You should now see: `❌ ... Entry was tampered.` and `verdict: FAILURES PRESENT`.
+        That is the claim: **a sealed number cannot be quietly changed.**
+        (Undo your edit: `git checkout stack/evidence/compute_governor.jsonl`)
+
+        **Step 4 — optional** *(5 min)*: seal a claim of your own — see the
+        [Quick Start](https://github.com/bhyi4/measure-mirror#quick-start)
+        (`mm register` before, `mm audit` after — the kill-condition is the point).
+
+        Now fill in the three boxes below. Done — thank you. 🙇
+
+  - type: input
+    id: env
+    attributes:
+      label: "Your environment"
+      placeholder: "e.g. Ubuntu 24.04 / Python 3.12"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: verdict
+    attributes:
+      label: "What did you see?"
+      options:
+        - "Step 2 = ALL OK, and Step 3 tamper was caught (❌) — reproduced as claimed"
+        - "Something did NOT match the expected output (details below)"
+        - "Could not complete the steps (details below)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: "Paste the last lines of your output"
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: "Anything odd, unclear, or broken? (optional)"
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        **Want your reproduction to count as a public witness record?**
+        Declare what you verified on the 👁 [mirror-witness board](https://github.com/bhyi4/mirror-witness) —
+        an append-only, CI-checked witness ledger. Your declaration becomes something
+        no one (including the authors) can rewind.
