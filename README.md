@@ -15,7 +15,7 @@ Zero training · Deterministic · Zero-dep core (Python 3.10+ stdlib; `judge` mo
 > Built while honestly killing our own project.  
 > The makers ran it on themselves first. → [🦋 Origin Story](docs/CHRONICLE.md)
 
-**[📖 Full Probe Guide →](docs/GUIDE.md)** — detailed explanations, worked examples, and workflows for all 26 probes
+**[📖 Full Probe Guide →](docs/GUIDE.md)** — detailed explanations, worked examples, and workflows for all 27 probes
 **[📜 MIRROR-SPEC v1.1 →](docs/SPEC.md)** — the normative ledger format & verification protocol (ratified 2026-07-02, amended 2026-07-17; this package is its reference implementation)
 **[🦋 Catalog of Measurement Illusions →](catalog/README.md)** — 46 real sealed cases of measurement deceiving its own authors (gaming · self-catch · false-negative guards · contamination)
 
@@ -171,7 +171,7 @@ def test_my_model_is_real():
 
 ## Three Verification Tiers
 
-You don't need to memorize 26 probes — there are exactly three ways to use the mirror:
+You don't need to memorize 27 probes — there are exactly three ways to use the mirror:
 
 ```bash
 # FULL — one shot, everything applicable runs automatically
@@ -694,7 +694,7 @@ pip install "measure-mirror[mcp]"
 
 **Other MCP clients** — run `mm-mcp` as the stdio server command.
 
-All 26 probes + 6 utilities + the `mm_verify` umbrella are exposed as MCP tools (37 total):  
+All 27 probes + 6 utilities + the `mm_verify` umbrella are exposed as MCP tools (37 total):  
 `mm_verify` (full / group-filtered) ·  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_leakage_check` · `mm_multiseed_check` · `mm_scope_check` ·

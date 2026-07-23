@@ -631,7 +631,7 @@ pip install "measure-mirror[mcp]"
 
 **기타 MCP 클라이언트** — stdio 서버 명령으로 `mm-mcp`를 실행하세요.
 
-26종 probe + 6 유틸리티 + `mm_verify` 우산까지 전부 MCP 도구로 노출됩니다(총 37개):  
+27종 probe + 6 유틸리티 + `mm_verify` 우산까지 전부 MCP 도구로 노출됩니다(총 37개):  
 `mm_verify` (풀 / 그룹 필터) ·  
 `mm_register` · `mm_verify_chain` · `mm_audit` · `mm_continuous_audit` · `mm_full_audit` ·  
 `mm_baseline_fairness` · `mm_gaming_check` · `mm_leakage_check` · `mm_multiseed_check` · `mm_scope_check` ·  
